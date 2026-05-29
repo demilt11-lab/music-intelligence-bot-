@@ -1,0 +1,836 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Core entities
+// ─────────────────────────────────────────────
+
+model Track {
+  id               Int      @id @default(autoincrement())
+  isrc             String?  @unique
+  title            String
+  durationMs       Int?
+  explicit         Boolean  @default(false)
+  releaseDate      DateTime?
+  previewUrl       String?
+  coverUrl         String?
+  popularity       Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  trackArtists          TrackArtist[]
+  trackAlbums           TrackAlbum[]
+  externalIds           ExternalId[]
+  trackTags             TrackTag[]
+  platformStatsDaily    TrackPlatformStatsDaily[]
+  statisticsLatest      TrackStatisticsLatest?
+  audioFeatures         TrackAudioFeatures?
+  versionClusters       TrackVersionCluster[]
+  chartRows             ChartRow[]
+  tiktokTypedChartRows  TiktokTypedTrackChartRow[]
+  airplayChartRows      AirplayTrackChartRow[]
+  radioAirplayFacts     RadioAirplayFact[]
+  playlistMembershipEvents PlaylistMembershipEvent[]
+
+  @@map("tracks")
+}
+
+model Artist {
+  id           Int      @id @default(autoincrement())
+  name         String
+  slug         String?  @unique
+  imageUrl     String?
+  country      String?
+  bio          String?
+  popularity   Int?
+  followersCount BigInt?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  trackArtists     TrackArtist[]
+  externalIds      ExternalId[]
+  tiktokUserChartRows TiktokUserChartRow[]
+
+  @@map("artists")
+}
+
+model Album {
+  id           Int      @id @default(autoincrement())
+  title        String
+  albumType    String?
+  releaseDate  DateTime?
+  coverUrl     String?
+  totalTracks  Int?
+  label        String?
+  popularity   Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  trackAlbums  TrackAlbum[]
+  externalIds  ExternalId[]
+
+  @@map("albums")
+}
+
+model Playlist {
+  id              Int      @id @default(autoincrement())
+  name            String
+  description     String?
+  imageUrl        String?
+  platform        String
+  externalId      String?
+  isAlgorithmic   Boolean  @default(false)
+  isOfficial      Boolean  @default(false)
+  followerCount   BigInt?
+  trackCount      Int?
+  countryCode     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  playlistCuratorLinks      PlaylistCuratorLink[]
+  curatorPlaylists          CuratorPlaylist[]
+  playlistTags              PlaylistTag[]
+  playlistFlags             PlaylistFlag[]
+  membershipEvents          PlaylistMembershipEvent[]
+  spotifyMetricsLatest      SpotifyPlaylistMetricsLatest?
+  youtubeMetricsLatest      YoutubePlaylistMetricsLatest?
+  playlistMetricsLatest     PlaylistMetricsLatest?
+
+  @@map("playlists")
+}
+
+model Curator {
+  id           Int      @id @default(autoincrement())
+  name         String
+  slug         String?  @unique
+  platform     String
+  externalId   String?
+  imageUrl     String?
+  description  String?
+  followerCount BigInt?
+  isVerified   Boolean  @default(false)
+  countryCode  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  playlistCuratorLinks PlaylistCuratorLink[]
+  curatorPlaylists     CuratorPlaylist[]
+  curatorFlags         CuratorFlag[]
+  curatorMetrics       CuratorMetric[]
+
+  @@map("curators")
+}
+
+model Station {
+  id           Int      @id @default(autoincrement())
+  name         String
+  callSign     String?  @unique
+  format       String?
+  countryCode  String?
+  cityId       Int?
+  frequency    String?
+  streamUrl    String?
+  websiteUrl   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  city              City?             @relation(fields: [cityId], references: [id])
+  radioAirplayFacts RadioAirplayFact[]
+  radioStations     RadioStation[]
+
+  @@map("stations")
+}
+
+model City {
+  id          Int    @id @default(autoincrement())
+  name        String
+  countryCode String
+  stateCode   String?
+  latitude    Float?
+  longitude   Float?
+
+  stations         Station[]
+  radioCityMarkets RadioCityMarket[]
+
+  @@map("cities")
+}
+
+model Country {
+  id          Int    @id @default(autoincrement())
+  code        String @unique
+  name        String
+  region      String?
+  subRegion   String?
+
+  radioCountryMarkets RadioCountryMarket[]
+
+  @@map("countries")
+}
+
+// ─────────────────────────────────────────────
+// Junction / link tables
+// ─────────────────────────────────────────────
+
+model TrackArtist {
+  trackId  Int
+  artistId Int
+  role     String?  // "main", "featured", "remixer", etc.
+  position Int      @default(0)
+
+  track  Track  @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  artist Artist @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@id([trackId, artistId])
+  @@map("track_artists")
+}
+
+model TrackAlbum {
+  trackId    Int
+  albumId    Int
+  trackNumber Int?
+  discNumber  Int?
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  album Album @relation(fields: [albumId], references: [id], onDelete: Cascade)
+
+  @@id([trackId, albumId])
+  @@map("track_albums")
+}
+
+model PlaylistCuratorLink {
+  playlistId Int
+  curatorId  Int
+  linkedAt   DateTime @default(now())
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  curator  Curator  @relation(fields: [curatorId], references: [id], onDelete: Cascade)
+
+  @@id([playlistId, curatorId])
+  @@map("playlist_curator_links")
+}
+
+model CuratorPlaylist {
+  curatorId  Int
+  playlistId Int
+  addedAt    DateTime @default(now())
+
+  curator  Curator  @relation(fields: [curatorId], references: [id], onDelete: Cascade)
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@id([curatorId, playlistId])
+  @@map("curator_playlists")
+}
+
+model ExternalId {
+  id         Int    @id @default(autoincrement())
+  entityType String // "track", "artist", "album", "playlist"
+  entityId   Int
+  platform   String // "spotify", "apple_music", "youtube", "tiktok", etc.
+  externalId String
+
+  track  Track?  @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_ids_track_fk")
+  artist Artist? @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_ids_artist_fk")
+  album  Album?  @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_ids_album_fk")
+
+  @@unique([entityType, entityId, platform])
+  @@map("external_ids")
+}
+
+// ─────────────────────────────────────────────
+// Tags, moods, activities
+// ─────────────────────────────────────────────
+
+model Tag {
+  id       Int    @id @default(autoincrement())
+  name     String @unique
+  category String?
+
+  playlistTags PlaylistTag[]
+  trackTags    TrackTag[]
+
+  @@map("tags")
+}
+
+model PlaylistTag {
+  playlistId Int
+  tagId      Int
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  tag      Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([playlistId, tagId])
+  @@map("playlist_tags")
+}
+
+model TrackTag {
+  trackId Int
+  tagId   Int
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  tag   Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([trackId, tagId])
+  @@map("track_tags")
+}
+
+model Mood {
+  id          Int    @id @default(autoincrement())
+  name        String @unique
+  description String?
+
+  @@map("moods")
+}
+
+model Activity {
+  id          Int    @id @default(autoincrement())
+  name        String @unique
+  description String?
+
+  @@map("activities")
+}
+
+// ─────────────────────────────────────────────
+// Flags
+// ─────────────────────────────────────────────
+
+model CuratorFlag {
+  id         Int      @id @default(autoincrement())
+  curatorId  Int
+  flagType   String
+  flagValue  String?
+  createdAt  DateTime @default(now())
+
+  curator Curator @relation(fields: [curatorId], references: [id], onDelete: Cascade)
+
+  @@map("curator_flags")
+}
+
+model PlaylistFlag {
+  id         Int      @id @default(autoincrement())
+  playlistId Int
+  flagType   String
+  flagValue  String?
+  createdAt  DateTime @default(now())
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@map("playlist_flags")
+}
+
+// ─────────────────────────────────────────────
+// Platform statistics
+// ─────────────────────────────────────────────
+
+model TrackPlatformStatsDaily {
+  id           Int      @id @default(autoincrement())
+  trackId      Int
+  platform     String
+  date         DateTime @db.Date
+  streams      BigInt?
+  downloads    BigInt?
+  saves        BigInt?
+  skips        BigInt?
+  playlistAdds BigInt?
+  radioPlays   BigInt?
+  videoViews   BigInt?
+  likes        BigInt?
+  shares       BigInt?
+  comments     BigInt?
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([trackId, platform, date])
+  @@map("track_platform_stats_daily")
+}
+
+model TrackStatisticsLatest {
+  trackId              Int      @id
+  totalStreams          BigInt?
+  totalDownloads        BigInt?
+  totalPlaylists        Int?
+  totalCountries        Int?
+  spotifyMonthlyListeners BigInt?
+  spotifyPopularity     Int?
+  appleMusicPlays       BigInt?
+  youtubeViews          BigInt?
+  tiktokCreations       BigInt?
+  updatedAt             DateTime @updatedAt
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@map("track_statistics_latest")
+}
+
+// ─────────────────────────────────────────────
+// Playlist metrics
+// ─────────────────────────────────────────────
+
+model SpotifyPlaylistMetricsLatest {
+  playlistId      Int      @id
+  followers       BigInt?
+  monthlyListeners BigInt?
+  trackCount      Int?
+  averagePopularity Float?
+  updatedAt       DateTime @updatedAt
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@map("spotify_playlist_metrics_latest")
+}
+
+model YoutubePlaylistMetricsLatest {
+  playlistId   Int      @id
+  subscribers  BigInt?
+  videoCount   Int?
+  totalViews   BigInt?
+  updatedAt    DateTime @updatedAt
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@map("youtube_playlist_metrics_latest")
+}
+
+model PlaylistMetricsLatest {
+  playlistId    Int      @id
+  followerCount BigInt?
+  trackCount    Int?
+  platform      String?
+  updatedAt     DateTime @updatedAt
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@map("playlist_metrics_latest")
+}
+
+// ─────────────────────────────────────────────
+// Curator metrics
+// ─────────────────────────────────────────────
+
+model CuratorMetric {
+  id              Int      @id @default(autoincrement())
+  curatorId       Int
+  date            DateTime @db.Date
+  followerCount   BigInt?
+  playlistCount   Int?
+  totalReach      BigInt?
+  engagementRate  Float?
+
+  curator Curator @relation(fields: [curatorId], references: [id], onDelete: Cascade)
+
+  @@unique([curatorId, date])
+  @@map("curator_metrics")
+}
+
+// ─────────────────────────────────────────────
+// TikTok video metrics
+// ─────────────────────────────────────────────
+
+model TiktokVideoMetricsDaily {
+  id          Int      @id @default(autoincrement())
+  videoId     String
+  date        DateTime @db.Date
+  views       BigInt?
+  likes       BigInt?
+  comments    BigInt?
+  shares      BigInt?
+  saves       BigInt?
+  playTime    BigInt?
+
+  @@unique([videoId, date])
+  @@map("tiktok_video_metrics_daily")
+}
+
+// ─────────────────────────────────────────────
+// Radio airplay
+// ─────────────────────────────────────────────
+
+model RadioAirplayFact {
+  id          Int      @id @default(autoincrement())
+  trackId     Int
+  stationId   Int
+  playedAt    DateTime
+  durationSec Int?
+  countryCode String?
+  cityId      Int?
+
+  track   Track   @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  @@index([trackId, playedAt])
+  @@index([stationId, playedAt])
+  @@map("radio_airplay_facts")
+}
+
+// ─────────────────────────────────────────────
+// Chart snapshots — generic
+// ─────────────────────────────────────────────
+
+model ChartSnapshot {
+  id          Int      @id @default(autoincrement())
+  chartName   String
+  platform    String
+  countryCode String?
+  genre       String?
+  snapshotDate DateTime @db.Date
+  createdAt   DateTime @default(now())
+
+  chartRows     ChartRow[]
+  chartRankStats ChartRankStat[]
+
+  @@unique([chartName, platform, countryCode, snapshotDate])
+  @@map("chart_snapshots")
+}
+
+model ChartRow {
+  id             Int      @id @default(autoincrement())
+  snapshotId     Int
+  trackId        Int
+  rank           Int
+  previousRank   Int?
+  peakRank       Int?
+  weeksOnChart   Int?
+  streamsToday   BigInt?
+
+  snapshot ChartSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  track    Track         @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, rank])
+  @@map("chart_rows")
+}
+
+model ChartRankStat {
+  id             Int      @id @default(autoincrement())
+  snapshotId     Int
+  trackExternalId String
+  peakRank       Int?
+  currentRank    Int?
+  weeksOnChart   Int?
+
+  snapshot ChartSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@map("chart_rank_stats")
+}
+
+// ─────────────────────────────────────────────
+// TikTok video charts
+// ─────────────────────────────────────────────
+
+model TiktokVideoChartSnapshot {
+  id           Int      @id @default(autoincrement())
+  chartName    String
+  countryCode  String?
+  snapshotDate DateTime @db.Date
+  createdAt    DateTime @default(now())
+
+  chartRows    TiktokVideoChartRow[]
+  chartHistory TiktokVideoChartHistory[]
+
+  @@unique([chartName, countryCode, snapshotDate])
+  @@map("tiktok_video_chart_snapshots")
+}
+
+model TiktokVideoChartRow {
+  id           Int    @id @default(autoincrement())
+  snapshotId   Int
+  videoId      String
+  rank         Int
+  previousRank Int?
+  views        BigInt?
+  likes        BigInt?
+  shares       BigInt?
+
+  snapshot TiktokVideoChartSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, rank])
+  @@map("tiktok_video_chart_rows")
+}
+
+model TiktokVideoChartHistory {
+  id         Int      @id @default(autoincrement())
+  snapshotId Int
+  videoId    String
+  date       DateTime @db.Date
+  rank       Int?
+
+  snapshot TiktokVideoChartSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@map("tiktok_video_chart_history")
+}
+
+// ─────────────────────────────────────────────
+// TikTok user charts
+// ─────────────────────────────────────────────
+
+model TiktokUserChartSnapshot {
+  id           Int      @id @default(autoincrement())
+  chartName    String
+  countryCode  String?
+  snapshotDate DateTime @db.Date
+  createdAt    DateTime @default(now())
+
+  chartRows      TiktokUserChartRow[]
+  chartRankStats TiktokUserChartRankStat[]
+
+  @@unique([chartName, countryCode, snapshotDate])
+  @@map("tiktok_user_chart_snapshots")
+}
+
+model TiktokUserChartRow {
+  id           Int    @id @default(autoincrement())
+  snapshotId   Int
+  artistId     Int?
+  tiktokUserId String?
+  rank         Int
+  previousRank Int?
+  followers    BigInt?
+  likes        BigInt?
+
+  snapshot TiktokUserChartSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  artist   Artist?                 @relation(fields: [artistId], references: [id], onDelete: SetNull)
+
+  @@unique([snapshotId, rank])
+  @@map("tiktok_user_chart_rows")
+}
+
+model TiktokUserChartRankStat {
+  id           Int    @id @default(autoincrement())
+  snapshotId   Int
+  tiktokUserId String
+  peakRank     Int?
+  currentRank  Int?
+  weeksOnChart Int?
+
+  snapshot TiktokUserChartSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@map("tiktok_user_chart_rank_stats")
+}
+
+// ─────────────────────────────────────────────
+// TikTok typed track charts
+// ─────────────────────────────────────────────
+
+model TiktokTypedTrackChartSnapshot {
+  id           Int      @id @default(autoincrement())
+  chartName    String
+  chartType    String   // e.g. "viral", "trending", "top"
+  countryCode  String?
+  snapshotDate DateTime @db.Date
+  createdAt    DateTime @default(now())
+
+  chartRows TiktokTypedTrackChartRow[]
+
+  @@unique([chartName, chartType, countryCode, snapshotDate])
+  @@map("tiktok_typed_track_chart_snapshots")
+}
+
+model TiktokTypedTrackChartRow {
+  id           Int    @id @default(autoincrement())
+  snapshotId   Int
+  trackId      Int?
+  tiktokSongId String?
+  rank         Int
+  previousRank Int?
+  creations    BigInt?
+  views        BigInt?
+
+  snapshot TiktokTypedTrackChartSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  track    Track?                        @relation(fields: [trackId], references: [id], onDelete: SetNull)
+
+  @@unique([snapshotId, rank])
+  @@map("tiktok_typed_track_chart_rows")
+}
+
+// ─────────────────────────────────────────────
+// YouTube Shorts charts
+// ─────────────────────────────────────────────
+
+model YoutubeShortssChartSnapshot {
+  id           Int      @id @default(autoincrement())
+  chartName    String
+  countryCode  String?
+  snapshotDate DateTime @db.Date
+  createdAt    DateTime @default(now())
+
+  chartRows YoutubeShortsChartRow[]
+
+  @@unique([chartName, countryCode, snapshotDate])
+  @@map("youtube_shorts_chart_snapshots")
+}
+
+model YoutubeShortsChartRow {
+  id           Int    @id @default(autoincrement())
+  snapshotId   Int
+  videoId      String
+  rank         Int
+  previousRank Int?
+  views        BigInt?
+  likes        BigInt?
+  comments     BigInt?
+
+  snapshot YoutubeShortssChartSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, rank])
+  @@map("youtube_shorts_chart_rows")
+}
+
+// ─────────────────────────────────────────────
+// Airplay track charts
+// ─────────────────────────────────────────────
+
+model AirplayTrackChartSnapshot {
+  id           Int      @id @default(autoincrement())
+  chartName    String
+  countryCode  String?
+  format       String?
+  snapshotDate DateTime @db.Date
+  createdAt    DateTime @default(now())
+
+  chartRows      AirplayTrackChartRow[]
+  chartRankStats AirplayTrackChartRankStat[]
+
+  @@unique([chartName, countryCode, format, snapshotDate])
+  @@map("airplay_track_chart_snapshots")
+}
+
+model AirplayTrackChartRow {
+  id           Int    @id @default(autoincrement())
+  snapshotId   Int
+  trackId      Int?
+  rank         Int
+  previousRank Int?
+  spins        Int?
+  audience     BigInt?
+
+  snapshot AirplayTrackChartSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  track    Track?                    @relation(fields: [trackId], references: [id], onDelete: SetNull)
+
+  @@unique([snapshotId, rank])
+  @@map("airplay_track_chart_rows")
+}
+
+model AirplayTrackChartRankStat {
+  id           Int    @id @default(autoincrement())
+  snapshotId   Int
+  trackId      Int?
+  peakRank     Int?
+  currentRank  Int?
+  weeksOnChart Int?
+  totalSpins   Int?
+
+  snapshot AirplayTrackChartSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+
+  @@map("airplay_track_chart_rank_stats")
+}
+
+// ─────────────────────────────────────────────
+// Radio markets
+// ─────────────────────────────────────────────
+
+model RadioCountryMarket {
+  id          Int    @id @default(autoincrement())
+  countryCode String
+  marketName  String
+  format      String?
+  stationCount Int?
+
+  country Country @relation(fields: [countryCode], references: [code], onDelete: Cascade)
+
+  @@unique([countryCode, marketName])
+  @@map("radio_country_markets")
+}
+
+model RadioCityMarket {
+  id         Int    @id @default(autoincrement())
+  cityId     Int
+  marketName String
+  format     String?
+  rank       Int?
+
+  city City @relation(fields: [cityId], references: [id], onDelete: Cascade)
+
+  @@unique([cityId, marketName])
+  @@map("radio_city_markets")
+}
+
+model RadioStation {
+  id          Int    @id @default(autoincrement())
+  stationId   Int
+  callSign    String?
+  format      String?
+  marketName  String?
+  countryCode String?
+  cityName    String?
+  weeklyAudience BigInt?
+
+  station Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  @@map("radio_stations")
+}
+
+// ─────────────────────────────────────────────
+// Playlist membership events
+// ─────────────────────────────────────────────
+
+model PlaylistMembershipEvent {
+  id         Int      @id @default(autoincrement())
+  playlistId Int
+  trackId    Int
+  eventType  String   // "added", "removed"
+  position   Int?
+  eventDate  DateTime @db.Date
+  createdAt  DateTime @default(now())
+
+  playlist Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track    Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@index([playlistId, eventDate])
+  @@index([trackId, eventDate])
+  @@map("playlist_membership_events")
+}
+
+// ─────────────────────────────────────────────
+// Audio features
+// ─────────────────────────────────────────────
+
+model TrackAudioFeatures {
+  trackId          Int     @id
+  danceability     Float?
+  energy           Float?
+  loudness         Float?
+  speechiness      Float?
+  acousticness     Float?
+  instrumentalness Float?
+  liveness         Float?
+  valence          Float?
+  tempo            Float?
+  timeSignature    Int?
+  key              Int?
+  mode             Int?    // 0 = minor, 1 = major
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@map("track_audio_features")
+}
+
+// ─────────────────────────────────────────────
+// Track version clusters
+// ─────────────────────────────────────────────
+
+model TrackVersionCluster {
+  id          Int    @id @default(autoincrement())
+  trackId     Int
+  clusterId   String // UUID or hash identifying the cluster group
+  versionType String? // "original", "remix", "edit", "acoustic", "live", etc.
+  isPrimary   Boolean @default(false)
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([trackId, clusterId])
+  @@map("track_version_clusters")
+}
