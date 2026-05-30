@@ -28,4 +28,9 @@
     "prisma": "^5.10.0",
     "typescript": "^5"
   }
+  {
+  "scripts": {
+    "create-tenant": "ts-node scripts/create-tenant.ts"
+  }
+}
 }
