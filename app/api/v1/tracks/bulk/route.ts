@@ -1,4 +1,4 @@
-// app/api/v1/catalog/tracks/bulk/route.ts
+// app/api/v1/tracks/bulk/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
 import { enforceRateLimit } from '@/lib/platform/rate-limit';
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
     );
     await logRequest(
       ctx,
-      '/api/v1/catalog/tracks/bulk',
+      '/api/v1/tracks/bulk',
       'POST',
       200,
       startedAt,
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     if (ctx) {
       await logRequest(
         ctx,
-        '/api/v1/catalog/tracks/bulk',
+        '/api/v1/tracks/bulk',
         'POST',
         status,
         startedAt,
