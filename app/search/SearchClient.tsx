@@ -40,7 +40,9 @@ export default function SearchClient() {
   const [type, setType] = useState<SearchType>('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<SearchResultBuckets | null>(null);
+  const [result, setResult] = useState<SearchResultBuckets | null>(
+    null
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,7 +132,7 @@ export default function SearchClient() {
 
       {error && !loading && (
         <PageSection>
-          <ErrorState description={error} onRetry={() => handleSubmit(new Event('submit') as any)} />
+          <ErrorState description={error} />
         </PageSection>
       )}
 
@@ -168,22 +170,6 @@ export default function SearchClient() {
                   },
                 ]}
                 rows={result.tracks}
-              />
-            </PageSection>
-          )}
-
-          {result?.artists && result.artists.length > 0 && (
-            <PageSection
-              title="Artists"
-              description="Top matching artists."
-            >
-              <DataTable
-                ariaLabel="Artist search results"
-                columns={[
-                  { key: 'name', header: 'Artist' },
-                  { key: 'code2', header: 'Country' },
-                ]}
-                rows={result.artists}
               />
             </PageSection>
           )}
