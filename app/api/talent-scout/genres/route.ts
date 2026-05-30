@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
         date,
         usCode2,
         description:
-          'Genre-level breakout detector combining UGC, international playlists, and US radio.',
+          'Next-genre-to-break detector combining UGC, international playlists, and US radio.',
       },
     });
   } catch (err: any) {
