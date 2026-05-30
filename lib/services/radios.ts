@@ -1,12 +1,14 @@
 // lib/services/radios.ts
 
+import { prisma } from '@/lib/prisma'; // adjust if your prisma client path differs
+
 export interface Radio {
+  id: string;
   slug: string;
   name: string;
-  countryCode?: string;
-  market?: string;
-  genre?: string;
-  // add anything else you want to expose
+  countryCode?: string | null;
+  market?: string | null;
+  genre?: string | null;
 }
 
 export interface ListRadiosParams {
@@ -22,46 +24,116 @@ export interface ListRadiosResult {
   total: number;
 }
 
-/**
- * This is your proprietary data access.
- * Right now it's stubbed with static data; replace with Prisma, Supabase, etc.
- */
+export interface RadioLiveFeedParams {
+  radioSlug: string;
+  startDate?: string; // ISO string
+  endDate?: string;   // ISO string
+  offset?: number;
+  limit?: number;
+}
+
+export interface RadioLiveFeedItem {
+  id: string;
+  radioId: string;
+  songUuid: string;
+  airedAtUtc: string;
+  countryCode?: string | null;
+  payload?: unknown;
+}
+
+export interface RadioLiveFeedResult {
+  items: RadioLiveFeedItem[];
+  offset: number;
+  total: number;
+}
+
+// LIST RADIOS ------------------------------------------------------------
+
 export async function listRadios(params: ListRadiosParams = {}): Promise<ListRadiosResult> {
   const offset = params.offset ?? 0;
   const limit = params.limit ?? 25;
 
-  // TODO: replace with real DB query
-  const allRadios: Radio[] = [
-    {
-      slug: 'nov8te-test-radio-1',
-      name: 'NOV8TE Global Radio 1',
-      countryCode: 'US',
-      market: 'Global',
-      genre: 'Pop',
-    },
-    {
-      slug: 'nov8te-test-radio-2',
-      name: 'NOV8TE Indie Radio',
-      countryCode: 'US',
-      market: 'US',
-      genre: 'Indie',
-    },
-  ];
+  const where: Parameters<typeof prisma.radio.findMany>[0]['where'] = {};
 
-  // basic filtering example
-  const filtered = allRadios.filter((radio) => {
-    if (params.countryCode && radio.countryCode !== params.countryCode) return false;
-    if (params.search && !radio.name.toLowerCase().includes(params.search.toLowerCase())) {
-      return false;
-    }
-    return true;
-  });
+  if (params.countryCode) {
+    where.countryCode = params.countryCode;
+  }
 
-  const slice = filtered.slice(offset, offset + limit);
+  if (params.search && params.search.trim()) {
+    where.OR = [
+      { name: { contains: params.search, mode: 'insensitive' } },
+      { slug: { contains: params.search, mode: 'insensitive' } },
+    ];
+  }
+
+  const [items, total] = await Promise.all([
+    prisma.radio.findMany({
+      where,
+      skip: offset,
+      take: limit,
+      orderBy: { name: 'asc' },
+    }),
+    prisma.radio.count({ where }),
+  ]);
 
   return {
-    items: slice,
+    items,
     offset,
-    total: filtered.length,
+    total,
+  };
+}
+
+// LIVE FEED (from your own spins table) ---------------------------------
+
+export async function getRadioLiveFeed(
+  params: RadioLiveFeedParams,
+): Promise<RadioLiveFeedResult> {
+  const offset = params.offset ?? 0;
+  const limit = params.limit ?? 100;
+
+  const radio = await prisma.radio.findUnique({
+    where: { slug: params.radioSlug },
+    select: { id: true },
+  });
+
+  if (!radio) {
+    return { items: [], offset, total: 0 };
+  }
+
+  const where: Parameters<typeof prisma.radioSpin.findMany>[0]['where'] = {
+    radioId: radio.id,
+  };
+
+  if (params.startDate || params.endDate) {
+    where.airedAtUtc = {};
+    if (params.startDate) {
+      (where.airedAtUtc as any).gte = new Date(params.startDate);
+    }
+    if (params.endDate) {
+      (where.airedAtUtc as any).lte = new Date(params.endDate);
+    }
+  }
+
+  const [rows, total] = await Promise.all([
+    prisma.radioSpin.findMany({
+      where,
+      skip: offset,
+      take: limit,
+      orderBy: { airedAtUtc: 'desc' },
+    }),
+    prisma.radioSpin.count({ where }),
+  ]);
+
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      radioId: row.radioId,
+      songUuid: row.songUuid,
+      airedAtUtc: row.airedAtUtc.toISOString(),
+      countryCode: row.countryCode,
+      payload: row.payload ?? undefined,
+    })),
+    offset,
+    total,
   };
 }
