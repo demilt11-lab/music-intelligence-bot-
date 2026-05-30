@@ -12,7 +12,7 @@ type AirplayParserContext = {
   entityId: number;
   locationId?: string | null;
   marketId?: number | null;
-  formatId?: string | null; // airplay_format_filter / format_id
+  formatId?: string | null;
 };
 
 export function parseAirplayMetrics(
@@ -41,7 +41,6 @@ export function parseAirplayMetrics(
     []) as LuminateMetricValuePoint[];
   const spinsSeries = (spinsTotal?.value ?? []) as LuminateMetricValuePoint[];
 
-  // Build a map date -> { audience, spins }
   const byDate = new Map<
     string,
     { audience?: string | null; spins?: string | null }
