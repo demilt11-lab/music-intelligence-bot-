@@ -10,7 +10,7 @@ import {
 } from '@/lib/services/radios';
 
 export interface InternalConnectorConfig {
-  // reserved for multi-tenant config later
+  // reserved for multi-tenant/feature flags later
 }
 
 export class InternalConnector {
