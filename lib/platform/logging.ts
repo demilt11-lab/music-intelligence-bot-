@@ -11,7 +11,6 @@ export async function logRequest(
 ) {
   const latencyMs = Date.now() - startedAt;
 
-  // optional: wrap in try/catch so logging never breaks requests
   try {
     await db.requestLog.create({
       data: {
@@ -23,6 +22,6 @@ export async function logRequest(
       },
     });
   } catch {
-    // swallow
+    // logging should never break the API; swallow errors
   }
 }
