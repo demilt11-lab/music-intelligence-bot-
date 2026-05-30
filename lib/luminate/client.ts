@@ -5,11 +5,6 @@ import { LuminateMetricsResponse } from './types';
 const LUMINATE_BASE_URL = process.env.LUMINATE_BASE_URL ?? '';
 const LUMINATE_API_KEY = process.env.LUMINATE_API_KEY ?? '';
 
-if (!LUMINATE_BASE_URL) {
-  // eslint-disable-next-line no-console
-  console.warn('[luminate] LUMINATE_BASE_URL is not set');
-}
-
 export type LuminateQueryParams = Record<string, string | number | boolean | undefined>;
 
 function buildQuery(params: LuminateQueryParams): string {
@@ -23,7 +18,12 @@ function buildQuery(params: LuminateQueryParams): string {
 }
 
 async function fetchJson<T>(path: string, params: LuminateQueryParams): Promise<T> {
+  if (!LUMINATE_BASE_URL || !LUMINATE_API_KEY) {
+    throw new Error('Luminate env vars not configured');
+  }
+
   const url = `${LUMINATE_BASE_URL}${path}${buildQuery(params)}`;
+
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${LUMINATE_API_KEY}`,
@@ -40,7 +40,6 @@ async function fetchJson<T>(path: string, params: LuminateQueryParams): Promise<
   return (await res.json()) as T;
 }
 
-// Streams (consumption) – you’d align paths to your Luminate endpoints
 export async function fetchLuminateStreams(
   path: string,
   params: LuminateQueryParams,
@@ -48,7 +47,6 @@ export async function fetchLuminateStreams(
   return fetchJson<LuminateMetricsResponse>(path, params);
 }
 
-// Product sales
 export async function fetchLuminateSales(
   path: string,
   params: LuminateQueryParams,
@@ -56,7 +54,6 @@ export async function fetchLuminateSales(
   return fetchJson<LuminateMetricsResponse>(path, params);
 }
 
-// Airplay
 export async function fetchLuminateAirplay(
   path: string,
   params: LuminateQueryParams,
