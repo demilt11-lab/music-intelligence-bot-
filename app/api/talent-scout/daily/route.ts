@@ -1,12 +1,7 @@
 // app/api/talent-scout/daily/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  fetchTopUgcBreakoutTracks,
-  hydrateInternalStreaming,
-  hydrateLuminateMetrics,
-} from '@/lib/talentScout/sources';
-import { rankTalentTracks } from '@/lib/talentScout/score';
+import { ScoutSources, ScoutScore } from '@/lib/engine';
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,11 +11,12 @@ export async function GET(req: NextRequest) {
     const limit = Number(searchParams.get('limit') ?? '50');
     const mode = (searchParams.get('mode') ?? 'ugc_early') as 'ugc_early' | 'general';
 
-    let tracks = await fetchTopUgcBreakoutTracks({ date, code2, limit });
-    tracks = await hydrateInternalStreaming(tracks);
-    tracks = await hydrateLuminateMetrics(tracks);
+    let tracks = await ScoutSources.fetchTopUgcBreakoutTracks({ date, code2, limit });
+    tracks = await ScoutSources.hydrateInternalStreaming(tracks);
+    tracks = await ScoutSources.hydrateLuminateMetrics(tracks);
+    tracks = await ScoutSources.hydrateMlSignals(tracks, date);
 
-    const ranked = rankTalentTracks(tracks, mode);
+    const ranked = ScoutScore.rankTalentTracks(tracks, mode);
 
     return NextResponse.json({
       obj: ranked,
@@ -30,7 +26,7 @@ export async function GET(req: NextRequest) {
         limit,
         mode,
         description:
-          'Daily UGC trend-spotting list combining TikTok, internal streaming, and Luminate metrics.',
+          'NOV8TE proprietary daily UGC trend-spotting list combining internal ML, UGC, streaming, and Luminate metrics.',
       },
     });
   } catch (err: any) {
