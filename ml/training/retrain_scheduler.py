@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 
-from ml.config import ROOT, LOG_DIR, configure_logging
+from ml.config import ROOT, LOG_DIR, METRICS_DIR, configure_logging
 
 logger = configure_logging(__name__)
 
@@ -20,6 +20,8 @@ TRAIN_SCRIPTS = [
     ROOT / "ml" / "training" / "train_trend_classifier.py",
     ROOT / "ml" / "training" / "train_viral_predictor.py",
 ]
+
+METRICS_FILE = METRICS_DIR / "viral_prob_distribution.json"
 
 def load_state():
     if not STATE_PATH.exists():
@@ -34,13 +36,18 @@ def save_state(state):
 def detect_model_drift(
     recent_scores: np.ndarray, baseline_scores: np.ndarray
 ) -> bool:
-    """Simple drift: compare mean and variance."""
+    """Simple drift: compare mean of viral probabilities."""
     if recent_scores.size == 0 or baseline_scores.size == 0:
         return False
     recent_mean = recent_scores.mean()
     base_mean = baseline_scores.mean()
     diff = abs(recent_mean - base_mean)
-    logger.info("Drift check: recent_mean=%.4f, base_mean=%.4f, diff=%.4f", recent_mean, base_mean, diff)
+    logger.info(
+        "Drift check: recent_mean=%.4f, base_mean=%.4f, diff=%.4f",
+        recent_mean,
+        base_mean,
+        diff,
+    )
     return diff > DRIFT_THRESHOLD
 
 def run_training_script(path: Path) -> bool:
@@ -67,6 +74,15 @@ def run_training_script(path: Path) -> bool:
         )
         return False
 
+def load_recent_scores() -> np.ndarray:
+    if not METRICS_FILE.exists():
+        logger.info("Metrics file %s not found; no recent scores.", METRICS_FILE)
+        return np.array([], dtype=float)
+    with METRICS_FILE.open() as f:
+        data = json.load(f)
+    recent = data.get("recent_probs", [])
+    return np.array(recent, dtype=float)
+
 def main():
     state = load_state()
     last_retrain_iso = state.get("last_retrain_at")
@@ -80,10 +96,8 @@ def main():
             logger.info("Skipping retrain: minimum interval not reached")
             return
 
-    # TODO: load baseline and recent scores from metrics store
-    # For now, stub arrays; plug your real metrics here.
     baseline_scores = np.array(state.get("baseline_scores", []), dtype=float)
-    recent_scores = np.array(state.get("recent_scores", []), dtype=float)
+    recent_scores = load_recent_scores()
 
     if not detect_model_drift(recent_scores, baseline_scores):
         logger.info("No significant model drift detected. Skipping retrain.")
@@ -97,7 +111,6 @@ def main():
 
     if all_ok:
         state["last_retrain_at"] = now.isoformat()
-        # Update baseline scores to recent after successful retrain
         if recent_scores.size:
             state["baseline_scores"] = recent_scores.tolist()
         save_state(state)
