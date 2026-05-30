@@ -1,5 +1,5 @@
 // scripts/automation/tenantAutomation.ts
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, TenantEnvironment } from '@prisma/client';
 import crypto from 'crypto';
 
 const prisma = new PrismaClient();
@@ -7,10 +7,10 @@ const prisma = new PrismaClient();
 type AutomationCommand =
   | {
       type: 'createTenantPair';
-      baseName: string;      // e.g. "Acme Label"
-      baseSlug: string;      // e.g. "acme"
-      sandboxLabel?: string; // default: "<baseName> Sandbox"
-      prodLabel?: string;    // default: "<baseName> Production"
+      baseName: string;
+      baseSlug: string;
+      sandboxLabel?: string;
+      prodLabel?: string;
       sandboxScopes?: string;
       prodScopes?: string;
     }
@@ -18,6 +18,7 @@ type AutomationCommand =
       type: 'createTenantWithKey';
       name: string;
       slug: string;
+      environment?: 'SANDBOX' | 'PROD';
       label?: string;
       scopes?: string;
     }
@@ -37,13 +38,20 @@ function generateApiKey(): { raw: string; hash: string } {
 async function createTenantWithKey(cmd: {
   name: string;
   slug: string;
+  environment?: 'SANDBOX' | 'PROD';
   label?: string;
   scopes?: string;
 }) {
+  const envEnum =
+    cmd.environment === 'PROD'
+      ? TenantEnvironment.PROD
+      : TenantEnvironment.SANDBOX;
+
   const tenant = await prisma.tenant.create({
     data: {
       name: cmd.name,
       slug: cmd.slug,
+      environment: envEnum,
     },
   });
 
@@ -129,6 +137,7 @@ async function handleCommand(cmd: AutomationCommand) {
       const sandbox = await createTenantWithKey({
         name: sandboxName,
         slug: sandboxSlug,
+        environment: 'SANDBOX',
         label: sandboxLabel,
         scopes: sandboxScopes,
       });
@@ -136,6 +145,7 @@ async function handleCommand(cmd: AutomationCommand) {
       const prod = await createTenantWithKey({
         name: prodName,
         slug: prodSlug,
+        environment: 'PROD',
         label: prodLabel,
         scopes: prodScopes,
       });
@@ -145,6 +155,7 @@ async function handleCommand(cmd: AutomationCommand) {
           id: sandbox.tenant.id,
           name: sandbox.tenant.name,
           slug: sandbox.tenant.slug,
+          environment: sandbox.tenant.environment,
           apiKey: sandbox.apiKey,
           scopes: sandbox.scopes,
         },
@@ -152,6 +163,7 @@ async function handleCommand(cmd: AutomationCommand) {
           id: prod.tenant.id,
           name: prod.tenant.name,
           slug: prod.tenant.slug,
+          environment: prod.tenant.environment,
           apiKey: prod.apiKey,
           scopes: prod.scopes,
         },
@@ -170,8 +182,6 @@ async function handleCommand(cmd: AutomationCommand) {
 }
 
 async function main() {
-  // Example:
-  // node scripts/automation/tenantAutomation.js '{"type":"createTenantPair","baseName":"Acme Label","baseSlug":"acme"}'
   const raw = process.argv[2];
 
   if (!raw) {
