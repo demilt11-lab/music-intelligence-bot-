@@ -33,4 +33,11 @@
     "create-tenant": "ts-node scripts/create-tenant.ts"
   }
 }
+{
+  "scripts": {
+    "create-tenant": "ts-node scripts/create-tenant.ts",
+    "create-api-key": "ts-node scripts/create-api-key.ts",
+    "tenant-automation": "ts-node scripts/automation/tenantAutomation.ts"
+  }
+}
 }
