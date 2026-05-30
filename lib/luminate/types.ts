@@ -12,18 +12,12 @@ export type LuminateDimensionCategory = {
 
 export type LuminateMetricNode = {
   name: string;
-  // value can be:
-  // - number | string (aggregate)
-  // - LuminateMetricValuePoint[] (time series)
-  // - LuminateDimensionCategory[] (dimension categories)
   value: any;
 };
 
 export type LuminateMetricsResponse = {
   metrics: LuminateMetricNode[];
 };
-
-// Normalized internal shapes
 
 export type StreamRecord = {
   entityType: 'song' | 'artist' | 'release_group';
@@ -34,7 +28,7 @@ export type StreamRecord = {
   contentType: 'audio' | 'video' | null;
   commercialModel: 'premium' | 'ad_supported' | null;
   serviceType: 'on_demand' | 'programmed' | null;
-  streams: string; // store as string to match repo conventions
+  streams: string;
 };
 
 export type SalesRecord = {
@@ -74,7 +68,7 @@ export type AirplayRecord = {
   date: string;
   locationId: string | null;
   marketId: number | null;
-  formatId: string | null; // CW, AC, etc.
+  formatId: string | null;
   audience: string | null;
   spins: string | null;
 };
