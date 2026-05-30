@@ -1,4 +1,5 @@
 // lib/radiostats/client.ts
+
 const BASE_URL =
   process.env.SONGSTATS_API_BASE_URL ||
   'https://api.songstats.com/enterprise/v1';
@@ -45,7 +46,7 @@ export async function radiostatsGet<T>(
   const res = await fetch(url.toString(), {
     method: 'GET',
     headers: {
-      apikey: API_KEY, // Radiostats docs: apikey header
+      apikey: API_KEY, // Radiostats docs: `apikey` header
     },
   });
 
@@ -75,7 +76,7 @@ export async function radiostatsPost<T>(
 ): Promise<T> {
   const url = new URL(path, BASE_URL);
 
-  // Radiostats “add station” uses query params.[page:2]
+  // “Add Station” endpoint expects query parameters plus POST.[page:2]
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       url.searchParams.set(String(key), String(value));
@@ -90,7 +91,7 @@ export async function radiostatsPost<T>(
       'Content-Type': 'application/json',
       'Accept-Encoding': 'gzip, deflate, br',
     },
-    body: JSON.stringify({}), // body empty per docs, everything in query.[page:2]
+    body: JSON.stringify({}), // params live in query string per docs.[page:2]
   });
 
   const body = await parseBody(res);
