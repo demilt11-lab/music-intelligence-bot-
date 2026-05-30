@@ -13,6 +13,7 @@ export type ViralFeatures = {
   streamVelocity7d?: number;
   tiktokGrowth7d?: number;
   playlistCount?: number;
+  playlistAdds7d?: number;
   radioSpins7d?: number;
 };
 
@@ -34,20 +35,28 @@ export async function buildViralFeatures(
 
   const streamVelocity7d =
     track.statistics?.streamVelocity7d ?? null;
+  const tiktokGrowth7d =
+    track.statistics?.tiktokGrowth7d ?? null;
 
   const playlistCount = await db.playlistTrack.count({
     where: { trackId },
   });
 
+  const playlistAdds7d = await db.playlistMembershipEvents.count({
+    where: {
+      trackId,
+      addedAt: {
+        gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      },
+    },
+  });
+
   const airplayTotals = await radioService.getTrackAirplayTotals(
     trackId,
-    // last 7d
+    // since 7 days ago
   );
 
   const radioSpins7d = airplayTotals?.totalSpins ?? null;
-
-  const tiktokGrowth7d =
-    track.statistics?.tiktokGrowth7d ?? null;
 
   return {
     trackId,
@@ -59,6 +68,7 @@ export async function buildViralFeatures(
     streamVelocity7d: streamVelocity7d ?? undefined,
     tiktokGrowth7d: tiktokGrowth7d ?? undefined,
     playlistCount,
+    playlistAdds7d,
     radioSpins7d: radioSpins7d ?? undefined,
   };
 }
