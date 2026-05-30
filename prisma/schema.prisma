@@ -914,4 +914,22 @@ model RequestLog {
   latencyMs  Int
   createdAt  DateTime @default(now())
 }
+
+model CatalogTrack {
+  id             Int      @id @default(autoincrement())
+  tenantId       Int
+  clientTrackId  String
+  isrc           String?
+  name           String?
+  artistName     String?
+  spotifyTrackId String?
+  tiktokSoundId  String?
+  youtubeVideoId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, clientTrackId])
+}
 }
