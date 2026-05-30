@@ -833,4 +833,31 @@ model TrackVersionCluster {
 
   @@unique([trackId, clusterId])
   @@map("track_version_clusters")
+
+model Radio {
+  id          String       @id @default(cuid())
+  slug        String       @unique
+  name        String
+  countryCode String?      // ISO 2
+  market      String?
+  genre       String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  spins       RadioSpin[]
+}
+
+model RadioSpin {
+  id         String   @id @default(cuid())
+  radioId    String
+  songUuid   String   // your canonical song id, or vendor uuid
+  airedAtUtc DateTime
+  countryCode String?
+  payload    Json?
+
+  radio      Radio    @relation(fields: [radioId], references: [id])
+
+  @@index([radioId, airedAtUtc])
+  @@index([songUuid, airedAtUtc])
+}
 }
