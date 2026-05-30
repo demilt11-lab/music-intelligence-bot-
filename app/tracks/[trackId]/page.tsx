@@ -83,11 +83,6 @@ export default async function TrackPage({ params }: TrackPageProps) {
             </div>
           </PageSection>
 
-          <PageSection title="Analytics">
-            <ChartsClient trackId={params.trackId} />
-            <RadioClient trackId={params.trackId} />
-            </PageSection>
-          
           <PageSection title="Platform stats">
             <StatGrid
               items={[
@@ -118,6 +113,9 @@ export default async function TrackPage({ params }: TrackPageProps) {
               ]}
             />
           </PageSection>
+
+          <ChartsClient trackId={params.trackId} />
+          <RadioClient trackId={params.trackId} />
         </>
       )}
     </AppShell>
