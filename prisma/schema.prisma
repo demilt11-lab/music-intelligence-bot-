@@ -1207,4 +1207,65 @@ model LuminateAirplay {
     map: "luminate_airplay_unique_key"
   )
 }
+model UgcTrackMetrics {
+  id             Int      @id @default(autoincrement())
+  trackId        Int
+  code2          String
+  date           DateTime
+  videos7d       Int
+  videos7dGrowth Float
+  views7d        BigInt
+  views7dGrowth  Float
+  rankDelta7d    Float
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@map("ugc_track_metrics")
+  @@unique([trackId, code2, date])
+}
+
+model UgcGenreMetrics {
+  id            Int      @id @default(autoincrement())
+  genre         String
+  code2         String
+  date          DateTime
+  videos7d      Int
+  videos7dGrowth Float
+  views7d       BigInt
+  views7dGrowth Float
+  leadCountry   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  @@map("ugc_genre_metrics")
+  @@unique([genre, code2, date])
+}
+
+model GenrePlaylistMetrics {
+  id              Int      @id @default(autoincrement())
+  genre           String
+  country         String
+  date            DateTime
+  playlistType    String
+  streams7d       BigInt
+  streams7dGrowth Float
+  adds7d          Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  @@map("genre_playlist_metrics")
+  @@unique([genre, country, date, playlistType])
+}
+
+model GenreAirplayMetrics {
+  id             Int      @id @default(autoincrement())
+  genre          String
+  country        String
+  date           DateTime
+  formatId       String?
+  spins7d        Int
+  spins7dGrowth  Float
+  audience7d     BigInt?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@map("genre_airplay_metrics")
+  @@unique([genre, country, date, formatId])
+}
 }
