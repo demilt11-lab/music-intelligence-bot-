@@ -1,7 +1,7 @@
 // app/api/talent-scout/genres/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
-import { computeGenreBreakouts } from '@/lib/talentScout/genres';
+import { ScoutGenres } from '@/lib/engine';
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const usCode2 = searchParams.get('usCode2') ?? 'US';
     const limit = Number(searchParams.get('limit') ?? '5');
 
-    const signals = await computeGenreBreakouts({ date, usCode2 });
+    const signals = await ScoutGenres.computeGenreBreakouts({ date, usCode2 });
 
     return NextResponse.json({
       obj: signals.slice(0, limit),
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
         date,
         usCode2,
         description:
-          'Next-genre-to-break detector combining UGC, international playlists, and US radio.',
+          'NOV8TE proprietary genre breakout detector combining UGC, playlists, and US radio.',
       },
     });
   } catch (err: any) {
