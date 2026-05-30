@@ -1,9 +1,10 @@
 // lib/radiostats/addStation.ts
+
 import { radiostatsPost } from './client';
 
 export type AddStationRequest = {
-  country_code: string; // 2-letter, e.g., 'US'
-  name: string;         // station name
+  country_code: string; // 2-letter: 'US', 'UK', etc.
+  name: string;         // station name, e.g. 'BBC Radio 1'
   radio_type: 'radio' | 'digital' | 'sat_radio' | 'tv';
   website: string;
   city_name?: string;
@@ -14,8 +15,8 @@ export type AddStationRequest = {
 };
 
 export type AddStationResponse = {
-  result: string;  // e.g., 'success'
-  message: string; // human message
+  result: string;  // e.g. 'success'
+  message: string; // explanatory message from Radiostats
 };
 
 export async function addRadiostatsStation(
