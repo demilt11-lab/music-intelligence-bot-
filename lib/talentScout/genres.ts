@@ -6,6 +6,7 @@ const db = new PrismaClient();
 
 export type GenreBreakoutSignal = {
   genre: string;
+
   // UGC
   ugcVideos7d: number;
   ugcVideos7dGrowth: number;
@@ -18,7 +19,7 @@ export type GenreBreakoutSignal = {
   intlStreams7dGrowth: number;
   intlLeadCountry: string | null;
 
-  // US streaming baseline
+  // US streaming
   usStreams7d: number;
   usStreams7dGrowth: number;
 
@@ -27,14 +28,13 @@ export type GenreBreakoutSignal = {
   usSpins7dGrowth: number;
   leadFormat: string | null;
 
-  // Scores
   breakoutScore: number;
   commentary: string;
 };
 
 type GenreTrendOptions = {
-  date?: string; // reference date, default: latest
-  usCode2?: string; // default 'US'
+  date?: string;
+  usCode2?: string;
 };
 
 export async function computeGenreBreakouts(
@@ -42,14 +42,12 @@ export async function computeGenreBreakouts(
 ): Promise<GenreBreakoutSignal[]> {
   const usCode2 = opts.usCode2 ?? 'US';
 
-  // 1) Pull UGC genre aggregates for latest window
   const ugcRows = await db.ugc_genre_metrics.findMany({
     where: {
       date: opts.date ? new Date(opts.date) : undefined,
     },
   });
 
-  // 2) Pull international streaming genre aggregates
   const intlRows = await db.genre_playlist_metrics.findMany({
     where: {
       country: { not: usCode2 },
@@ -57,7 +55,6 @@ export async function computeGenreBreakouts(
     },
   });
 
-  // 3) Pull US streaming genre aggregates
   const usStreamRows = await db.genre_playlist_metrics.findMany({
     where: {
       country: usCode2,
@@ -65,7 +62,6 @@ export async function computeGenreBreakouts(
     },
   });
 
-  // 4) Pull US radio genre aggregates (from LuminateAirplay-derived table)
   const radioRows = await db.genre_airplay_metrics.findMany({
     where: {
       country: usCode2,
@@ -75,7 +71,6 @@ export async function computeGenreBreakouts(
 
   const byGenre: Map<string, GenreBreakoutSignal> = new Map();
 
-  // Helper to get-or-create
   const ensureGenre = (genre: string): GenreBreakoutSignal => {
     const existing = byGenre.get(genre);
     if (existing) return existing;
@@ -101,7 +96,6 @@ export async function computeGenreBreakouts(
     return base;
   };
 
-  // UGC
   ugcRows.forEach((row) => {
     const g = ensureGenre(row.genre);
     g.ugcVideos7d = Number(row.videos_7d ?? 0);
@@ -111,24 +105,21 @@ export async function computeGenreBreakouts(
     g.ugcLeadCountry = row.lead_country ?? g.ugcLeadCountry;
   });
 
-  // International streaming
   intlRows.forEach((row) => {
     const g = ensureGenre(row.genre);
-    g.intlStreams7d = Number(row.streams_7d ?? 0) + g.intlStreams7d;
-    g.intlStreams7dGrowth = Number(row.streams_7d_growth ?? 0) + g.intlStreams7dGrowth;
+    g.intlStreams7d += Number(row.streams_7d ?? 0);
+    g.intlStreams7dGrowth += Number(row.streams_7d_growth ?? 0);
     if (!g.intlLeadCountry || row.streams_7d > 0) {
       g.intlLeadCountry = row.country;
     }
   });
 
-  // US streaming
   usStreamRows.forEach((row) => {
     const g = ensureGenre(row.genre);
     g.usStreams7d = Number(row.streams_7d ?? 0);
     g.usStreams7dGrowth = Number(row.streams_7d_growth ?? 0);
   });
 
-  // US radio
   radioRows.forEach((row) => {
     const g = ensureGenre(row.genre);
     g.usSpins7d = Number(row.spins_7d ?? 0);
@@ -138,18 +129,15 @@ export async function computeGenreBreakouts(
     }
   });
 
-  // Score & commentary
   for (const g of byGenre.values()) {
     g.breakoutScore = computeGenreBreakoutScore(g);
     g.commentary = buildGenreCommentary(g, usCode2);
   }
 
-  // Sort descending by breakoutScore
   return [...byGenre.values()].sort((a, b) => b.breakoutScore - a.breakoutScore);
 }
 
 function computeGenreBreakoutScore(g: GenreBreakoutSignal): number {
-  // Emphasize UGC + international growth with a US catch-up gap
   const ugcMomentum =
     growthScore(g.ugcVideos7dGrowth) * 0.4 +
     growthScore(g.ugcViews7dGrowth) * 0.2;
@@ -165,9 +153,8 @@ function computeGenreBreakoutScore(g: GenreBreakoutSignal): number {
 
 function growthScore(delta: number): number {
   if (!delta || Number.isNaN(delta)) return 0;
-  // Treat delta as percent; cap extremes
   const capped = Math.max(-100, Math.min(300, delta));
-  return capped / 100; // -1 to 3 range
+  return capped / 100;
 }
 
 function buildGenreCommentary(g: GenreBreakoutSignal, usCode2: string): string {
