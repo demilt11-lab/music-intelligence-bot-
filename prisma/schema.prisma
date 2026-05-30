@@ -1006,4 +1006,78 @@ model RequestLog {
   latencyMs  Int
   createdAt  DateTime @default(now())
 }
+
+model Tenant {
+  id        Int         @id @default(autoincrement())
+  name      String
+  slug      String      @unique
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  users     TenantUser[]
+  apiKeys   ApiKey[]
+  catalog   CatalogTrack[]
+}
+
+model TenantUser {
+  id        Int        @id @default(autoincrement())
+  tenantId  Int
+  email     String
+  role      TenantRole
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+}
+
+enum TenantRole {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+model ApiKey {
+  id         Int       @id @default(autoincrement())
+  tenantId   Int
+  keyHash    String    @unique
+  label      String
+  scopes     String    // e.g. "search:read,tracks:read,catalog:write"
+  expiresAt  DateTime?
+  isRevoked  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+}
+
+model CatalogTrack {
+  id              Int      @id @default(autoincrement())
+  tenantId        Int
+  clientTrackId   String
+  isrc            String?
+  name            String?
+  artistName      String?
+  spotifyTrackId  String?
+  tiktokSoundId   String?
+  youtubeVideoId  String?
+  canonicalTrackId Int?    // optional: link to your internal track id later
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, clientTrackId])
+}
+
+model RequestLog {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int
+  endpoint   String
+  method     String
+  statusCode Int
+  latencyMs  Int
+  createdAt  DateTime @default(now())
+}
 }
