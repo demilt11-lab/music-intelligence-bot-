@@ -203,3 +203,45 @@ export async function hydrateLuminateMetrics(
       luminateAudienceLatest: airplay?.audience ?? null,
       luminateSpinsLatest: airplay?.spins ?? null,
     };
+// lib/talentScout/sources.ts (add near other hydrate functions)
+
+import { PrismaClient } from '@prisma/client';
+const db = new PrismaClient();
+
+export async function hydrateMlSignals(
+  tracks: TalentScoutTrack[],
+  date?: string,
+): Promise<TalentScoutTrack[]> {
+  if (!tracks.length) return tracks;
+  const trackIds = tracks.map((t) => t.trackId);
+
+  // Use provided date, or fallback to today (UTC)
+  const referenceDate =
+    date ??
+    new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const refDateStart = new Date(referenceDate);
+  const refDateEnd = new Date(referenceDate);
+  refDateEnd.setUTCDate(refDateEnd.getUTCDate() + 1);
+
+  const mlRows = await db.talentScoutScore.findMany({
+    where: {
+      trackId: { in: trackIds },
+      date: {
+        gte: refDateStart,
+        lt: refDateEnd,
+      },
+    },
+  });
+
+  const byTrack = new Map<number, (typeof mlRows)[number]>();
+  mlRows.forEach((r) => byTrack.set(r.trackId, r));
+
+  return tracks.map((t) => {
+    const m = byTrack.get(t.trackId);
+    return {
+      ...t,
+      viralScore: m?.viralScore ?? t.viralScore,
+      rightsComplexityScore: m?.rightsComplexityScore ?? t.rightsComplexityScore,
+    };
+  });
+}
