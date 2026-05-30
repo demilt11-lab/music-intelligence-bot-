@@ -1,25 +1,30 @@
 # scripts/run_predict.py
-from typing import List, Dict, Any
+import datetime
+from db_client import get_db  # your own helper
+from model import load_model, build_features  # your existing code
 
-from ml.inference.service import score_batch
+def main(reference_date=None):
+    db = get_db()
+    today = reference_date or datetime.date.today().isoformat()
 
-def main():
-    # Minimal dummy record – adjust to match your real feature schema
-    records: List[Dict[str, Any]] = [
-        {
-            "sound_id": "dummy",
-            "snapshot_at": "2026-05-30T00:00:00",
-            "video_count": 100,
-            "view_count": 10000,
-            "like_count": 500,
-            "share_count": 50,
-            "comment_count": 20,
-            "velocity_score": 3.2,
-            # plus audio_vec_0 ... audio_vec_N fields in real usage
-        }
-    ]
-    result = score_batch(records, explain=True)
-    print(result)
+    # 1) Fetch candidate tracks and features
+    tracks = db.fetch_candidate_tracks(date=today)  # you define this query
+    X, track_ids, code2s = build_features(tracks)
+
+    # 2) Load model and predict
+    model = load_model()
+    viral_scores = model.predict_proba(X)[:, 1]  # or whatever shape
+    rights_scores = model.predict_rights(X)      # if separate
+
+    # 3) Upsert into talent_scout_scores
+    for track_id, code2, v_score, r_score in zip(track_ids, code2s, viral_scores, rights_scores):
+        db.upsert_talent_scout_score(
+            track_id=track_id,
+            code2=code2,
+            date=today,
+            viral_score=float(v_score),
+            rights_complexity_score=float(r_score),
+        )
 
 if __name__ == "__main__":
     main()
