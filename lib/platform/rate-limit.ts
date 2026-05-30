@@ -5,7 +5,7 @@ export async function enforceRateLimit(
   ctx: RequestContext,
   bucket: string,
 ): Promise<void> {
-  // Implement using Redis/Upstash/etc. later.
-  // For now, this is a no-op hook.
+  // Hook up Redis/Upstash/etc. later.
+  // For now, this is a no-op to keep the API shape.
   return;
 }
