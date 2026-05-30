@@ -1109,4 +1109,102 @@ model Tenant {
   planId  Int?
   plan    Plan?  @relation(fields: [planId], references: [id])
 }
+model LuminateStream {
+  id              Int      @id @default(autoincrement())
+  /// 'song' | 'artist' | 'release_group'
+  entityType      String
+  entityId        Int
+  date            DateTime
+  locationId      String?  // Luminate location_id (US, CA, AA, etc.)
+  marketId        Int?     // Luminate market_id
+  /// 'audio' | 'video'
+  contentType     String?
+  /// 'premium' | 'ad_supported'
+  commercialModel String?
+  /// 'on_demand' | 'programmed'
+  serviceType     String?
+  /// Streams count stored as string to align with TS code
+  streams         String
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("luminate_streams")
+
+  /// Prevent duplicates per entity/date/dimension combo
+  @@unique(
+    [entityType, entityId, date, locationId, marketId, contentType, commercialModel, serviceType],
+    map: "luminate_streams_unique_key"
+  )
+}
+model LuminateSales {
+  id                  Int      @id @default(autoincrement())
+  /// 'song' | 'artist' | 'release_group'
+  entityType          String
+  entityId            Int
+  date                DateTime
+  locationId          String?
+  marketId            Int?
+
+  /// 'digital' | 'physical'
+  distributionChannel String?
+  /// 'online' | 'storefront'
+  purchaseMethod      String?
+  /// 'e-commerce' | 'mass_market' | 'independent' | 'direct_to_consumer' | 'venue' | 'non-traditional'
+  storeStrata         String?
+  /// 'cd' | 'cassette' | 'vinyl' | 'mxcd' | 'digital' | 'dvd' | 'vhs' | 'laser' | 'unknown'
+  productFormat       String?
+  /// 'album' | 'single' | 'ep' | 'video' | 'playlist' | 'unknown'
+  releaseType         String?
+
+  /// Units count stored as string to align with TS code
+  units               String
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("luminate_sales")
+
+  @@unique(
+    [
+      entityType,
+      entityId,
+      date,
+      locationId,
+      marketId,
+      distributionChannel,
+      purchaseMethod,
+      storeStrata,
+      productFormat,
+      releaseType
+    ],
+    map: "luminate_sales_unique_key"
+  )
+}
+model LuminateAirplay {
+  id         Int      @id @default(autoincrement())
+  /// 'song' | 'artist' | 'release_group'
+  entityType String
+  entityId   Int
+  date       DateTime
+  locationId String?
+  marketId   Int?
+
+  /// Airplay format_id, e.g. 'CW'
+  formatId   String?
+
+  /// Audience and spins stored as strings to align with TS code
+  audience   String?
+  spins      String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("luminate_airplay")
+
+  @@unique(
+    [entityType, entityId, date, locationId, marketId, formatId],
+    map: "luminate_airplay_unique_key"
+  )
+}
 }
