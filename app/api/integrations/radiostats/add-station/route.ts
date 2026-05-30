@@ -1,10 +1,14 @@
 // app/api/integrations/radiostats/add-station/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
-import { addRadiostatsStation } from '@/lib/radiostats/addStation';
+import {
+  addRadiostatsStation,
+  AddStationRequest,
+} from '@/lib/radiostats/addStation';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = (await req.json()) as Partial<AddStationRequest>;
 
     const {
       country_code,
@@ -42,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(resp, { status: 200 });
   } catch (err: any) {
-    console.error('Radiostats add-station integration error', err);
+    console.error('Radiostats add-station error', err);
     const status = err.status || 500;
     return NextResponse.json(
       { error: err.message ?? 'Unknown error' },
