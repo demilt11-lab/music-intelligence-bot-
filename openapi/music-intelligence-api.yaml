@@ -1,1 +1,74 @@
-
+openapi: 3.0.3
+info:
+  title: Music Intelligence API
+  version: 1.0.0
+paths:
+  /api/v1/tracks/{id}:
+    get:
+      summary: Get track metadata and stats
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Track found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    $ref: '#/components/schemas/TrackResponse'
+        '404':
+          description: Track not found
+components:
+  schemas:
+    TrackResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        isrc:
+          type: string
+          nullable: true
+        artists:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              name:
+                type: string
+        statistics:
+          type: object
+          properties:
+            raw:
+              type: object
+              properties:
+                spotifyStreams:
+                  type: string
+                  nullable: true
+                spotifyPopularity:
+                  type: integer
+                  nullable: true
+                tiktokVideoCount:
+                  type: integer
+                  nullable: true
+                youtubeViews:
+                  type: string
+                  nullable: true
+            derived:
+              type: object
+              properties:
+                streamVelocity7d:
+                  type: number
+                  nullable: true
+                viralScore:
+                  type: number
+                  nullable: true
