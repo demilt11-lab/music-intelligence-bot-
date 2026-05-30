@@ -3,7 +3,6 @@
 import {
   LuminateMetricsResponse,
   LuminateMetricNode,
-  LuminateDimensionCategory,
   LuminateMetricValuePoint,
   StreamRecord,
 } from '../types';
@@ -13,19 +12,11 @@ type StreamParserContext = {
   entityId: number;
   locationId?: string | null;
   marketId?: number | null;
-  // optional: injected from query
   contentType?: StreamRecord['contentType'];
   commercialModel?: StreamRecord['commercialModel'];
   serviceType?: StreamRecord['serviceType'];
 };
 
-/**
- * Parse a Luminate "Streams" metrics payload into normalized StreamRecord[]
- * Handles:
- *  - metrics[].name === "Streams"
- *  - value[].name === "total" -> primary time series (date, value)
- *  - dimension nodes: commercial_model, content_type, service_type
- */
 export function parseStreamsMetrics(
   resp: LuminateMetricsResponse,
   ctx: StreamParserContext,
@@ -43,30 +34,15 @@ export function parseStreamsMetrics(
 
   const timeSeries = totalNode.value as LuminateMetricValuePoint[];
 
-  // optional dimension categories
-  const commercialNode = values.find((v) => v.name === 'commercial_model');
-  const contentTypeNode = values.find((v) => v.name === 'content_type');
-  const serviceTypeNode = values.find((v) => v.name === 'service_type');
-
-  const commercialCategories = (commercialNode?.value ??
-    []) as LuminateDimensionCategory[];
-  const contentTypeCategories = (contentTypeNode?.value ??
-    []) as LuminateDimensionCategory[];
-  const serviceTypeCategories = (serviceTypeNode?.value ??
-    []) as LuminateDimensionCategory[];
-
-  // For now, we just attach the query-level filters (ctx.*) and not explode per-category.
-  return timeSeries.map((point) => {
-    return {
-      entityType: ctx.entityType,
-      entityId: ctx.entityId,
-      date: point.date,
-      locationId: ctx.locationId ?? null,
-      marketId: ctx.marketId ?? null,
-      contentType: ctx.contentType ?? null,
-      commercialModel: ctx.commercialModel ?? null,
-      serviceType: ctx.serviceType ?? null,
-      streams: String(point.value),
-    };
-  });
+  return timeSeries.map((point) => ({
+    entityType: ctx.entityType,
+    entityId: ctx.entityId,
+    date: point.date,
+    locationId: ctx.locationId ?? null,
+    marketId: ctx.marketId ?? null,
+    contentType: ctx.contentType ?? null,
+    commercialModel: ctx.commercialModel ?? null,
+    serviceType: ctx.serviceType ?? null,
+    streams: String(point.value),
+  }));
 }
