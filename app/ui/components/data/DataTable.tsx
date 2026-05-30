@@ -2,13 +2,11 @@
 'use client';
 
 import React from 'react';
-import clsx from 'clsx';
 
 type Column<T> = {
   key: keyof T | string;
   header: string;
   render?: (row: T) => React.ReactNode;
-  width?: string;
 };
 
 type DataTableProps<T> = {
@@ -44,10 +42,7 @@ export function DataTable<T>({
               <th
                 key={String(column.key)}
                 scope="col"
-                className={clsx(
-                  'px-3 py-2 font-medium text-slate-300',
-                  column.width && column.width
-                )}
+                className="px-3 py-2 font-medium text-slate-300"
               >
                 {column.header}
               </th>
@@ -58,10 +53,7 @@ export function DataTable<T>({
           {rows.map((row, rowIndex) => (
             <tr
               key={rowIndex}
-              className={clsx(
-                'bg-slate-950',
-                rowIndex % 2 === 0 && 'bg-slate-950/80'
-              )}
+              className={rowIndex % 2 === 0 ? 'bg-slate-950/80' : 'bg-slate-950'}
             >
               {columns.map((column) => (
                 <td key={String(column.key)} className="px-3 py-2 align-middle">
