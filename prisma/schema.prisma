@@ -1268,4 +1268,19 @@ model GenreAirplayMetrics {
   @@map("genre_airplay_metrics")
   @@unique([genre, country, date, formatId])
 }
+model TalentScoutScore {
+  id                     Int      @id @default(autoincrement())
+  trackId                Int
+  code2                  String   // country or GLOBAL
+  date                   DateTime // date the prediction applies to
+
+  viralScore             Float    // modelled breakout probability / score
+  rightsComplexityScore  Float    // modelled rights / complexity risk
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@map("talent_scout_scores")
+  @@unique([trackId, code2, date])
+}
 }
