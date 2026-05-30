@@ -40,4 +40,9 @@
     "tenant-automation": "ts-node scripts/automation/tenantAutomation.ts"
   }
 }
+{
+  "scripts": {
+    "tenant-automation": "ts-node scripts/automation/tenantAutomation.ts"
+  }
+}
 }
