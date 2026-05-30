@@ -10,19 +10,17 @@ import {
 } from '@/lib/services/radios';
 
 export interface InternalConnectorConfig {
-  // For future multi-tenant or feature flags.
+  // reserved for multi-tenant config later
 }
 
 export class InternalConnector {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   constructor(_config?: InternalConnectorConfig) {}
 
-  // RADIO LIST
   async getRadios(params: ListRadiosParams = {}): Promise<ListRadiosResult> {
     return listRadios(params);
   }
 
-  // RADIO LIVE FEED
   async getRadioLiveFeed(params: RadioLiveFeedParams): Promise<RadioLiveFeedResult> {
     return getRadioLiveFeed(params);
   }
