@@ -1,6 +1,10 @@
 // lib/catalog/matcher.ts
 import { db } from '@/lib/db';
 import { searchService } from '@/lib/search';
+import {
+  resolveTrackByIsrc,
+  resolveTrackByExternalIds,
+} from '@/lib/tracks/canonical';
 
 type MatchOptions = {
   tenantId: number;
@@ -10,7 +14,6 @@ type MatchOptions = {
 export async function matchTenantCatalogToCanonicalTracks(
   { tenantId, batchSize = 100 }: MatchOptions,
 ) {
-  // find catalog entries without canonicalTrackId
   const catalog = await db.catalogTrack.findMany({
     where: {
       tenantId,
@@ -38,50 +41,31 @@ export async function matchTenantCatalogToCanonicalTracks(
 }
 
 async function resolveCatalogRowToTrack(row: any): Promise<number | null> {
-  // 1) Try ISRC exact match
+  // 1. ISRC
   if (row.isrc) {
-    const track = await db.track.findFirst({
-      where: { isrc: row.isrc },
-      select: { id: true },
-    });
-    if (track) return track.id;
+    const id = await resolveTrackByIsrc(row.isrc);
+    if (id) return id;
   }
 
-  // 2) Try external IDs if present
-  if (row.spotifyTrackId) {
-    const external = await db.externalTrackId.findFirst({
-      where: { spotifyTrackId: row.spotifyTrackId },
-      select: { trackId: true },
-    });
-    if (external) return external.trackId;
-  }
+  // 2. External IDs
+  const externalId = await resolveTrackByExternalIds({
+    spotifyTrackId: row.spotifyTrackId,
+    appleMusicTrackId: row.appleMusicTrackId,
+    youtubeVideoId: row.youtubeVideoId,
+    tiktokSoundId: row.tiktokSoundId,
+  });
+  if (externalId) return externalId;
 
-  if (row.youtubeVideoId) {
-    const external = await db.externalTrackId.findFirst({
-      where: { youtubeVideoId: row.youtubeVideoId },
-      select: { trackId: true },
-    });
-    if (external) return external.trackId;
-  }
-
-  if (row.tiktokSoundId) {
-    const external = await db.externalTrackId.findFirst({
-      where: { tiktokSoundId: row.tiktokSoundId },
-      select: { trackId: true },
-    });
-    if (external) return external.trackId;
-  }
-
-  // 3) Fallback: name + artist search
+  // 3. Fallback: search by name + artist
   if (row.name && row.artistName) {
-    const result = await searchService.search({
+    const res = await searchService.search({
       q: `${row.name} ${row.artistName}`,
       type: 'tracks',
       limit: 1,
     } as any);
 
     const track =
-      result.obj?.tracks && result.obj.tracks[0];
+      res.obj?.tracks && res.obj.tracks[0];
     if (track?.id) return track.id;
   }
 
