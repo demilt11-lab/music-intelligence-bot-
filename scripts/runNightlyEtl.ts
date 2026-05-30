@@ -1,10 +1,9 @@
 // scripts/runNightlyEtl.ts
-
 import { runUgcTrackEtl } from '@/jobs/etl/ugcTracks';
 import { runGenreEtl } from '@/jobs/etl/genres';
 
 async function main() {
-  const referenceDate = process.argv[2]; // optional YYYY-MM-DD
+  const referenceDate = process.argv[2];
   console.log('[ETL] starting nightly ETL', referenceDate ?? '(today)');
   await runUgcTrackEtl(referenceDate);
   await runGenreEtl(referenceDate);
