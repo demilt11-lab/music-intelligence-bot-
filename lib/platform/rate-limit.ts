@@ -5,7 +5,7 @@ export async function enforceRateLimit(
   ctx: RequestContext,
   bucket: string,
 ): Promise<void> {
-  // Example bucket: `tenant:${ctx.tenantId}:search`
-  // Implement with Redis or a SaaS later.
+  // Implement using Redis/Upstash/etc. later.
+  // For now, this is a no-op hook.
   return;
 }
