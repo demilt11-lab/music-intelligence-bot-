@@ -1,6 +1,6 @@
 // lib/luminate/ingest.ts
 
-import { db } from '../db'; // adjust path to your db helper
+import { PrismaClient } from '@prisma/client';
 import {
   AirplayRecord,
   SalesRecord,
@@ -17,24 +17,20 @@ import { parseStreamsMetrics } from './parsers/streams';
 import { parseSalesMetrics } from './parsers/sales';
 import { parseAirplayMetrics } from './parsers/airplay';
 
-/**
- * Insert or upsert StreamRecord[] into your DB.
- * You’ll need to align this with your Prisma schema
- * (e.g. track_platform_stats_daily or a new table).
- */
+const db = new PrismaClient();
+
 async function saveStreams(records: StreamRecord[]) {
   if (!records.length) return;
-  // Example: insert into a dedicated luminate_streams table
-  await db.luminate_streams.createMany({
+  await db.luminateStream.createMany({
     data: records.map((r) => ({
-      entity_type: r.entityType,
-      entity_id: r.entityId,
+      entityType: r.entityType,
+      entityId: r.entityId,
       date: new Date(r.date),
-      location_id: r.locationId,
-      market_id: r.marketId,
-      content_type: r.contentType,
-      commercial_model: r.commercialModel,
-      service_type: r.serviceType,
+      locationId: r.locationId,
+      marketId: r.marketId,
+      contentType: r.contentType,
+      commercialModel: r.commercialModel,
+      serviceType: r.serviceType,
       streams: r.streams,
     })),
     skipDuplicates: true,
@@ -43,18 +39,18 @@ async function saveStreams(records: StreamRecord[]) {
 
 async function saveSales(records: SalesRecord[]) {
   if (!records.length) return;
-  await db.luminate_sales.createMany({
+  await db.luminateSales.createMany({
     data: records.map((r) => ({
-      entity_type: r.entityType,
-      entity_id: r.entityId,
+      entityType: r.entityType,
+      entityId: r.entityId,
       date: new Date(r.date),
-      location_id: r.locationId,
-      market_id: r.marketId,
-      distribution_channel: r.distributionChannel,
-      purchase_method: r.purchaseMethod,
-      store_strata: r.storeStrata,
-      product_format: r.productFormat,
-      release_type: r.releaseType,
+      locationId: r.locationId,
+      marketId: r.marketId,
+      distributionChannel: r.distributionChannel,
+      purchaseMethod: r.purchaseMethod,
+      storeStrata: r.storeStrata,
+      productFormat: r.productFormat,
+      releaseType: r.releaseType,
       units: r.units,
     })),
     skipDuplicates: true,
@@ -63,14 +59,14 @@ async function saveSales(records: SalesRecord[]) {
 
 async function saveAirplay(records: AirplayRecord[]) {
   if (!records.length) return;
-  await db.luminate_airplay.createMany({
+  await db.luminateAirplay.createMany({
     data: records.map((r) => ({
-      entity_type: r.entityType,
-      entity_id: r.entityId,
+      entityType: r.entityType,
+      entityId: r.entityId,
       date: new Date(r.date),
-      location_id: r.locationId,
-      market_id: r.marketId,
-      format_id: r.formatId,
+      locationId: r.locationId,
+      marketId: r.marketId,
+      formatId: r.formatId,
       audience: r.audience,
       spins: r.spins,
     })),
