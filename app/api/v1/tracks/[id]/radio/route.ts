@@ -1,0 +1,73 @@
+// app/api/v1/tracks/[id]/radio/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { buildRequestContext, requireScope } from '@/lib/platform/context';
+import { enforceRateLimit } from '@/lib/platform/rate-limit';
+import { logRequest } from '@/lib/platform/logging';
+import { radioService } from '@/lib/radio';
+
+type RouteParams = { params: { id: string } };
+
+export async function GET(req: NextRequest, { params }: RouteParams) {
+  const startedAt = Date.now();
+  let ctx;
+
+  try {
+    ctx = await buildRequestContext(req);
+    requireScope(ctx, 'tracks:radio:read');
+
+    await enforceRateLimit(ctx, `tenant:${ctx.tenantId}:tracks:radio`);
+
+    const trackId = Number(params.id);
+    if (!Number.isFinite(trackId)) {
+      return NextResponse.json(
+        { error: 'Invalid track id' },
+        { status: 400 },
+      );
+    }
+
+    const url = new URL(req.url);
+    const since = url.searchParams.get('since') || undefined;
+
+    const radioTotals = await radioService.getTrackAirplayTotals(
+      trackId,
+      since,
+    );
+    const broadcastMarkets =
+      await radioService.getTrackBroadcastMarkets(trackId, since);
+
+    const res = NextResponse.json(
+      {
+        obj: {
+          airplayTotals: radioTotals,
+          broadcastMarkets,
+        },
+      },
+      { status: 200 },
+    );
+
+    await logRequest(
+      ctx,
+      '/api/v1/tracks/[id]/radio',
+      'GET',
+      200,
+      startedAt,
+    );
+    return res;
+  } catch (err: any) {
+    const status = err.status || 500;
+    const message =
+      status === 500 ? 'Internal server error' : err.message ?? 'Error';
+
+    if (ctx) {
+      await logRequest(
+        ctx,
+        '/api/v1/tracks/[id]/radio',
+        'GET',
+        status,
+        startedAt,
+      );
+    }
+
+    return NextResponse.json({ error: message }, { status });
+  }
+}
