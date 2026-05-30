@@ -1,158 +1,109 @@
 # ml/training/retrain_scheduler.py
-"""
-Automated retraining loop.
-Runs on a schedule (cron or continuous loop) to:
-  1. Collect fresh features from the API
-  2. Auto-label using rule-based trajectory logic (until enough human labels exist)
-  3. Retrain viral predictor and trend classifier
-  4. Save versioned models with metadata
-  5. Log performance delta vs previous model
-"""
-
-import os
+from pathlib import Path
 import json
-import time
-import logging
 import subprocess
-from datetime import datetime
-import joblib
+import sys
+from datetime import datetime, timedelta
+
 import numpy as np
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from ml.config import ROOT, LOG_DIR, configure_logging
 
-MODEL_DIR = "output/models"
-DATA_DIR = "output/data"
-RETRAIN_INTERVAL_HOURS = int(os.environ.get("RETRAIN_INTERVAL_HOURS", 24))
+logger = configure_logging(__name__)
 
-TRAJECTORY_AUTO_LABEL_RULES = {
-    "rising": 1,
-    "resurging": 1,
-    "peaking": 0,
-    "declining": 0,
-    "stable": 0,
-    "low_signal": 0,
-}
+STATE_PATH = LOG_DIR / "retrain_state.json"
+DRIFT_THRESHOLD = 0.1  # example tolerance on metric difference
+MIN_HOURS_BETWEEN_RETRAINS = 12
 
+TRAIN_SCRIPTS = [
+    ROOT / "ml" / "training" / "train_trajectory_model.py",
+    ROOT / "ml" / "training" / "train_trend_classifier.py",
+    ROOT / "ml" / "training" / "train_viral_predictor.py",
+]
 
-def auto_label_rows(rows):
-    """
-    Auto-labels rows using trajectory state as a proxy for viral_label.
-    Used until sufficient human-verified labels are available.
-    """
-    labeled = []
-    for row in rows:
-        traj = row.get("trajectory_label")
-        if traj and row.get("viral_label") is None:
-            row["viral_label"] = TRAJECTORY_AUTO_LABEL_RULES.get(traj, 0)
-        labeled.append(row)
-    return labeled
+def load_state():
+    if not STATE_PATH.exists():
+        return {}
+    with STATE_PATH.open() as f:
+        return json.load(f)
 
+def save_state(state):
+    with STATE_PATH.open("w") as f:
+        json.dump(state, f, indent=2)
 
-def load_existing_metrics(model_name: str) -> dict:
-    path = f"{MODEL_DIR}/{model_name}_metadata.json"
-    if os.path.exists(path):
-        with open(path) as f:
-            return json.load(f)
-    return {}
+def detect_model_drift(
+    recent_scores: np.ndarray, baseline_scores: np.ndarray
+) -> bool:
+    """Simple drift: compare mean and variance."""
+    if recent_scores.size == 0 or baseline_scores.size == 0:
+        return False
+    recent_mean = recent_scores.mean()
+    base_mean = baseline_scores.mean()
+    diff = abs(recent_mean - base_mean)
+    logger.info("Drift check: recent_mean=%.4f, base_mean=%.4f, diff=%.4f", recent_mean, base_mean, diff)
+    return diff > DRIFT_THRESHOLD
 
-
-def version_model(model_name: str):
-    """Copies current model to a versioned backup before retraining."""
-    src = f"{MODEL_DIR}/{model_name}.pkl"
-    if os.path.exists(src):
-        ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        dst = f"{MODEL_DIR}/versions/{model_name}_{ts}.pkl"
-        os.makedirs(f"{MODEL_DIR}/versions", exist_ok=True)
-        import shutil
-        shutil.copy(src, dst)
-        logger.info(f"Versioned model to {dst}")
-
-
-def run_retrain_cycle():
-    logger.info("=== Starting retrain cycle ===")
-
-    # 1. Load latest collected features
-    features_path = f"{DATA_DIR}/features.json"
-    labeled_path = f"{DATA_DIR}/features_labeled.json"
-
-    if not os.path.exists(features_path):
-        logger.warning("No features file found; skipping retrain.")
-        return
-
-    with open(features_path) as f:
-        rows = json.load(f)
-
-    # 2. Auto-label unlabeled rows
-    rows = auto_label_rows(rows)
-
-    with open(labeled_path, "w") as f:
-        json.dump(rows, f, indent=2)
-
-    logger.info(f"Auto-labeled {len(rows)} rows")
-
-    # 3. Version existing models before overwriting
-    version_model("viral_predictor_stack")
-    version_model("audio_archetype_kmeans")
-    version_model("regional_trend_models")
-
-    # 4. Load previous metrics for comparison
-    prev_metrics = load_existing_metrics("viral_predictor")
-
-    # 5. Retrain viral predictor
-    logger.info("Retraining viral predictor...")
-    result = subprocess.run(
-        ["python", "ml/training/train_viral_predictor.py"],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        logger.error(f"Viral predictor training failed:\n{result.stderr}")
-    else:
-        logger.info("Viral predictor retrained successfully.")
-
-    # 6. Retrain trend classifier
-    logger.info("Retraining trend classifier...")
-    result = subprocess.run(
-        ["python", "ml/training/train_trend_classifier.py"],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        logger.error(f"Trend classifier training failed:\n{result.stderr}")
-    else:
-        logger.info("Trend classifier retrained successfully.")
-
-    # 7. Log performance delta
-    new_metrics = load_existing_metrics("viral_predictor")
-    prev_auc = prev_metrics.get("metrics", {}).get("auc_roc", 0)
-    new_auc = new_metrics.get("metrics", {}).get("auc_roc", 0)
-
-    delta = new_auc - prev_auc
-    logger.info(f"AUC delta: {delta:+.4f} (prev={prev_auc:.4f} new={new_auc:.4f})")
-
-    cycle_log = {
-        "timestamp": datetime.utcnow().isoformat(),
-        "rows_trained": len(rows),
-        "prev_auc": prev_auc,
-        "new_auc": new_auc,
-        "delta": delta,
-    }
-
-    log_path = f"{DATA_DIR}/retrain_log.jsonl"
-    with open(log_path, "a") as f:
-        f.write(json.dumps(cycle_log) + "\n")
-
-    logger.info("=== Retrain cycle complete ===")
-
+def run_training_script(path: Path) -> bool:
+    logger.info("Running training script: %s", path)
+    try:
+        result = subprocess.run(
+            [sys.executable, str(path)],
+            cwd=str(ROOT),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        logger.info("Training script %s completed. stdout:\n%s", path.name, result.stdout)
+        if result.stderr:
+            logger.warning("stderr from %s:\n%s", path.name, result.stderr)
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(
+            "Training script %s failed with code %s.\nstdout:\n%s\nstderr:\n%s",
+            path.name,
+            e.returncode,
+            e.stdout,
+            e.stderr,
+        )
+        return False
 
 def main():
-    while True:
-        try:
-            run_retrain_cycle()
-        except Exception as e:
-            logger.error(f"Retrain cycle error: {e}")
-        logger.info(f"Sleeping {RETRAIN_INTERVAL_HOURS}h until next cycle...")
-        time.sleep(RETRAIN_INTERVAL_HOURS * 3600)
+    state = load_state()
+    last_retrain_iso = state.get("last_retrain_at")
+    now = datetime.utcnow()
 
+    if last_retrain_iso:
+        last_retrain = datetime.fromisoformat(last_retrain_iso)
+        elapsed = (now - last_retrain).total_seconds() / 3600.0
+        logger.info("Hours since last retrain: %.2f", elapsed)
+        if elapsed < MIN_HOURS_BETWEEN_RETRAINS:
+            logger.info("Skipping retrain: minimum interval not reached")
+            return
+
+    # TODO: load baseline and recent scores from metrics store
+    # For now, stub arrays; plug your real metrics here.
+    baseline_scores = np.array(state.get("baseline_scores", []), dtype=float)
+    recent_scores = np.array(state.get("recent_scores", []), dtype=float)
+
+    if not detect_model_drift(recent_scores, baseline_scores):
+        logger.info("No significant model drift detected. Skipping retrain.")
+        return
+
+    logger.info("Model drift detected. Triggering retrain.")
+    all_ok = True
+    for script in TRAIN_SCRIPTS:
+        if not run_training_script(script):
+            all_ok = False
+
+    if all_ok:
+        state["last_retrain_at"] = now.isoformat()
+        # Update baseline scores to recent after successful retrain
+        if recent_scores.size:
+            state["baseline_scores"] = recent_scores.tolist()
+        save_state(state)
+        logger.info("Retrain completed successfully and state saved.")
+    else:
+        logger.error("One or more training scripts failed; state not updated.")
 
 if __name__ == "__main__":
     main()
