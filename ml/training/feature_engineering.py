@@ -294,3 +294,97 @@ NUMERIC_BASE_FEATURES = [
 
 def engineer_features(row: Dict) -> Dict[str, float]:
     """
+# --- continuation of feature_engineering.py ---
+
+def engineer_features(row: Dict) -> Dict[str, float]:
+    """
+    Master feature engineering function.
+    Takes one raw row and returns a flat dict of ML-ready features.
+    """
+    features = {}
+
+    # 1. Numeric base features (log-scale large counts)
+    for key in NUMERIC_BASE_FEATURES:
+        val = row.get(key)
+        if val is None:
+            features[key] = 0.0
+        else:
+            fval = float(val)
+            # Log-scale stream/view/count features to handle skew
+            if any(k in key for k in ["streams", "views", "count", "spins"]):
+                features[key] = float(np.log1p(max(fval, 0)))
+            else:
+                features[key] = fval
+
+    # 2. Audio encoding
+    features.update(encode_key(row.get("musical_key"), row.get("mode")))
+    features.update(encode_bpm(row.get("bpm")))
+
+    # 3. Language + genre one-hot
+    features.update(encode_language(row.get("language")))
+    features.update(encode_genre(row.get("genre_primary")))
+
+    # 4. Geo encoding
+    features.update(encode_geo(
+        row.get("active_regions"),
+        row.get("region_video_counts"),
+        row.get("top_country_1"),
+    ))
+
+    # 5. Cross-platform momentum
+    features.update(compute_cross_platform_momentum(row))
+
+    # 6. TikTok UGC signals
+    features.update(compute_tiktok_ugc_signals(row))
+
+    return features
+
+
+def build_feature_matrix(
+    rows: List[Dict],
+    fit_scaler: bool = True,
+    scaler_path: str = "output/models/scaler.pkl",
+) -> Tuple[np.ndarray, List[str]]:
+    """
+    Converts a list of raw feature rows into a scaled numpy matrix.
+    Returns (X, feature_names).
+    """
+    engineered = [engineer_features(r) for r in rows]
+    df = pd.DataFrame(engineered).fillna(0.0)
+    feature_names = list(df.columns)
+
+    imputer = SimpleImputer(strategy="constant", fill_value=0.0)
+    X = imputer.fit_transform(df.values)
+
+    if fit_scaler:
+        scaler = StandardScaler()
+        X = scaler.fit_transform(X)
+        os.makedirs(os.path.dirname(scaler_path), exist_ok=True)
+        joblib.dump(scaler, scaler_path)
+        logger.info(f"Saved scaler to {scaler_path}")
+    else:
+        if os.path.exists(scaler_path):
+            scaler = joblib.load(scaler_path)
+            X = scaler.transform(X)
+
+    return X, feature_names
+
+
+def extract_labels(
+    rows: List[Dict],
+    label_key: str = "viral_label",
+) -> np.ndarray:
+    return np.array([
+        int(r.get(label_key) or 0) for r in rows
+    ])
+
+
+if __name__ == "__main__":
+    import sys
+    input_file = sys.argv[1] if len(sys.argv) > 1 else "output/data/features.json"
+    with open(input_file) as f:
+        rows = json.load(f)
+
+    X, names = build_feature_matrix(rows, fit_scaler=True)
+    logger.info(f"Feature matrix: {X.shape}, features: {len(names)}")
+    logger.info(f"Sample features: {names[:10]}")
