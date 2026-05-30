@@ -1,0 +1,6 @@
+// app/api/v1/tracks/[id]/route.ts
+import type { TrackResponse } from '@/lib/api-contracts';
+// ...
+const track = await tracksService.getTrackById(trackId);
+const response: TrackResponse = transformTrackToResponse(track);
+return NextResponse.json({ obj: response }, { status: 200 });
