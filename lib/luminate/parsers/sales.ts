@@ -23,7 +23,6 @@ export function parseSalesMetrics(
     | undefined;
   if (!salesMetric || !Array.isArray(salesMetric.value)) return [];
 
-  // Under Sales, examples show a nested "Product Sales" node with total + dimensions
   const productSalesNode = (salesMetric.value as LuminateMetricNode[]).find(
     (n) => n.name === 'Product Sales',
   );
