@@ -1,12 +1,10 @@
 // app/ui/components/data/StatGrid.tsx
 import React from 'react';
-import { StatBadge } from './StatBadge';
 
 type StatGridItem = {
   key: string;
   label: string;
   value: string | number;
-  tone?: 'default' | 'success' | 'warning' | 'danger';
 };
 
 type StatGridProps = {
