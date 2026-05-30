@@ -1,4 +1,5 @@
 // lib/radiostats/artists.ts
+
 import { radiostatsGet } from './client';
 
 export type RadiostatsArtistQuery = {
