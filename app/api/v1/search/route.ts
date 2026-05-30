@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
 import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { logRequest } from '@/lib/platform/logging';
-import { searchService } from '@/lib/search'; // existing search module
-import { parseSearchParams } from '@/lib/shared/validation'; // existing helper
+import { searchService } from '@/lib/search';
+import { parseSearchParams } from '@/lib/shared/validation';
 
 export async function GET(req: NextRequest) {
   const startedAt = Date.now();
