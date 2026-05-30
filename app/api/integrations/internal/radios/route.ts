@@ -4,21 +4,29 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createInternalConnector } from '@/lib/integrations/internal';
 
 export async function GET(req: NextRequest) {
-  const searchParams = req.nextUrl.searchParams;
+  try {
+    const sp = req.nextUrl.searchParams;
 
-  const offset = Number(searchParams.get('offset') ?? '0');
-  const limit = Number(searchParams.get('limit') ?? '25');
-  const countryCode = searchParams.get('countryCode') || undefined;
-  const search = searchParams.get('search') || undefined;
+    const offset      = Number(sp.get('offset')      ?? '0');
+    const limit       = Number(sp.get('limit')        ?? '25');
+    const countryCode = sp.get('countryCode')         || undefined;
+    const search      = sp.get('search')              || undefined;
 
-  const internal = createInternalConnector();
+    const connector = createInternalConnector();
 
-  const data = await internal.getRadios({
-    offset,
-    limit,
-    countryCode,
-    search,
-  });
+    const data = await connector.getRadios({
+      offset,
+      limit,
+      countryCode,
+      search,
+    });
 
-  return NextResponse.json(data);
+    return NextResponse.json(data);
+  } catch (err) {
+    console.error('[GET /api/integrations/internal/radios]', err);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 },
+    );
+  }
 }
