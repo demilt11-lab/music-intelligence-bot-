@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
       | null) ?? null;
 
     const result = await ingestStreamsForEntity({
-      luminatePath: '/songs', // or /artists, /musical_release_groups depending on entityType
+      luminatePath: '/songs', // adjust based on entityType if needed
       params: {
         start_date: since,
         end_date: until,
@@ -52,10 +52,12 @@ export async function GET(req: NextRequest) {
       serviceType,
     });
 
-    return NextResponse.json({ obj: result });
+    return NextResponse.json({ data: result });
   } catch (err: any) {
-    // eslint-disable-next-line no-console
     console.error('[luminate-streams]', err);
-    return NextResponse.json({ error: err.message ?? 'Internal error' }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message ?? 'Internal error' },
+      { status: 500 },
+    );
   }
 }
