@@ -16,7 +16,6 @@ export async function upsertCatalogTracks(
   ctx: RequestContext,
   tracks: CatalogTrackInput[],
 ): Promise<void> {
-  // naive implementation: store raw data + mapping; you can enrich later
   for (const t of tracks) {
     await db.catalogTrack.upsert({
       where: {
