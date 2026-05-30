@@ -5,10 +5,14 @@ import { PageSection } from '../../ui/components/layout/PageSection';
 import { StatGrid } from '../../ui/components/data/StatGrid';
 
 async function getTrack(trackId: string) {
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL}/api/tracks/${trackId}`,
-    { cache: 'no-store' }
-  );
+  const baseUrl =
+    process.env.INTERNAL_API_BASE_URL ??
+    process.env.NEXT_PUBLIC_BASE_URL ??
+    '';
+
+  const res = await fetch(`${baseUrl}/api/tracks/${trackId}`, {
+    cache: 'no-store',
+  });
 
   if (!res.ok) {
     return null;
@@ -51,7 +55,9 @@ export default async function TrackPage({ params }: TrackPageProps) {
               <div className="flex-1 space-y-2 text-sm">
                 <p>
                   <span className="text-slate-400">ISRC:</span>{' '}
-                  <span className="text-slate-100">{track.isrc}</span>
+                  <span className="text-slate-100">
+                    {track.isrc}
+                  </span>
                 </p>
                 <p>
                   <span className="text-slate-400">Release date:</span>{' '}
@@ -81,22 +87,26 @@ export default async function TrackPage({ params }: TrackPageProps) {
                 {
                   key: 'spotifyPopularity',
                   label: 'Spotify popularity',
-                  value: track.statistics?.spotifyPopularity ?? '—',
+                  value:
+                    track.statistics?.spotifyPopularity ?? '—',
                 },
                 {
                   key: 'spotifyStreams',
                   label: 'Spotify streams',
-                  value: track.statistics?.spotifyStreams ?? '—',
+                  value:
+                    track.statistics?.spotifyStreams ?? '—',
                 },
                 {
                   key: 'tiktokVideoCount',
                   label: 'TikTok videos',
-                  value: track.statistics?.tiktokVideoCount ?? '—',
+                  value:
+                    track.statistics?.tiktokVideoCount ?? '—',
                 },
                 {
                   key: 'youtubeViews',
                   label: 'YouTube views',
-                  value: track.statistics?.youtubeViews ?? '—',
+                  value:
+                    track.statistics?.youtubeViews ?? '—',
                 },
               ]}
             />
