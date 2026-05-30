@@ -1,6 +1,6 @@
 // lib/services/radios.ts
 
-import { prisma } from '@/lib/prisma'; // adjust path if your prisma client is elsewhere
+import { prisma } from '@/lib/prisma'; // adjust if your prisma client is elsewhere
 
 export interface Radio {
   id: string;
@@ -83,7 +83,7 @@ export async function listRadios(params: ListRadiosParams = {}): Promise<ListRad
   };
 }
 
-// LIVE FEED (your own radio spins) --------------------------------------
+// LIVE FEED (from your own radio spins table) ----------------------------
 
 export async function getRadioLiveFeed(
   params: RadioLiveFeedParams,
