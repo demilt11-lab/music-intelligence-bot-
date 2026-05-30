@@ -22,6 +22,6 @@ export async function logRequest(
       },
     });
   } catch {
-    // logging should never break the API; swallow errors
+    // logging should never break API responses
   }
 }
