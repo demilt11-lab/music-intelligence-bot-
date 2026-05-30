@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
 import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { logRequest } from '@/lib/platform/logging';
-import { tracksService } from '@/lib/tracks'; // barrel export in lib/services/index.ts
+import { tracksService } from '@/lib/tracks';
 
 type RouteParams = {
   params: { id: string };
