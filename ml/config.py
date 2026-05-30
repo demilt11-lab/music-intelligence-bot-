@@ -6,15 +6,15 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
 MODEL_DIR = ROOT / "models"
 LOG_DIR = ROOT / "logs"
+METRICS_DIR = LOG_DIR / "metrics"
 
-LOG_DIR.mkdir(parents=True, exist_ok=True)
-MODEL_DIR.mkdir(parents=True, exist_ok=True)
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+for d in (DATA_DIR, MODEL_DIR, LOG_DIR, METRICS_DIR):
+    d.mkdir(parents=True, exist_ok=True)
 
 def configure_logging(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     if logger.handlers:
-        return logger  # avoid duplicate handlers
+        return logger
 
     logger.setLevel(logging.INFO)
     fmt = logging.Formatter(
