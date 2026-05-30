@@ -2,27 +2,30 @@
 
 import {
   listRadios,
+  getRadioLiveFeed,
   type ListRadiosParams,
   type ListRadiosResult,
+  type RadioLiveFeedParams,
+  type RadioLiveFeedResult,
 } from '@/lib/services/radios';
 
 export interface InternalConnectorConfig {
-  // keep here in case you want per-tenant options later
+  // For future multi-tenant or feature flags.
 }
 
 export class InternalConnector {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   constructor(_config?: InternalConnectorConfig) {}
 
-  // RADIO ----------------------------------------------------------------
+  // RADIO LIST
   async getRadios(params: ListRadiosParams = {}): Promise<ListRadiosResult> {
     return listRadios(params);
   }
 
-  // later you can add:
-  // - getRadioLiveFeed (from your own events table)
-  // - getRadioIdentifiers (your own platform map)
-  // etc.
+  // RADIO LIVE FEED
+  async getRadioLiveFeed(params: RadioLiveFeedParams): Promise<RadioLiveFeedResult> {
+    return getRadioLiveFeed(params);
+  }
 }
 
 export function createInternalConnector(config?: InternalConnectorConfig) {
