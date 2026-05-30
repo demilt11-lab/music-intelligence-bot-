@@ -12,7 +12,6 @@ export async function buildRequestContext(
   req: NextRequest,
 ): Promise<RequestContext> {
   const apiKey = req.headers.get('x-api-key');
-
   if (!apiKey) {
     const err: any = new Error('Missing API key');
     err.status = 401;
