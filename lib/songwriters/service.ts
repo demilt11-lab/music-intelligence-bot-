@@ -1,6 +1,6 @@
 // lib/songwriters/service.ts
 import { db } from '@/lib/db';
-import { tracksService } from '@/lib/tracks';
+import { tracksService } from '@/lib/tracks/service';
 
 type CatalogOptions = {
   songwriterId: number;
@@ -13,6 +13,7 @@ export async function getCatalogWithStatsAndCharts(
 ) {
   const { songwriterId, limit, offset } = options;
 
+  // Join table linking songwriter to tracks
   const trackLinks = await db.songwriterTrack.findMany({
     where: { songwriterId },
     select: { trackId: true },
@@ -21,7 +22,6 @@ export async function getCatalogWithStatsAndCharts(
   });
 
   const trackIds = trackLinks.map((x) => x.trackId);
-
   const tracks = await tracksService.getTracksByIdsWithStatsAndCharts(
     trackIds,
   );
