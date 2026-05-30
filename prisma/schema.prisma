@@ -904,4 +904,14 @@ model ApiKey {
 
   tenant     Tenant    @relation(fields: [tenantId], references: [id])
 }
+
+model RequestLog {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int
+  endpoint   String
+  method     String
+  statusCode Int
+  latencyMs  Int
+  createdAt  DateTime @default(now())
+}
 }
