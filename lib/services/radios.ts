@@ -1,8 +1,10 @@
 // lib/services/radios.ts
 
-import { prisma } from '@/lib/prisma'; // adjust if your prisma client is elsewhere
+import { db } from '@/lib/db';
 
-export interface Radio {
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface RadioItem {
   id: string;
   slug: string;
   name: string;
@@ -19,15 +21,15 @@ export interface ListRadiosParams {
 }
 
 export interface ListRadiosResult {
-  items: Radio[];
+  items: RadioItem[];
   offset: number;
   total: number;
 }
 
 export interface RadioLiveFeedParams {
   radioSlug: string;
-  startDate?: string; // ISO string (e.g. 2024-01-01T00:00:00Z)
-  endDate?: string;   // ISO string
+  startDate?: string; // ISO datetime e.g. 2024-01-01T00:00:00Z
+  endDate?: string;   // ISO datetime
   offset?: number;
   limit?: number;
 }
@@ -47,19 +49,21 @@ export interface RadioLiveFeedResult {
   total: number;
 }
 
-// LIST RADIOS ------------------------------------------------------------
+// ─── List Radios ─────────────────────────────────────────────────────────────
 
-export async function listRadios(params: ListRadiosParams = {}): Promise<ListRadiosResult> {
+export async function listRadios(
+  params: ListRadiosParams = {},
+): Promise<ListRadiosResult> {
   const offset = params.offset ?? 0;
-  const limit = params.limit ?? 25;
+  const limit  = Math.min(params.limit ?? 25, 100);
 
-  const where: Parameters<typeof prisma.radio.findMany>[0]['where'] = {};
+  const where: Parameters<typeof db.radio.findMany>[0]['where'] = {};
 
   if (params.countryCode) {
     where.countryCode = params.countryCode;
   }
 
-  if (params.search && params.search.trim()) {
+  if (params.search?.trim()) {
     where.OR = [
       { name: { contains: params.search, mode: 'insensitive' } },
       { slug: { contains: params.search, mode: 'insensitive' } },
@@ -67,32 +71,37 @@ export async function listRadios(params: ListRadiosParams = {}): Promise<ListRad
   }
 
   const [items, total] = await Promise.all([
-    prisma.radio.findMany({
+    db.radio.findMany({
       where,
-      skip: offset,
-      take: limit,
+      skip:    offset,
+      take:    limit,
       orderBy: { name: 'asc' },
+      select: {
+        id:          true,
+        slug:        true,
+        name:        true,
+        countryCode: true,
+        market:      true,
+        genre:       true,
+      },
     }),
-    prisma.radio.count({ where }),
+    db.radio.count({ where }),
   ]);
 
-  return {
-    items,
-    offset,
-    total,
-  };
+  return { items, offset, total };
 }
 
-// LIVE FEED (from your own radio spins table) ----------------------------
+// ─── Radio Live Feed (from your own RadioSpin table) ─────────────────────────
 
 export async function getRadioLiveFeed(
   params: RadioLiveFeedParams,
 ): Promise<RadioLiveFeedResult> {
   const offset = params.offset ?? 0;
-  const limit = params.limit ?? 100;
+  const limit  = Math.min(params.limit ?? 100, 100);
 
-  const radio = await prisma.radio.findUnique({
-    where: { slug: params.radioSlug },
+  // resolve slug → id
+  const radio = await db.radio.findUnique({
+    where:  { slug: params.radioSlug },
     select: { id: true },
   });
 
@@ -100,38 +109,35 @@ export async function getRadioLiveFeed(
     return { items: [], offset, total: 0 };
   }
 
-  const where: Parameters<typeof prisma.radioSpin.findMany>[0]['where'] = {
+  const where: Parameters<typeof db.radioSpin.findMany>[0]['where'] = {
     radioId: radio.id,
   };
 
   if (params.startDate || params.endDate) {
-    where.airedAtUtc = {};
-    if (params.startDate) {
-      (where.airedAtUtc as any).gte = new Date(params.startDate);
-    }
-    if (params.endDate) {
-      (where.airedAtUtc as any).lte = new Date(params.endDate);
-    }
+    where.airedAtUtc = {
+      ...(params.startDate ? { gte: new Date(params.startDate) } : {}),
+      ...(params.endDate   ? { lte: new Date(params.endDate)   } : {}),
+    };
   }
 
   const [rows, total] = await Promise.all([
-    prisma.radioSpin.findMany({
+    db.radioSpin.findMany({
       where,
-      skip: offset,
-      take: limit,
+      skip:    offset,
+      take:    limit,
       orderBy: { airedAtUtc: 'desc' },
     }),
-    prisma.radioSpin.count({ where }),
+    db.radioSpin.count({ where }),
   ]);
 
   return {
     items: rows.map((row) => ({
-      id: row.id,
-      radioId: row.radioId,
-      songUuid: row.songUuid,
-      airedAtUtc: row.airedAtUtc.toISOString(),
-      countryCode: row.countryCode,
-      payload: row.payload ?? undefined,
+      id:          row.id,
+      radioId:     row.radioId,
+      songUuid:    row.songUuid,
+      airedAtUtc:  row.airedAtUtc.toISOString(),
+      countryCode: row.countryCode ?? null,
+      payload:     row.payload ?? undefined,
     })),
     offset,
     total,
