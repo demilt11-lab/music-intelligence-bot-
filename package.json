@@ -45,4 +45,9 @@
     "tenant-automation": "ts-node scripts/automation/tenantAutomation.ts"
   }
 }
+{
+  "scripts": {
+    "match-catalog": "ts-node scripts/match-catalog.ts"
+  }
+}
 }
