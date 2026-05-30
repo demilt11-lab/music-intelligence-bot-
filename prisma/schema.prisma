@@ -1080,4 +1080,21 @@ model RequestLog {
   latencyMs  Int
   createdAt  DateTime @default(now())
 }
+enum TenantEnvironment {
+  SANDBOX
+  PROD
+}
+
+model Tenant {
+  id          Int                 @id @default(autoincrement())
+  name        String
+  slug        String              @unique
+  environment TenantEnvironment   @default(SANDBOX)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  users     TenantUser[]
+  apiKeys   ApiKey[]
+  catalog   CatalogTrack[]
+}
 }
