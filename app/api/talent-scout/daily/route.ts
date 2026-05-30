@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  fetchTopTiktokBreakoutTracks,
+  fetchTopUgcBreakoutTracks,
   hydrateInternalStreaming,
   hydrateLuminateMetrics,
 } from '@/lib/talentScout/sources';
@@ -11,15 +11,16 @@ import { rankTalentTracks } from '@/lib/talentScout/score';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const date = searchParams.get('date') ?? undefined; // defaults to latest in DB
+    const date = searchParams.get('date') ?? undefined;
     const code2 = searchParams.get('code2') ?? 'GLOBAL';
     const limit = Number(searchParams.get('limit') ?? '50');
+    const mode = (searchParams.get('mode') ?? 'ugc_early') as 'ugc_early' | 'general';
 
-    let tracks = await fetchTopTiktokBreakoutTracks({ date, code2, limit });
+    let tracks = await fetchTopUgcBreakoutTracks({ date, code2, limit });
     tracks = await hydrateInternalStreaming(tracks);
     tracks = await hydrateLuminateMetrics(tracks);
 
-    const ranked = rankTalentTracks(tracks);
+    const ranked = rankTalentTracks(tracks, mode);
 
     return NextResponse.json({
       obj: ranked,
@@ -27,8 +28,9 @@ export async function GET(req: NextRequest) {
         date,
         code2,
         limit,
+        mode,
         description:
-          'Daily talent-scouting list combining TikTok breakout, internal streaming, and Luminate metrics.',
+          'Daily UGC trend-spotting list combining TikTok, internal streaming, and Luminate metrics.',
       },
     });
   } catch (err: any) {
