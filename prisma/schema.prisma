@@ -860,4 +860,48 @@ model RadioSpin {
   @@index([radioId, airedAtUtc])
   @@index([songUuid, airedAtUtc])
 }
+
+model Tenant {
+  id        Int         @id @default(autoincrement())
+  name      String
+  slug      String      @unique
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  users     TenantUser[]
+  apiKeys   ApiKey[]
+}
+
+model TenantUser {
+  id        Int        @id @default(autoincrement())
+  tenantId  Int
+  email     String
+  role      TenantRole
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+}
+
+enum TenantRole {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+model ApiKey {
+  id         Int       @id @default(autoincrement())
+  tenantId   Int
+  keyHash    String    @unique
+  label      String
+  scopes     String    // CSV or JSON string, e.g. "search:read,tracks:read"
+  expiresAt  DateTime?
+  isRevoked  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+}
 }
