@@ -1097,4 +1097,16 @@ model Tenant {
   apiKeys   ApiKey[]
   catalog   CatalogTrack[]
 }
+model Plan {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique
+  scopes String  // "search:read,tracks:read,tracks:features:read"
+  tenants Tenant[]
+}
+
+model Tenant {
+  // existing fields...
+  planId  Int?
+  plan    Plan?  @relation(fields: [planId], references: [id])
+}
 }
