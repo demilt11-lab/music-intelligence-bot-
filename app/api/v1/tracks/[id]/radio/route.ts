@@ -28,7 +28,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const url = new URL(req.url);
     const since = url.searchParams.get('since') || undefined;
 
-    const radioTotals = await radioService.getTrackAirplayTotals(
+    const airplayTotals = await radioService.getTrackAirplayTotals(
       trackId,
       since,
     );
@@ -38,13 +38,12 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const res = NextResponse.json(
       {
         obj: {
-          airplayTotals: radioTotals,
+          airplayTotals,
           broadcastMarkets,
         },
       },
       { status: 200 },
     );
-
     await logRequest(
       ctx,
       '/api/v1/tracks/[id]/radio',
