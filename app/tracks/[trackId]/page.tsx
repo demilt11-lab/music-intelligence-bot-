@@ -3,6 +3,8 @@ import { AppShell } from '../../ui/components/layout/AppShell';
 import { PageHeader } from '../../ui/components/layout/PageHeader';
 import { PageSection } from '../../ui/components/layout/PageSection';
 import { StatGrid } from '../../ui/components/data/StatGrid';
+import { ChartsClient } from './ChartsClient';
+import { RadioClient } from './RadioClient';
 
 async function getTrack(trackId: string) {
   const baseUrl =
@@ -81,6 +83,11 @@ export default async function TrackPage({ params }: TrackPageProps) {
             </div>
           </PageSection>
 
+          <PageSection title="Analytics">
+            <ChartsClient trackId={params.trackId} />
+            <RadioClient trackId={params.trackId} />
+            </PageSection>
+          
           <PageSection title="Platform stats">
             <StatGrid
               items={[
