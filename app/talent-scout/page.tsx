@@ -1,4 +1,3 @@
-// app/talent-scout/page.tsx
 'use client';
 
 import React from 'react';
