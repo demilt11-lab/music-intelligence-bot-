@@ -1,4 +1,3 @@
-// components/talent-scout/DailyTalentScout.tsx
 'use client';
 
 import React from 'react';
@@ -68,7 +67,7 @@ export function DailyTalentScout() {
       key: 'rank',
       header: '#',
       width: '3rem',
-      render: (_: TalentScoutTrack, idx: number) => idx + 1,
+      render: (_row: TalentScoutTrack, idx: number) => idx + 1,
     },
     {
       key: 'track',
@@ -138,7 +137,8 @@ export function DailyTalentScout() {
       key: 'actions',
       header: 'Actions',
       render: (row: TalentScoutTrack) => {
-        if (!row.actions?.length) return <span className="text-xs text-slate-400">—</span>;
+        if (!row.actions?.length)
+          return <span className="text-xs text-slate-400">—</span>;
         const primary = row.actions[0];
         return (
           <div className="max-w-xs text-xs text-slate-200">
@@ -172,7 +172,6 @@ export function DailyTalentScout() {
           options={[
             { value: 'US', label: 'United States' },
             { value: 'GLOBAL', label: 'Global' },
-            // add more key markets as needed
           ]}
           className="w-full max-w-xs"
         />
