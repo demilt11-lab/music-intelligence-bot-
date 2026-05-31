@@ -1,4 +1,3 @@
-// components/ui/DataTable.tsx
 'use client';
 
 import React from 'react';
@@ -8,7 +7,7 @@ type Column<T> = {
   header: string;
   width?: string;
   align?: 'left' | 'right' | 'center';
-  render: (row: T) => React.ReactNode;
+  render: (row: T, index: number) => React.ReactNode;
 };
 
 type DataTableProps<T> = {
@@ -80,7 +79,7 @@ export function DataTable<T>({
                       : 'text-left'
                   }`}
                 >
-                  {col.render(row)}
+                  {col.render(row, idx)}
                 </td>
               ))}
             </tr>
