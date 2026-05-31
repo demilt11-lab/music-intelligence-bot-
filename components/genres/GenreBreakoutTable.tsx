@@ -1,4 +1,3 @@
-// components/genres/GenreBreakoutTable.tsx
 'use client';
 
 import React from 'react';
@@ -65,7 +64,7 @@ export function GenreBreakoutTable() {
       key: 'rank',
       header: '#',
       width: '3rem',
-      render: (_: GenreSignal, idx: number) => idx + 1,
+      render: (_row: GenreSignal, idx: number) => idx + 1,
     },
     {
       key: 'genre',
@@ -164,10 +163,7 @@ export function GenreBreakoutTable() {
           label="Home market"
           value={usCode2}
           onChange={setUsCode2}
-          options={[
-            { value: 'US', label: 'United States' },
-            // could add other primary targets in future
-          ]}
+          options={[{ value: 'US', label: 'United States' }]}
           className="w-full max-w-xs"
         />
         <Select
