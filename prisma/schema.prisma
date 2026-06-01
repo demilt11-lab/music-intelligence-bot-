@@ -1368,4 +1368,24 @@ model TrackTrendLabel {
   @@unique([trackId, genre, code2])
   @@map("track_trend_labels")
 }
+model TrackTrendPrediction {
+  id          Int      @id @default(autoincrement())
+  trackId     Int
+  genre       String?
+  code2       String?  // ISO2 country or GLOBAL
+  // model outputs
+  label       String   // predicted class: VIRAL | TRENDING | POPULAR | NONE
+  probViral   Float
+  probTrending Float
+  probPopular Float
+  probNone    Float
+  modelName   String
+  modelVersion String
+  predictedAt DateTime @default(now())
+
+  track       Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([trackId, genre, code2, modelName, modelVersion])
+  @@map("track_trend_predictions")
+}
 }
