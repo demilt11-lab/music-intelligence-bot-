@@ -10,21 +10,7 @@
     "api/v1/artists/breaking": { "maxDuration": 30 },
     "api/v1/artist/trajectory/predict": { "maxDuration": 60 }
   },
-  "crons": [
-    {
-      "path": "/api/cron/check-alert-rules",
-      "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/cron/send-daily-digest",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/etl-artist-trajectory",
-      "schedule": "0 4 * * *"
-    }
-  ],
-  "headers": [
+"headers": [
     {
       "source": "/api/(.*)",
       "headers": [
