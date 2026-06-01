@@ -317,64 +317,36 @@ class FeatureStore:
         return rows
 
     def _fetch_playlist_metrics(self, cur, ids: List[int]) -> Dict[int, Dict]:
+        # All playlist signals in one query via CTEs — 3 round trips → 1.
         cur.execute(
             """
-            SELECT
-                pt.track_id,
-                COUNT(*) AS total_count,
-                SUM(CASE WHEN p.playlist_type = 'editorial' THEN 1 ELSE 0 END) AS editorial_count,
-                AVG(pt.position) AS avg_position
-            FROM playlist_tracks pt
-            JOIN playlists p ON p.id = pt.playlist_id
-            WHERE pt.track_id = ANY(%s)
-            GROUP BY pt.track_id
-            """,
-            (ids,),
-        )
-        totals = {r["track_id"]: dict(r) for r in cur.fetchall()}
-
-        # Recent adds
-        cur.execute(
-            """
+            WITH membership AS (
+                SELECT
+                    pt.track_id,
+                    p.playlist_type,
+                    pt.position,
+                    pme.added_at
+                FROM playlist_tracks pt
+                JOIN playlists p ON p.id = pt.playlist_id
+                LEFT JOIN playlist_membership_events pme
+                    ON pme.track_id = pt.track_id AND pme.playlist_id = pt.playlist_id
+                WHERE pt.track_id = ANY(%s)
+            )
             SELECT
                 track_id,
+                COUNT(*)                                                                      AS total_count,
+                SUM(CASE WHEN playlist_type = 'editorial' THEN 1 ELSE 0 END)                 AS editorial_count,
+                AVG(position)                                                                 AS avg_position,
                 SUM(CASE WHEN added_at >= CURRENT_DATE - INTERVAL '7 days'  THEN 1 ELSE 0 END) AS adds_7d,
-                SUM(CASE WHEN added_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 ELSE 0 END) AS adds_30d
-            FROM playlist_membership_events
-            WHERE track_id = ANY(%s)
-              AND added_at >= CURRENT_DATE - INTERVAL '30 days'
+                SUM(CASE WHEN added_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 ELSE 0 END) AS adds_30d,
+                SUM(CASE WHEN playlist_type = 'editorial'
+                          AND added_at >= CURRENT_DATE - INTERVAL '7 days'  THEN 1 ELSE 0 END) AS editorial_adds_7d
+            FROM membership
             GROUP BY track_id
             """,
             (ids,),
         )
-        for r in cur.fetchall():
-            tid = r["track_id"]
-            if tid not in totals:
-                totals[tid] = {}
-            totals[tid].update({"adds_7d": r["adds_7d"], "adds_30d": r["adds_30d"]})
-
-        # Editorial adds
-        cur.execute(
-            """
-            SELECT
-                pme.track_id,
-                SUM(CASE WHEN pme.added_at >= CURRENT_DATE - INTERVAL '7 days' THEN 1 ELSE 0 END) AS editorial_adds_7d
-            FROM playlist_membership_events pme
-            JOIN playlists p ON p.id = pme.playlist_id
-            WHERE pme.track_id = ANY(%s)
-              AND p.playlist_type = 'editorial'
-              AND pme.added_at >= CURRENT_DATE - INTERVAL '7 days'
-            GROUP BY pme.track_id
-            """,
-            (ids,),
-        )
-        for r in cur.fetchall():
-            tid = r["track_id"]
-            if tid not in totals:
-                totals[tid] = {}
-            totals[tid]["editorial_adds_7d"] = r["editorial_adds_7d"]
-
-        return totals
+        return {r["track_id"]: dict(r) for r in cur.fetchall()}
 
     def _fetch_talent_scores(self, cur, ids: List[int]) -> Dict[int, Dict]:
         cur.execute(

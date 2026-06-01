@@ -11,6 +11,7 @@ Models served:
 
 from __future__ import annotations
 
+import threading
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -43,7 +44,7 @@ def _load_calibrated(path: Path):
     return joblib.load(str(path))
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=1)
 def _get_viral_models() -> Dict[str, Any]:
     models = {}
     for horizon in ("7d", "14d", "30d"):
@@ -60,7 +61,7 @@ def _get_viral_models() -> Dict[str, Any]:
     return models
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=1)
 def _get_popularity_models() -> Dict[str, Any]:
     models = {}
     for horizon in ("7d", "30d", "90d"):
@@ -75,7 +76,7 @@ def _get_popularity_models() -> Dict[str, Any]:
     return models
 
 
-@lru_cache(maxsize=None)
+@lru_cache(maxsize=1)
 def _get_trend_classifier() -> Optional[Tuple[Any, Any]]:
     """Returns (model, label_encoder) or None if not trained yet."""
     model_path   = MODEL_DIR / "trend_classifier_xgb.json"
@@ -84,11 +85,29 @@ def _get_trend_classifier() -> Optional[Tuple[Any, Any]]:
         logger.warning("Trend classifier not found at %s", model_path)
         return None
     model = _load_xgb(model_path)
-    if encoder_path.exists():
-        le = joblib.load(str(encoder_path))
-    else:
-        le = None
+    le = joblib.load(str(encoder_path)) if encoder_path.exists() else None
     return model, le
+
+
+# SHAP explainer is expensive to construct — cache it once per process.
+_shap_explainer_lock = threading.Lock()
+_shap_explainer_cache: Optional[Any] = None
+
+
+def _get_shap_explainer(model: Any) -> Optional[Any]:
+    global _shap_explainer_cache
+    if _shap_explainer_cache is not None:
+        return _shap_explainer_cache
+    with _shap_explainer_lock:
+        if _shap_explainer_cache is None:
+            try:
+                import shap
+                base = getattr(model, "estimator", model)
+                _shap_explainer_cache = shap.TreeExplainer(base)
+            except Exception as e:
+                logger.warning("SHAP explainer init failed: %s", e)
+                return None
+    return _shap_explainer_cache
 
 
 # ── core predictor ────────────────────────────────────────────────────────────
@@ -99,103 +118,110 @@ class Predictor:
         record: Dict[str, Any],
         explain: bool = False,
     ) -> Dict[str, Any]:
-        """
-        Score a single track record.
-
-        record: dict matching TrackFeatureRow schema.
-        explain: if True, include SHAP feature attributions for the viral model.
-
-        Returns a dict with keys:
-          viral_probabilities   — {7d, 14d, 30d}
-          popularity_probabilities — {7d, 30d, 90d}
-          trend_prediction      — {label, probabilities: {NONE, TRENDING, POPULAR, VIRAL}}
-          shap (optional)       — top feature drivers for viral 30d
-        """
-        records = [record]
-
-        # ── Viral ─────────────────────────────────────────────────────────
-        X_viral, viral_feat_names = build_viral_features(records)
-        viral_probs: Dict[str, Optional[float]] = {}
-        viral_models = _get_viral_models()
-        for horizon, model in viral_models.items():
-            try:
-                viral_probs[horizon] = float(model.predict_proba(X_viral)[0, 1])
-            except Exception as e:
-                logger.warning("Viral %s prediction failed: %s", horizon, e)
-                viral_probs[horizon] = None
-
-        # ── Popularity ────────────────────────────────────────────────────
-        X_pop, pop_feat_names = build_popularity_features(records)
-        pop_probs: Dict[str, Optional[float]] = {}
-        pop_models = _get_popularity_models()
-        for horizon, model in pop_models.items():
-            try:
-                pop_probs[horizon] = float(model.predict_proba(X_pop)[0, 1])
-            except Exception as e:
-                logger.warning("Popularity %s prediction failed: %s", horizon, e)
-                pop_probs[horizon] = None
-
-        # ── Multi-class trend ─────────────────────────────────────────────
-        trend_result: Dict[str, Any] = {}
-        clf_bundle = _get_trend_classifier()
-        if clf_bundle is not None:
-            clf, le = clf_bundle
-            try:
-                X_comb, _ = build_combined_features(records)
-                proba = clf.predict_proba(X_comb)[0]
-                pred_idx = int(np.argmax(proba))
-                labels = le.classes_.tolist() if le is not None else TREND_LABELS
-                trend_result = {
-                    "label": labels[pred_idx],
-                    "probabilities": {
-                        label: round(float(p), 4)
-                        for label, p in zip(labels, proba)
-                    },
-                }
-            except Exception as e:
-                logger.warning("Trend classifier failed: %s", e)
-
-        # Derive a single consensus label when trend classifier is unavailable
-        if not trend_result:
-            trend_result = _derive_trend_label(viral_probs, pop_probs)
-
-        result: Dict[str, Any] = {
-            "viral_probabilities": {k: _round(v) for k, v in viral_probs.items()},
-            "popularity_probabilities": {k: _round(v) for k, v in pop_probs.items()},
-            "trend_prediction": trend_result,
-        }
-
-        # ── SHAP explanations (viral 30d only, expensive) ─────────────────
-        if explain and viral_models.get("30d") is not None:
-            try:
-                import shap
-                raw_model = viral_models["30d"]
-                # Get the underlying XGBClassifier from calibrated wrapper
-                base = getattr(raw_model, "estimator", raw_model)
-                explainer = shap.TreeExplainer(base)
-                shap_vals = explainer.shap_values(X_viral)
-                if isinstance(shap_vals, list):
-                    shap_vals = shap_vals[1]
-                top = sorted(
-                    zip(viral_feat_names, shap_vals[0].tolist()),
-                    key=lambda x: abs(x[1]),
-                    reverse=True,
-                )[:15]
-                result["shap"] = {
-                    "model": "viral_30d",
-                    "features": [{"feature": f, "shap_value": round(v, 4)} for f, v in top],
-                }
-            except Exception as e:
-                logger.warning("SHAP explanation failed: %s", e)
-
-        return result
+        """Score a single track. Delegates to predict_batch for consistency."""
+        return self.predict_batch([record], explain=explain)[0]
 
     def predict_batch(
         self,
         records: List[Dict[str, Any]],
         explain: bool = False,
     ) -> List[Dict[str, Any]]:
-        return [self.predict(r, explain=explain) for r in records]
+        """
+        Vectorized batch scoring — builds each feature matrix once across
+        all records, then calls predict_proba once per model.
+        """
+        if not records:
+            return []
+
+        # Build all three feature matrices in one pass each
+        X_viral,   viral_feat_names = build_viral_features(records)
+        X_pop,     _                = build_popularity_features(records)
+        X_comb,    _                = build_combined_features(records)
+
+        viral_models = _get_viral_models()
+        pop_models   = _get_popularity_models()
+        clf_bundle   = _get_trend_classifier()
+
+        # Batch predict_proba for every model — one call per model, not one per record
+        viral_proba:  Dict[str, Optional[np.ndarray]] = {}
+        for h, m in viral_models.items():
+            try:
+                viral_proba[h] = m.predict_proba(X_viral)[:, 1]
+            except Exception as e:
+                logger.warning("Viral %s batch prediction failed: %s", h, e)
+                viral_proba[h] = None
+
+        pop_proba: Dict[str, Optional[np.ndarray]] = {}
+        for h, m in pop_models.items():
+            try:
+                pop_proba[h] = m.predict_proba(X_pop)[:, 1]
+            except Exception as e:
+                logger.warning("Popularity %s batch prediction failed: %s", h, e)
+                pop_proba[h] = None
+
+        trend_proba_matrix: Optional[np.ndarray] = None
+        trend_labels_list: List[str] = TREND_LABELS
+        if clf_bundle is not None:
+            clf, le = clf_bundle
+            try:
+                trend_proba_matrix = clf.predict_proba(X_comb)
+                if le is not None:
+                    trend_labels_list = le.classes_.tolist()
+            except Exception as e:
+                logger.warning("Trend classifier batch failed: %s", e)
+
+        # SHAP — computed once for the full batch, not per record
+        shap_matrix: Optional[np.ndarray] = None
+        if explain and viral_models.get("30d") is not None:
+            explainer = _get_shap_explainer(viral_models["30d"])
+            if explainer is not None:
+                try:
+                    shap_vals = explainer.shap_values(X_viral)
+                    shap_matrix = shap_vals[1] if isinstance(shap_vals, list) else shap_vals
+                except Exception as e:
+                    logger.warning("SHAP batch explanation failed: %s", e)
+
+        # Assemble per-record results
+        results = []
+        for i in range(len(records)):
+            vp = {h: _round(float(arr[i])) if arr is not None else None
+                  for h, arr in viral_proba.items()}
+            pp = {h: _round(float(arr[i])) if arr is not None else None
+                  for h, arr in pop_proba.items()}
+
+            if trend_proba_matrix is not None:
+                proba_row = trend_proba_matrix[i]
+                pred_idx  = int(np.argmax(proba_row))
+                trend_result: Dict[str, Any] = {
+                    "label": trend_labels_list[pred_idx],
+                    "probabilities": {
+                        lbl: round(float(p), 4)
+                        for lbl, p in zip(trend_labels_list, proba_row)
+                    },
+                }
+            else:
+                trend_result = _derive_trend_label(vp, pp)
+
+            rec: Dict[str, Any] = {
+                "viral_probabilities":       vp,
+                "popularity_probabilities":  pp,
+                "trend_prediction":          trend_result,
+            }
+
+            if shap_matrix is not None:
+                top = sorted(
+                    zip(viral_feat_names, shap_matrix[i].tolist()),
+                    key=lambda x: abs(x[1]),
+                    reverse=True,
+                )[:15]
+                rec["shap"] = {
+                    "model": "viral_30d",
+                    "features": [{"feature": f, "shap_value": round(v, 4)} for f, v in top],
+                }
+
+            results.append(rec)
+
+        return results
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

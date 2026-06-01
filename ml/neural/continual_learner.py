@@ -41,6 +41,7 @@ Key hyperparameters:
 from __future__ import annotations
 
 import json
+import queue
 import random
 import threading
 from collections import deque
@@ -89,12 +90,18 @@ class ReplayBuffer:
 
     def sample(self, n: int) -> List[Tuple[Dict, Dict]]:
         with self._lock:
-            if len(self._buffer) < n:
-                return list(self._buffer)
-            return random.sample(self._buffer, n)
+            size = len(self._buffer)
+            if size == 0:
+                return []
+            # sample indices first to avoid materialising the full deque
+            buf_list = list(self._buffer)
+        k = min(n, len(buf_list))
+        indices = random.sample(range(len(buf_list)), k)
+        return [buf_list[i] for i in indices]
 
     def __len__(self) -> int:
-        return len(self._buffer)
+        with self._lock:
+            return len(self._buffer)
 
 
 # ── EWC State ─────────────────────────────────────────────────────────────────
@@ -229,9 +236,16 @@ class ContinualLearner:
         self.ewc    = EWCState()
         self.buffer = ReplayBuffer()
 
-        self._optimizer   = torch.optim.Adam(self.model.parameters(), lr=ONLINE_LR)
+        self._optimizer    = torch.optim.Adam(self.model.parameters(), lr=ONLINE_LR)
         self._update_count = 0
-        self._lock = threading.Lock()
+
+        # Online updates are queued and processed by a single background thread.
+        # This keeps inference threads non-blocking while serialising gradient steps.
+        self._update_queue: queue.Queue = queue.Queue(maxsize=2048)
+        self._worker_thread = threading.Thread(
+            target=self._update_worker, daemon=True, name="online-learner"
+        )
+        self._worker_thread.start()
 
         logger.info("ContinualLearner initialised on device=%s", self.device)
 
@@ -287,45 +301,34 @@ class ContinualLearner:
             "embeddings": out["embeddings"][0].cpu().numpy().tolist(),
         }
 
-    # ── Online update (called per new data point) ─────────────────────────
+    # ── Background update worker ──────────────────────────────────────────
 
-    def online_update(
-        self,
-        features: Dict[str, torch.Tensor],
-        targets:  Dict[str, torch.Tensor],
-    ) -> Dict[str, float]:
-        """
-        Single online gradient step.  Thread-safe.
+    def _update_worker(self):
+        """Drains the update queue and runs gradient steps on the background thread."""
+        while True:
+            try:
+                features, targets = self._update_queue.get(timeout=5)
+            except queue.Empty:
+                continue
 
-        features: dict with keys matching MusicIntelligenceNet.forward() args
-        targets:  dict with keys viral / popular / trend / traj (LongTensors)
-
-        Returns per-task loss values for monitoring.
-        """
-        with self._lock:
-            # Push new sample to replay buffer
             self.buffer.push(features, targets)
-
             self.model.train()
             self._optimizer.zero_grad()
 
-            # Build batch: new sample + replayed samples
             replayed = self.buffer.sample(REPLAY_BATCH_SIZE)
             all_feats, all_tgts = _collate_samples(
                 [(features, targets)] + replayed, self.device
             )
 
             out = self.model(**all_feats)
-
             task_loss, per_task = compute_loss(out, all_tgts)
             ewc_penalty = self.ewc.penalty(self.model)
-            total_loss  = task_loss + ewc_penalty
-
-            total_loss.backward()
+            (task_loss + ewc_penalty).backward()
             nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self._optimizer.step()
 
             self._update_count += 1
+            self._update_queue.task_done()
 
             if self._update_count % CHECKPOINT_EVERY == 0:
                 self.save()
@@ -334,11 +337,23 @@ class ContinualLearner:
                     self._update_count, per_task, float(ewc_penalty),
                 )
 
-            return {
-                **per_task,
-                "ewc_penalty": float(ewc_penalty),
-                "update_count": self._update_count,
-            }
+    # ── Online update (called per new data point) ─────────────────────────
+
+    def online_update(
+        self,
+        features: Dict[str, torch.Tensor],
+        targets:  Dict[str, torch.Tensor],
+    ) -> Dict[str, Any]:
+        """
+        Non-blocking online update — enqueues sample for background gradient step.
+        Returns immediately; gradient step happens asynchronously.
+        """
+        try:
+            self._update_queue.put_nowait((features, targets))
+        except queue.Full:
+            # Drop silently under extreme load rather than blocking inference
+            logger.debug("Online update queue full — sample dropped")
+        return {"queued": True, "queue_depth": self._update_queue.qsize()}
 
     # ── Offline consolidation (called after full retraining) ──────────────
 

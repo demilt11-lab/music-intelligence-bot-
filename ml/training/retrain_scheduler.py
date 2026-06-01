@@ -142,12 +142,16 @@ def _run_script(path: Path) -> bool:
             check=True,
             capture_output=True,
             text=True,
+            timeout=3600,   # 1 hour hard limit — prevents hung training jobs stalling the scheduler
         )
         if result.stdout:
             logger.info("%s stdout:\n%s", path.name, result.stdout[-2000:])
         if result.stderr:
             logger.warning("%s stderr:\n%s", path.name, result.stderr[-1000:])
         return True
+    except subprocess.TimeoutExpired:
+        logger.error("%s timed out after 1 hour — killed", path.name)
+        return False
     except subprocess.CalledProcessError as e:
         logger.error("%s failed (code %d):\n%s\n%s", path.name, e.returncode, e.stdout[-2000:], e.stderr[-1000:])
         return False

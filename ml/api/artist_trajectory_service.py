@@ -15,6 +15,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 import joblib
+import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -103,24 +104,23 @@ def predict_trajectory(body: Dict[str, List[ArtistFeatures]]):
     if _trajectory_clf is None:
         raise HTTPException(status_code=503, detail="Trajectory model not loaded")
 
-    rows = []
-    artist_ids = []
-    for item in items:
-        artist_ids.append(item.artist_id)
-        rows.append({
-            "streams7dDelta":      item.streams7dDelta,
-            "streams28dDelta":     item.streams28dDelta,
-            "streams90dDelta":     item.streams90dDelta,
-            "playlistsDelta28d":   item.playlistsDelta28d,
-            "followersDelta28d":   item.followersDelta28d,
-            "tiktokVelocityScore": item.tiktokVelocityScore,
-            "airplayVelocityScore":item.airplayVelocityScore,
-            "maxTrackProbViral":   item.maxTrackProbViral,
-            "spotifyBreakProb":    item.spotifyBreakProb,
-        })
+    artist_ids = [item.artist_id for item in items]
 
-    df = pd.DataFrame(rows, columns=FEATURE_COLS).fillna(0.0)
-    X = _trajectory_scaler.transform(df)
+    # Build a numpy array directly — no pandas DataFrame overhead in the hot path.
+    col_index = {c: i for i, c in enumerate(FEATURE_COLS)}
+    matrix = np.zeros((len(items), len(FEATURE_COLS)), dtype=np.float32)
+    for row_i, item in enumerate(items):
+        matrix[row_i, col_index["streams7dDelta"]]      = item.streams7dDelta
+        matrix[row_i, col_index["streams28dDelta"]]     = item.streams28dDelta
+        matrix[row_i, col_index["streams90dDelta"]]     = item.streams90dDelta
+        matrix[row_i, col_index["playlistsDelta28d"]]   = item.playlistsDelta28d
+        matrix[row_i, col_index["followersDelta28d"]]   = item.followersDelta28d
+        matrix[row_i, col_index["tiktokVelocityScore"]] = item.tiktokVelocityScore
+        matrix[row_i, col_index["airplayVelocityScore"]]= item.airplayVelocityScore
+        matrix[row_i, col_index["maxTrackProbViral"]]   = item.maxTrackProbViral
+        matrix[row_i, col_index["spotifyBreakProb"]]    = item.spotifyBreakProb
+
+    X = _trajectory_scaler.transform(matrix)
     probs = _trajectory_clf.predict_proba(X)
     preds = _trajectory_clf.predict(X)
 
