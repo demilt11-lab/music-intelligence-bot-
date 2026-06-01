@@ -10,7 +10,37 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+
+    "create-tenant": "ts-node scripts/create-tenant.ts",
+    "create-api-key": "ts-node scripts/create-api-key.ts",
+    "tenant-automation": "ts-node scripts/automation/tenantAutomation.ts",
+    "match-catalog": "ts-node scripts/match-catalog.ts",
+
+    // artist trajectory ETL
+    "etl:artist-daily": "ts-node jobs/etl/artist_daily_stats.ts",
+    "etl:artist-trajectory": "ts-node jobs/etl/artist_trajectory_snapshots.ts",
+    "etl:artist-all": "node scripts/run_artist_etl.js",
+    "export:artist-training": "ts-node scripts/export_artist_trajectory_training.ts",
+
+    // track trend ETL + ML
+    "etl:track-trends": "ts-node jobs/etl/track_trend_labels.ts",
+    "export:track-trend-training": "ts-node scripts/export_track_trend_training.ts",
+    "ml:track-trend:train": "python ml/track_trend_model.py --mode train --input output/track_trend_training.csv",
+    "ml:track-trend:predict": "python ml/track_trend_model.py --mode predict --input output/track_trend_training.csv --output output/track_trend_predictions.csv",
+    "ml:track-trend:import": "ts-node scripts/import_track_trend_predictions.ts",
+    "ml:track-trend:full": "npm run export:track-trend-training && npm run ml:track-trend:train && npm run ml:track-trend:predict && npm run ml:track-trend:import",
+
+    // artist Spotify release stats + ML
+    "etl:artist-spotify-release-stats": "ts-node jobs/etl/artist_spotify_release_stats.ts",
+    "etl:artist-spotify-release-labels": "ts-node jobs/etl/artist_spotify_release_stats_labels.ts",
+    "export:artist-spotify-trend-training": "ts-node scripts/export_artist_spotify_trend_training.ts",
+    "ml:artist-spotify-trend:train": "python ml/artist_spotify_trend_model.py --mode train --input output/artist_spotify_trend_training.csv",
+    "ml:artist-spotify-trend:predict": "python ml/artist_spotify_trend_model.py --mode predict --input output/artist_spotify_trend_training.csv --output output/artist_spotify_trend_predictions.csv",
+    "ml:artist-spotify-trend:import": "ts-node scripts/import_artist_spotify_trend_predictions.ts",
+
+    // one convenience pipeline for Spotify trend
+    "ml:artist-spotify-trend:full": "npm run etl:artist-spotify-release-stats -- $(date +%F) && npm run export:artist-spotify-trend-training && npm run ml:artist-spotify-trend:train && npm run ml:artist-spotify-trend:predict && npm run ml:artist-spotify-trend:import"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
@@ -28,6 +58,7 @@
     "prisma": "^5.10.0",
     "typescript": "^5"
   }
+}
   {
   "scripts": {
     "create-tenant": "ts-node scripts/create-tenant.ts"
