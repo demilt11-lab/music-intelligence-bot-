@@ -8,14 +8,18 @@ function buildMeta(offset: number, limit: number, total: number): PaginationMeta
   return { offset, limit, total, hasMore: offset + limit < total };
 }
 
-// ─── List radios with cache ──────────────────────────────────────────────────────────
+function toRadioItem(row: { id: string; slug: string; name: string; countryCode: string | null; market: string | null; genre: string | null }): RadioItem {
+  return { ...row, streamUrl: null, imageUrl: null, isActive: true };
+}
+
+// ─── List radios with cache ──────────────────────────────────────────────────
 
 export async function listRadios(params: ListRadiosInput): Promise<PaginatedResponse<RadioItem>> {
   const cacheKey = CacheKey.radios(JSON.stringify(params));
   const cached = Cache.get<PaginatedResponse<RadioItem>>(cacheKey);
   if (cached) return cached;
 
-  const where: Parameters<typeof db.radio.findMany>[0]['where'] = { isActive: true };
+  const where: any = {};
   if (params.countryCode) where.countryCode = params.countryCode;
   if (params.genre)       where.genre = { contains: params.genre, mode: 'insensitive' };
   if (params.search)      where.OR = [
@@ -29,13 +33,13 @@ export async function listRadios(params: ListRadiosInput): Promise<PaginatedResp
       skip: params.offset,
       take: params.limit,
       orderBy: { name: 'asc' },
-      select: { id:true, slug:true, name:true, countryCode:true, market:true, genre:true, streamUrl:true, imageUrl:true, isActive:true },
+      select: { id: true, slug: true, name: true, countryCode: true, market: true, genre: true },
     }),
     db.radio.count({ where }),
   ]);
 
   const result: PaginatedResponse<RadioItem> = {
-    data: rows,
+    data: rows.map(toRadioItem),
     meta: buildMeta(params.offset, params.limit, total),
   };
 
@@ -43,7 +47,7 @@ export async function listRadios(params: ListRadiosInput): Promise<PaginatedResp
   return result;
 }
 
-// ─── Get single radio ──────────────────────────────────────────────────────────────────
+// ─── Get single radio ─────────────────────────────────────────────────────────
 
 export async function getRadioBySlug(slug: string): Promise<RadioItem | null> {
   const cacheKey = CacheKey.radioDetail(slug);
@@ -52,14 +56,16 @@ export async function getRadioBySlug(slug: string): Promise<RadioItem | null> {
 
   const row = await db.radio.findUnique({
     where: { slug },
-    select: { id:true, slug:true, name:true, countryCode:true, market:true, genre:true, streamUrl:true, imageUrl:true, isActive:true },
+    select: { id: true, slug: true, name: true, countryCode: true, market: true, genre: true },
   });
 
-  if (row) Cache.set(cacheKey, row, TTL.MEDIUM);
-  return row;
+  if (!row) return null;
+  const item = toRadioItem(row);
+  Cache.set(cacheKey, item, TTL.MEDIUM);
+  return item;
 }
 
-// ─── Radio spins (live feed) ─────────────────────────────────────────────────────────────
+// ─── Radio spins ──────────────────────────────────────────────────────────────
 
 export async function getRadioSpins(
   slug: string,
@@ -72,7 +78,7 @@ export async function getRadioSpins(
   const radio = await db.radio.findUnique({ where: { slug }, select: { id: true } });
   if (!radio) return { data: [], meta: buildMeta(params.offset, params.limit, 0) };
 
-  const where: Parameters<typeof db.radioSpin.findMany>[0]['where'] = { radioId: radio.id };
+  const where: any = { radioId: radio.id };
   if (params.startDate || params.endDate) {
     where.airedAtUtc = {
       ...(params.startDate ? { gte: new Date(params.startDate) } : {}),
@@ -91,12 +97,20 @@ export async function getRadioSpins(
   ]);
 
   const result: PaginatedResponse<RadioSpinItem> = {
-    data: rows.map(r => ({
-      id: r.id, radioId: r.radioId, songUuid: r.songUuid,
-      songTitle: r.songTitle, artistName: r.artistName, isrc: r.isrc,
-      airedAtUtc: r.airedAtUtc.toISOString(),
-      durationSec: r.durationSec, countryCode: r.countryCode,
-    })),
+    data: rows.map((r) => {
+      const p = (r.payload ?? {}) as any;
+      return {
+        id: r.id,
+        radioId: r.radioId,
+        songUuid: r.songUuid,
+        songTitle: p.songTitle ?? null,
+        artistName: p.artistName ?? null,
+        isrc: p.isrc ?? null,
+        airedAtUtc: r.airedAtUtc.toISOString(),
+        durationSec: p.durationSec ?? null,
+        countryCode: r.countryCode ?? null,
+      };
+    }),
     meta: buildMeta(params.offset, params.limit, total),
   };
 

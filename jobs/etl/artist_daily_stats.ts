@@ -9,13 +9,12 @@ import { db } from "@/lib/db";
 export async function buildArtistDailyStats(dateStr: string) {
   const dateParam = dateStr;
 
-  // Aggregate streams per artist per day from track_platform_stats_daily
-  const streamRows = await db.$queryRawUnsafe<{
+  const streamRows = await db.$queryRawUnsafe<Array<{
     artist_id: bigint;
     date: Date;
     total_streams: bigint;
     platform_streams: any;
-  }>(
+  }>>(
     `
     SELECT
       ta.artist_id,
@@ -31,15 +30,14 @@ export async function buildArtistDailyStats(dateStr: string) {
     dateParam,
   );
 
-  // Aggregate playlist membership per artist per day
-  const playlistRows = await db.$queryRawUnsafe<{
+  const playlistRows = await db.$queryRawUnsafe<Array<{
     artist_id: bigint;
     date: Date;
     playlist_count: number;
     editorial_playlist_count: number;
     indie_playlist_count: number;
     playlist_reach: bigint;
-  }>(
+  }>>(
     `
     SELECT
       ta.artist_id,
@@ -58,13 +56,12 @@ export async function buildArtistDailyStats(dateStr: string) {
     dateParam,
   );
 
-  // Simple genre + region inference: weighted by streams from track_audio_features / tracks
-  const genreRows = await db.$queryRawUnsafe<{
+  const genreRows = await db.$queryRawUnsafe<Array<{
     artist_id: bigint;
     date: Date;
     genres: string[];
     primary_code2: string | null;
-  }>(
+  }>>(
     `
     WITH artist_genres AS (
       SELECT
@@ -91,20 +88,55 @@ export async function buildArtistDailyStats(dateStr: string) {
     dateParam,
   );
 
-  // Index playlist + genre rows by artist+date for quick lookup
+  const tiktokRows = await db.$queryRawUnsafe<Array<{
+    artist_id: bigint;
+    date: Date;
+    tiktok_score: number;
+  }>>(
+    `
+    SELECT
+      ta.artist_id,
+      tt.date::date AS date,
+      AVG(tt.rank_score) AS tiktok_score
+    FROM tiktok_track_chart_global_daily tt
+    JOIN tracks t ON t.id = tt.track_id
+    JOIN track_artists ta ON ta.track_id = t.id
+    WHERE tt.date::date = $1::date
+    GROUP BY ta.artist_id, tt.date::date
+    `,
+    dateParam,
+  );
+
+  const airplayRows = await db.$queryRawUnsafe<Array<{
+    artist_id: bigint;
+    date: Date;
+    airplay_plays: bigint;
+  }>>(
+    `
+    SELECT
+      ra.artist_id,
+      ra.date::date AS date,
+      SUM(ra.plays) AS airplay_plays
+    FROM radio_airplay_facts ra
+    WHERE ra.date::date = $1::date
+    GROUP BY ra.artist_id, ra.date::date
+    `,
+    dateParam,
+  );
+
   const playlistKey = (row: { artist_id: bigint; date: Date }) =>
     `${row.artist_id.toString()}-${row.date.toISOString().slice(0, 10)}`;
-  const playlistMap = new Map(
-    playlistRows.map((r) => [playlistKey(r), r]),
-  );
-  const genreMap = new Map(
-    genreRows.map((r) => [playlistKey(r), r]),
-  );
+
+  const playlistMap = new Map(playlistRows.map((r) => [playlistKey(r), r]));
+  const genreMap = new Map(genreRows.map((r) => [playlistKey(r), r]));
+  const tiktokMap = new Map(tiktokRows.map((r) => [playlistKey(r), r.tiktok_score]));
+  const airplayMap = new Map(airplayRows.map((r) => [playlistKey(r), r.airplay_plays]));
 
   for (const row of streamRows) {
     const key = playlistKey(row);
     const playlist = playlistMap.get(key);
     const genreInfo = genreMap.get(key);
+    const airplayPlays = airplayMap.get(key);
 
     await db.artistDailyStats.upsert({
       where: {
@@ -122,6 +154,7 @@ export async function buildArtistDailyStats(dateStr: string) {
         playlistReach: playlist?.playlist_reach ?? null,
         genres: genreInfo?.genres ?? [],
         primaryCode2: genreInfo?.primary_code2 ?? null,
+        airplayPlays: airplayPlays ?? null,
       },
       create: {
         artistId: row.artist_id,
@@ -134,6 +167,7 @@ export async function buildArtistDailyStats(dateStr: string) {
         playlistReach: playlist?.playlist_reach ?? null,
         genres: genreInfo?.genres ?? [],
         primaryCode2: genreInfo?.primary_code2 ?? null,
+        airplayPlays: airplayPlays ?? null,
       },
     });
   }
@@ -153,80 +187,5 @@ if (require.main === module) {
     .catch((err) => {
       console.error(err);
       process.exit(1);
-    });
-    // TikTok / Shorts velocity per artist per day (example for TikTok global chart)
-  const tiktokRows = await db.$queryRawUnsafe<{
-    artist_id: bigint;
-    date: Date;
-    tiktok_score: number;
-  }>(
-    `
-    SELECT
-      ta.artist_id,
-      tt.date::date AS date,
-      AVG(tt.rank_score) AS tiktok_score
-    FROM tiktok_track_chart_global_daily tt
-    JOIN tracks t ON t.id = tt.track_id
-    JOIN track_artists ta ON ta.track_id = t.id
-    WHERE tt.date::date = $1::date
-    GROUP BY ta.artist_id, tt.date::date
-    `,
-    dateParam,
-  );
-
-  const tiktokMap = new Map(
-    tiktokRows.map((r) => [
-      playlistKey(r),
-      r.tiktok_score,
-    ]),
-  );
-
-  // Airplay per artist per day
-  const airplayRows = await db.$queryRawUnsafe<{
-    artist_id: bigint;
-    date: Date;
-    airplay_plays: bigint;
-  }>(
-    `
-    SELECT
-      ra.artist_id,
-      ra.date::date AS date,
-      SUM(ra.plays) AS airplay_plays
-    FROM radio_airplay_facts ra
-    WHERE ra.date::date = $1::date
-    GROUP BY ra.artist_id, ra.date::date
-    `,
-    dateParam,
-  );
-
-  const airplayMap = new Map(
-    airplayRows.map((r) => [
-      playlistKey(r),
-      r.airplay_plays,
-    ]),
-  );
-      const tiktokScore = tiktokMap.get(key);
-    const airplayPlays = airplayMap.get(key);
-
-    await db.artistDailyStats.upsert({
-      where: { artistId_date: { artistId: row.artist_id, date: row.date } },
-      update: {
-        // ...
-        airplayPlays: airplayPlays ?? null,
-        // store chartCountries / airplayMarkets in later iterations if you want
-      },
-      create: {
-        artistId: row.artist_id,
-        date: row.date,
-        totalStreams: row.total_streams,
-        platformStreams: row.platform_streams,
-        playlistCount: playlist?.playlist_count ?? null,
-        editorialPlaylistCount: playlist?.editorial_playlist_count ?? null,
-        indiePlaylistCount: playlist?.indie_playlist_count ?? null,
-        playlistReach: playlist?.playlist_reach ?? null,
-        genres: genreInfo?.genres ?? [],
-        primaryCode2: genreInfo?.primary_code2 ?? null,
-        airplayPlays: airplayPlays ?? null,
-      },
     });
 }

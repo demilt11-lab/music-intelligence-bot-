@@ -10,10 +10,10 @@ async function validateApiKey(apiKey: string | null) {
   if (!apiKey) return null;
 
   // Adjust field names to your actual api_keys schema
-  const keyRecord = await db.apiKeys.findFirst({
+  const keyRecord = await db.apiKey.findFirst({
     where: {
-      key: apiKey,
-      active: true,
+      keyHash: apiKey,
+      isRevoked: false,
     },
   });
 

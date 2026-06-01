@@ -96,14 +96,14 @@ export async function search(
       querySongwriters(q, limit, offset),
     ]);
 
-    suggestions.push(...rowsToSuggestions('artists', artistRows, normalizeArtist as (r: RawRow) => Record<string, unknown>));
-    suggestions.push(...rowsToSuggestions('tracks', trackRows, normalizeTrack as (r: RawRow) => Record<string, unknown>));
-    suggestions.push(...rowsToSuggestions('playlists', playlistRows, normalizePlaylist as (r: RawRow) => Record<string, unknown>));
-    suggestions.push(...rowsToSuggestions('curators', curatorRows, normalizeCurator as (r: RawRow) => Record<string, unknown>));
-    suggestions.push(...rowsToSuggestions('albums', albumRows, normalizeAlbum as (r: RawRow) => Record<string, unknown>));
-    suggestions.push(...rowsToSuggestions('stations', stationRows, normalizeStation as (r: RawRow) => Record<string, unknown>));
-    suggestions.push(...rowsToSuggestions('cities', cityRows, normalizeCity as (r: RawRow) => Record<string, unknown>));
-    suggestions.push(...rowsToSuggestions('songwriters', songwriterRows, normalizeSongwriter as (r: RawRow) => Record<string, unknown>));
+    suggestions.push(...rowsToSuggestions('artists', artistRows, normalizeArtist as unknown as (r: RawRow) => Record<string, unknown>));
+    suggestions.push(...rowsToSuggestions('tracks', trackRows, normalizeTrack as unknown as (r: RawRow) => Record<string, unknown>));
+    suggestions.push(...rowsToSuggestions('playlists', playlistRows, normalizePlaylist as unknown as (r: RawRow) => Record<string, unknown>));
+    suggestions.push(...rowsToSuggestions('curators', curatorRows, normalizeCurator as unknown as (r: RawRow) => Record<string, unknown>));
+    suggestions.push(...rowsToSuggestions('albums', albumRows, normalizeAlbum as unknown as (r: RawRow) => Record<string, unknown>));
+    suggestions.push(...rowsToSuggestions('stations', stationRows, normalizeStation as unknown as (r: RawRow) => Record<string, unknown>));
+    suggestions.push(...rowsToSuggestions('cities', cityRows, normalizeCity as unknown as (r: RawRow) => Record<string, unknown>));
+    suggestions.push(...rowsToSuggestions('songwriters', songwriterRows, normalizeSongwriter as unknown as (r: RawRow) => Record<string, unknown>));
 
     // Filter suggestions by platform when the caller requested it
     const filtered =

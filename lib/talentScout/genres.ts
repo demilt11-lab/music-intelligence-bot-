@@ -42,27 +42,27 @@ export async function computeGenreBreakouts(
 ): Promise<GenreBreakoutSignal[]> {
   const usCode2 = opts.usCode2 ?? 'US';
 
-  const ugcRows = await db.ugc_genre_metrics.findMany({
+  const ugcRows = await db.ugcGenreMetrics.findMany({
     where: {
       date: opts.date ? new Date(opts.date) : undefined,
     },
   });
 
-  const intlRows = await db.genre_playlist_metrics.findMany({
+  const intlRows = await db.genrePlaylistMetrics.findMany({
     where: {
       country: { not: usCode2 },
       date: opts.date ? new Date(opts.date) : undefined,
     },
   });
 
-  const usStreamRows = await db.genre_playlist_metrics.findMany({
+  const usStreamRows = await db.genrePlaylistMetrics.findMany({
     where: {
       country: usCode2,
       date: opts.date ? new Date(opts.date) : undefined,
     },
   });
 
-  const radioRows = await db.genre_airplay_metrics.findMany({
+  const radioRows = await db.genreAirplayMetrics.findMany({
     where: {
       country: usCode2,
       date: opts.date ? new Date(opts.date) : undefined,
@@ -98,34 +98,34 @@ export async function computeGenreBreakouts(
 
   ugcRows.forEach((row) => {
     const g = ensureGenre(row.genre);
-    g.ugcVideos7d = Number(row.videos_7d ?? 0);
-    g.ugcVideos7dGrowth = Number(row.videos_7d_growth ?? 0);
-    g.ugcViews7d = Number(row.views_7d ?? 0);
-    g.ugcViews7dGrowth = Number(row.views_7d_growth ?? 0);
-    g.ugcLeadCountry = row.lead_country ?? g.ugcLeadCountry;
+    g.ugcVideos7d = Number(row.videos7d ?? 0);
+    g.ugcVideos7dGrowth = Number(row.videos7dGrowth ?? 0);
+    g.ugcViews7d = Number(row.views7d ?? 0);
+    g.ugcViews7dGrowth = Number(row.views7dGrowth ?? 0);
+    g.ugcLeadCountry = row.leadCountry ?? g.ugcLeadCountry;
   });
 
   intlRows.forEach((row) => {
     const g = ensureGenre(row.genre);
-    g.intlStreams7d += Number(row.streams_7d ?? 0);
-    g.intlStreams7dGrowth += Number(row.streams_7d_growth ?? 0);
-    if (!g.intlLeadCountry || row.streams_7d > 0) {
+    g.intlStreams7d += Number(row.streams7d ?? 0);
+    g.intlStreams7dGrowth += Number(row.streams7dGrowth ?? 0);
+    if (!g.intlLeadCountry || row.streams7d > 0) {
       g.intlLeadCountry = row.country;
     }
   });
 
   usStreamRows.forEach((row) => {
     const g = ensureGenre(row.genre);
-    g.usStreams7d = Number(row.streams_7d ?? 0);
-    g.usStreams7dGrowth = Number(row.streams_7d_growth ?? 0);
+    g.usStreams7d = Number(row.streams7d ?? 0);
+    g.usStreams7dGrowth = Number(row.streams7dGrowth ?? 0);
   });
 
   radioRows.forEach((row) => {
     const g = ensureGenre(row.genre);
-    g.usSpins7d = Number(row.spins_7d ?? 0);
-    g.usSpins7dGrowth = Number(row.spins_7d_growth ?? 0);
-    if (!g.leadFormat || row.spins_7d > 0) {
-      g.leadFormat = row.format_id;
+    g.usSpins7d = Number(row.spins7d ?? 0);
+    g.usSpins7dGrowth = Number(row.spins7dGrowth ?? 0);
+    if (!g.leadFormat || row.spins7d > 0) {
+      g.leadFormat = row.formatId;
     }
   });
 

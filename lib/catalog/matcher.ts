@@ -64,8 +64,8 @@ async function resolveCatalogRowToTrack(row: any): Promise<number | null> {
       limit: 1,
     } as any);
 
-    const track =
-      res.obj?.tracks && res.obj.tracks[0];
+    const obj = res.obj as any;
+    const track = obj?.tracks && obj.tracks[0];
     if (track?.id) return track.id;
   }
 

@@ -4,11 +4,11 @@ const BASE_URL =
   process.env.SONGSTATS_API_BASE_URL ||
   'https://api.songstats.com/enterprise/v1';
 
-if (!process.env.SONGSTATS_API_KEY) {
-  throw new Error('SONGSTATS_API_KEY is not set');
+function getApiKey(): string {
+  const key = process.env.SONGSTATS_API_KEY;
+  if (!key) throw new Error('SONGSTATS_API_KEY is not set');
+  return key;
 }
-
-const API_KEY = process.env.SONGSTATS_API_KEY as string;
 
 export class RadiostatsError extends Error {
   status: number;
@@ -46,7 +46,7 @@ export async function radiostatsGet<T>(
   const res = await fetch(url.toString(), {
     method: 'GET',
     headers: {
-      apikey: API_KEY, // Radiostats docs: `apikey` header
+      apikey: getApiKey(), // Radiostats docs: `apikey` header
     },
   });
 
@@ -86,7 +86,7 @@ export async function radiostatsPost<T>(
   const res = await fetch(url.toString(), {
     method: 'POST',
     headers: {
-      apikey: API_KEY,
+      apikey: getApiKey(),
       Accept: 'application/json',
       'Content-Type': 'application/json',
       'Accept-Encoding': 'gzip, deflate, br',

@@ -8,9 +8,9 @@ export const tracksService = {
     const track = await db.track.findUnique({
       where: { id: trackId },
       include: {
-        artists: true,
-        album: true,
-        statistics: true,
+        trackArtists: { include: { artist: true } },
+        externalIds: true,
+        
       },
     });
     if (!track) {
@@ -30,9 +30,9 @@ export const tracksService = {
     const tracks = await db.track.findMany({
       where: { id: { in: trackIds } },
       include: {
-        artists: true,
-        album: true,
-        statistics: true,
+        trackArtists: { include: { artist: true } },
+        externalIds: true,
+        
         // add relations for charts/playlists/radio as needed
       },
     });

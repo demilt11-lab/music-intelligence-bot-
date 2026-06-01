@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
 import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { logRequest } from '@/lib/platform/logging';
-import { tracksService } from '@/lib/tracks';
+import { getTrackChartAppearances } from '@/lib/tracks/charts/service';
+import { validateTrackChartParams } from '@/lib/tracks/charts/validate';
 
 type RouteParams = { params: { id: string } };
 
@@ -26,16 +27,12 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     }
 
     const url = new URL(req.url);
-    const chartType = url.searchParams.get('chartType') || undefined;
-    const since = url.searchParams.get('since') || undefined;
-    const until = url.searchParams.get('until') || undefined;
-
-    const charts = await tracksService.getTrackCharts({
-      trackId,
-      chartType,
-      since,
-      until,
-    });
+    const validatedParams = validateTrackChartParams(
+      String(trackId),
+      url.searchParams.get('chartType') ?? 'spotify',
+      url.searchParams,
+    );
+    const charts = await getTrackChartAppearances(validatedParams);
 
     const res = NextResponse.json({ obj: charts }, { status: 200 });
     await logRequest(

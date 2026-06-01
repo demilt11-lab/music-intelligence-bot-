@@ -57,7 +57,7 @@ export async function listRadios(
   const offset = params.offset ?? 0;
   const limit  = Math.min(params.limit ?? 25, 100);
 
-  const where: Parameters<typeof db.radio.findMany>[0]['where'] = {};
+  const where: any = {};
 
   if (params.countryCode) {
     where.countryCode = params.countryCode;
@@ -109,7 +109,7 @@ export async function getRadioLiveFeed(
     return { items: [], offset, total: 0 };
   }
 
-  const where: Parameters<typeof db.radioSpin.findMany>[0]['where'] = {
+  const where: any = {
     radioId: radio.id,
   };
 
