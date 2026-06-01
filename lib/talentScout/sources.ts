@@ -203,10 +203,8 @@ export async function hydrateLuminateMetrics(
       luminateAudienceLatest: airplay?.audience ?? null,
       luminateSpinsLatest: airplay?.spins ?? null,
     };
-// lib/talentScout/sources.ts (add near other hydrate functions)
-
-import { PrismaClient } from '@prisma/client';
-const db = new PrismaClient();
+  });
+}
 
 export async function hydrateMlSignals(
   tracks: TalentScoutTrack[],
