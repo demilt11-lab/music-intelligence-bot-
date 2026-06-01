@@ -79,4 +79,13 @@
     "export:track-trend-training": "ts-node scripts/export_track_trend_training.ts"
   }
 }
+{
+  "scripts": {
+    // existing scripts...
+    "ml:track-trend:train": "python ml/track_trend_model.py --mode train --input output/track_trend_training.csv",
+    "ml:track-trend:predict": "python ml/track_trend_model.py --mode predict --input output/track_trend_training.csv --output output/track_trend_predictions.csv",
+    "ml:track-trend:import": "ts-node scripts/import_track_trend_predictions.ts",
+    "ml:track-trend:full": "npm run export:track-trend-training && npm run ml:track-trend:train && npm run ml:track-trend:predict && npm run ml:track-trend:import"
+  }
+}
 }
