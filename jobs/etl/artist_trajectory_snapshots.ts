@@ -2,6 +2,92 @@
 import "dotenv/config";
 import { db } from "@/lib/db";
 
+type TrackTrendPred = {
+  trackId: number;
+  genre: string | null;
+  code2: string | null;
+  probViral: number;
+  probTrending: number;
+  probPopular: number;
+};
+
+function inferBreakoutRegionAndGenre(
+  predictions: TrackTrendPred[],
+) {
+  // Aggregate probabilities by genre and region
+  const genreScores = new Map<string, number>();
+  const regionScores = new Map<string, number>();
+
+  for (const p of predictions) {
+    const viralWeight = p.probViral ?? 0;
+    const trendingWeight = p.probTrending ?? 0;
+    const popularWeight = p.probPopular ?? 0;
+    const totalWeight =
+      viralWeight * 1.5 +
+      trendingWeight * 1.0 +
+      popularWeight * 0.5;
+
+    if (p.genre) {
+      genreScores.set(
+        p.genre,
+        (genreScores.get(p.genre) ?? 0) + totalWeight,
+      );
+    }
+    if (p.code2) {
+      regionScores.set(
+        p.code2,
+        (regionScores.get(p.code2) ?? 0) + totalWeight,
+      );
+    }
+  }
+
+  let primaryGenre: string | null = null;
+  let primaryCode2: string | null = null;
+  let maxGenreScore = 0;
+  let maxRegionScore = 0;
+
+  for (const [g, score] of genreScores.entries()) {
+    if (score > maxGenreScore) {
+      maxGenreScore = score;
+      primaryGenre = g;
+    }
+  }
+
+  for (const [c, score] of regionScores.entries()) {
+    if (score > maxRegionScore) {
+      maxRegionScore = score;
+      primaryCode2 = c;
+    }
+  }
+
+  const breakoutRegions = Array.from(
+    regionScores.entries(),
+  )
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([code2, score]) => ({
+      code2,
+      score,
+    }));
+
+  const breakoutGenres = Array.from(
+    genreScores.entries(),
+  )
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([genre, score]) => ({
+      genre,
+      score,
+    }));
+
+  return {
+    primaryGenre,
+    primaryCode2,
+    breakoutRegions,
+    breakoutGenres,
+  };
+}
+
 type DailyRow = {
   artistId: bigint;
   date: Date;
