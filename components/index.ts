@@ -76,3 +76,14 @@ export { DailyTalentScout } from './talent-scout/DailyTalentScout';
 
 export { AppShell } from './layout/AppShell';
 export type { AppShellProps, NavItem, NavSection } from './layout/AppShell';
+
+// ─── Watchlist ────────────────────────────────────────────────────────────────
+
+export { AddToWatchlistButton } from './watchlist/AddToWatchlistButton';
+export { WatchlistGrid } from './watchlist/WatchlistGrid';
+export type { WatchlistEntry } from './watchlist/WatchlistGrid';
+
+// ─── Talent Scout ICP ─────────────────────────────────────────────────────────
+
+export { SignalsSection } from './talent-scout/SignalsSection';
+export { UsageStatsWidget } from './talent-scout/UsageStatsWidget';

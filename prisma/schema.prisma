@@ -216,10 +216,61 @@ model Tenant {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
-  users    TenantUser[]
-  apiKeys  ApiKey[]
-  catalog  CatalogTrack[]
-  plan     Plan?          @relation(fields: [planId], references: [id])
+  users               TenantUser[]
+  apiKeys             ApiKey[]
+  catalog             CatalogTrack[]
+  plan                Plan?               @relation(fields: [planId], references: [id])
+  watchlistItems      WatchlistItem[]
+  digestSubscriptions DigestSubscription[]
+  alertRules          AlertRule[]
+}
+
+model WatchlistItem {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int
+  entityType String   // "track" | "artist"
+  entityId   Int
+  notes      String?  // JSON: { baselineViralScore, baselineBreakProb, addedAt }
+  addedAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, entityType, entityId])
+  @@map("watchlist_items")
+}
+
+model DigestSubscription {
+  id         Int       @id @default(autoincrement())
+  tenantId   Int
+  email      String?
+  webhookUrl String?
+  frequency  String    @default("daily")
+  isActive   Boolean   @default(true)
+  lastSentAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("digest_subscriptions")
+}
+
+model AlertRule {
+  id          Int       @id @default(autoincrement())
+  tenantId    Int
+  entityType  String    // "track" | "artist" | "watchlist"
+  entityId    Int?
+  metric      String    // "viralScore" | "breakProbability" | "streams7dDelta"
+  threshold   Float
+  operator    String    @default("gt")
+  channel     String    // "email" | "webhook"
+  destination String
+  isActive    Boolean   @default(true)
+  lastFiredAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("alert_rules")
 }
 
 model TenantUser {
