@@ -4,11 +4,11 @@
   "framework": "nextjs",
   "regions": ["iad1"],
   "functions": {
-    "app/api/v1/talent-scout/route.ts": { "maxDuration": 30 },
-    "app/api/v1/talent-scout/export/route.ts": { "maxDuration": 30 },
-    "app/api/v1/digest/preview/route.ts": { "maxDuration": 30 },
-    "app/api/v1/artists/breaking/route.ts": { "maxDuration": 30 },
-    "app/api/v1/artist/trajectory/predict/route.ts": { "maxDuration": 60 }
+    "api/v1/talent-scout": { "maxDuration": 30 },
+    "api/v1/talent-scout/export": { "maxDuration": 30 },
+    "api/v1/digest/preview": { "maxDuration": 30 },
+    "api/v1/artists/breaking": { "maxDuration": 30 },
+    "api/v1/artist/trajectory/predict": { "maxDuration": 60 }
   },
   "crons": [
     {
