@@ -58,4 +58,9 @@
     "etl:artist-all": "node scripts/run_artist_etl.js"
   }
 }
+
+"scripts": {
+  // ...
+  "export:artist-training": "ts-node scripts/export_artist_trajectory_training.ts"
+}
 }
