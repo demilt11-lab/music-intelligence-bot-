@@ -88,4 +88,16 @@
     "ml:track-trend:full": "npm run export:track-trend-training && npm run ml:track-trend:train && npm run ml:track-trend:predict && npm run ml:track-trend:import"
   }
 }
+{
+  "scripts": {
+    // ...existing scripts
+
+    "etl:artist-spotify-release-stats": "ts-node jobs/etl/artist_spotify_release_stats.ts",
+    "etl:artist-spotify-release-labels": "ts-node jobs/etl/artist_spotify_release_stats_labels.ts",
+    "export:artist-spotify-trend-training": "ts-node scripts/export_artist_spotify_trend_training.ts",
+
+    "ml:artist-spotify-trend:train": "python ml/artist_spotify_trend_model.py --mode train --input output/artist_spotify_trend_training.csv",
+    "ml:artist-spotify-trend:predict": "python ml/artist_spotify_trend_model.py --mode predict --input output/artist_spotify_trend_training.csv --output output/artist_spotify_trend_predictions.csv"
+  }
+}
 }
