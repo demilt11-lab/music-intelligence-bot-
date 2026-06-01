@@ -1352,4 +1352,20 @@ model ArtistTrajectorySnapshot {
   @@index([primaryGenre])
   @@index([primaryCode2])
 }
+model TrackTrendLabel {
+  id          Int      @id @default(autoincrement())
+  trackId     Int
+  genre       String?
+  code2       String?  // ISO2 country or GLOBAL
+  label       String   // VIRAL | TRENDING | POPULAR | NONE
+  firstSeenAt DateTime?
+  lastSeenAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  track       Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([trackId, genre, code2])
+  @@map("track_trend_labels")
+}
 }
