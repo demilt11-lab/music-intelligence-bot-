@@ -63,4 +63,13 @@
   // ...
   "export:artist-training": "ts-node scripts/export_artist_trajectory_training.ts"
 }
+{
+  "scripts": {
+    // existing scripts...
+    "etl:artist-daily": "ts-node jobs/etl/artist_daily_stats.ts",
+    "etl:artist-trajectory": "ts-node jobs/etl/artist_trajectory_snapshots.ts",
+    "etl:artist-all": "node scripts/run_artist_etl.js",
+    "export:artist-training": "ts-node scripts/export_artist_trajectory_training.ts"
+  }
+}
 }
