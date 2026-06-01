@@ -72,4 +72,11 @@
     "export:artist-training": "ts-node scripts/export_artist_trajectory_training.ts"
   }
 }
+{
+  "scripts": {
+    // existing scripts...
+    "etl:track-trends": "ts-node jobs/etl/track_trend_labels.ts",
+    "export:track-trend-training": "ts-node scripts/export_track_trend_training.ts"
+  }
+}
 }
