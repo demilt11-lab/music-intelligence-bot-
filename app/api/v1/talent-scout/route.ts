@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    let tracks = await ScoutSources.fetchTopUgcBreakoutTracks({ date, code2, limit });
+    let tracks = await ScoutSources.fetchTopTiktokBreakoutTracks({ date, code2, limit });
     tracks = await ScoutSources.hydrateInternalStreaming(tracks);
     tracks = await ScoutSources.hydrateLuminateMetrics(tracks);
     tracks = await ScoutSources.hydrateMlSignals(tracks, date);

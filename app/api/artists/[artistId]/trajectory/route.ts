@@ -13,11 +13,11 @@ export async function GET(
   const [artist, snapshot, history] = await Promise.all([
     db.artist.findUnique({ where: { id: artistId } }),
     db.artistTrajectorySnapshot.findFirst({
-      where: { artistId: BigInt(artistId) },
+      where: { artistId: artistId },
       orderBy: { date: 'desc' },
     }),
     db.artistDailyStats.findMany({
-      where: { artistId: BigInt(artistId) },
+      where: { artistId: artistId },
       orderBy: { date: 'asc' },
       take: 120,
     }),

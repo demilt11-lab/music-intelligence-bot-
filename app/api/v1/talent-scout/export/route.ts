@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
 import { logRequest } from '@/lib/platform/logging';
-import { ScoutScore } from '@/lib/engine';
+import { ScoutScore, ScoutSources } from '@/lib/engine';
 import { toCsvResponse } from '@/lib/export/csv';
 import type { TalentScoutTrack } from '@/lib/talentScout/score';
 
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     const code2 = searchParams.get('code2') ?? 'GLOBAL';
     const limit = Math.min(Number(searchParams.get('limit') ?? '100'), 200);
 
-    const ranked = await ScoutScore.fetchTopUgcBreakoutTracks({ date, code2, limit });
+    const ranked = await ScoutSources.fetchTopTiktokBreakoutTracks({ date, code2, limit });
 
     const rows = (ranked as TalentScoutTrack[]).map((t) => ({
       track: t.name,

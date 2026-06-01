@@ -40,7 +40,7 @@ export type DigestPayload = {
 export async function assembleDigest(tenantId: number, tenantName: string, date?: string): Promise<DigestPayload> {
   const today = date ?? new Date().toISOString().slice(0, 10);
 
-  const ranked = await ScoutScore.fetchTopUgcBreakoutTracks({ date: today, code2: 'GLOBAL', limit: 10 });
+  const ranked = await ScoutSources.fetchTopTiktokBreakoutTracks({ date: today, code2: 'GLOBAL', limit: 10 });
 
   const breakoutTracks: DigestTrack[] = (ranked as ScoreTrack[]).map((t) => ({
     trackId: t.trackId,
