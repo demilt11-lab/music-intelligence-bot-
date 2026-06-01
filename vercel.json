@@ -1,0 +1,35 @@
+{
+  "buildCommand": "prisma generate && next build",
+  "installCommand": "npm ci",
+  "framework": "nextjs",
+  "regions": ["iad1"],
+  "functions": {
+    "app/api/v1/talent-scout/route.ts": { "maxDuration": 30 },
+    "app/api/v1/talent-scout/export/route.ts": { "maxDuration": 30 },
+    "app/api/v1/digest/preview/route.ts": { "maxDuration": 30 },
+    "app/api/v1/artists/breaking/route.ts": { "maxDuration": 30 },
+    "app/api/v1/artist/trajectory/predict/route.ts": { "maxDuration": 60 }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/check-alert-rules",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/send-daily-digest",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/etl-artist-trajectory",
+      "schedule": "0 4 * * *"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex" }
+      ]
+    }
+  ]
+}
