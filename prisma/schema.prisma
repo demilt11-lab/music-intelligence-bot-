@@ -1410,4 +1410,44 @@ model ArtistTrajectorySnapshot {
   @@index([primaryGenre])
   @@index([primaryCode2])
 }
+model ArtistSpotifyReleaseStats {
+  id                Int      @id @default(autoincrement())
+  artistId          Int
+  snapshotDate      DateTime
+
+  // core counts
+  numTracks         Int      // number of releases considered (<= 10)
+  windowDays        Int      // days back we looked (e.g., 365)
+
+  // aggregate stats over last 10 tracks in last year
+  totalStreams      BigInt
+  avgStreams        Float
+  medianStreams     Float
+  maxStreams        BigInt
+  minStreams        BigInt
+
+  // distribution shape
+  stdStreams        Float
+  numAbove100k      Int
+  numAbove1M        Int
+
+  // latest track stats (most recent release)
+  latestTrackId     Int?
+  latestReleaseDate DateTime?
+  latestStreams28d  BigInt?   // Spotify streams in first 28 days
+  latestTotalStreams BigInt?
+
+  // cadence
+  avgDaysBetweenReleases Float?
+
+  // binary label for training: did they break later?
+  popularWithin6m   Boolean? // null for live data, set for historical training
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([artistId, snapshotDate])
+  @@index([artistId, snapshotDate])
+  @@map("artist_spotify_release_stats")
+}
 }
