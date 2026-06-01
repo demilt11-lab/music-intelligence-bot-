@@ -40,6 +40,7 @@ model Track {
   playlistMembershipEvents PlaylistMembershipEvent[]
   trendLabels           TrackTrendLabel[]
   trendPredictions      TrackTrendPrediction[]
+  playlistTracks        PlaylistTrack[]
 
   @@map("tracks")
 }
@@ -1116,10 +1117,7 @@ model LuminateStream {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@unique(
-    [entityType, entityId, date, locationId, marketId, contentType, commercialModel, serviceType],
-    map: "luminate_streams_unique_key"
-  )
+  @@unique([entityType, entityId, date, locationId, marketId, contentType, commercialModel, serviceType], map: "luminate_streams_unique_key")
   @@map("luminate_streams")
 }
 
@@ -1139,10 +1137,7 @@ model LuminateSales {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  @@unique(
-    [entityType, entityId, date, locationId, marketId, distributionChannel, purchaseMethod, storeStrata, productFormat, releaseType],
-    map: "luminate_sales_unique_key"
-  )
+  @@unique([entityType, entityId, date, locationId, marketId, distributionChannel, purchaseMethod, storeStrata, productFormat, releaseType], map: "luminate_sales_unique_key")
   @@map("luminate_sales")
 }
 
@@ -1159,10 +1154,7 @@ model LuminateAirplay {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@unique(
-    [entityType, entityId, date, locationId, marketId, formatId],
-    map: "luminate_airplay_unique_key"
-  )
+  @@unique([entityType, entityId, date, locationId, marketId, formatId], map: "luminate_airplay_unique_key")
   @@map("luminate_airplay")
 }
 
