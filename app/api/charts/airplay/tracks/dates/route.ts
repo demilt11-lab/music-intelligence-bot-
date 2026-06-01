@@ -39,7 +39,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!rawDuration || !VALID_DURATIONS.has(rawDuration)) {
       return NextResponse.json(
         {
-          error: `"duration" is required and must be one of: ${[...VALID_DURATIONS].join(', ')}.`,
+          error: `"duration" is required and must be one of: ${Array.from(VALID_DURATIONS).join(', ')}.`,
         },
         { status: 400 },
       );

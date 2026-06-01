@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 // app/api/internal/request-logs/summary/route.ts
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';

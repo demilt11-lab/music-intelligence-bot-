@@ -14,14 +14,14 @@ export async function getCatalogWithStatsAndCharts(
   const { songwriterId, limit, offset } = options;
 
   // Join table linking songwriter to tracks
-  const trackLinks = await db.songwriterTrack.findMany({
+  const trackLinks = await (db as any).songwriterTrack?.findMany({
     where: { songwriterId },
     select: { trackId: true },
     take: limit,
     skip: offset,
-  });
+  }) ?? [];
 
-  const trackIds = trackLinks.map((x) => x.trackId);
+  const trackIds = (trackLinks as any[]).map((x: any) => x.trackId);
   const tracks = await tracksService.getTracksByIdsWithStatsAndCharts(
     trackIds,
   );

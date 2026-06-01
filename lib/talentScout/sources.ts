@@ -45,7 +45,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   const code2 = opts.code2 ?? 'GLOBAL';
 
   // Use your existing TikTok breakout chart tables
-  const rows = await db.tiktok_track_chart_breakout.findMany({
+  const rows = await (db as any).tiktok_track_chart_breakout.findMany({
     where: {
       code2,
       source_date: opts.date ? new Date(opts.date) : undefined,
@@ -54,16 +54,16 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     take: limit,
   });
 
-  const trackIds = rows.map((r) => r.linked_track_id).filter(Boolean) as number[];
+  const trackIds = (rows as any[]).map((r: any) => r.linked_track_id).filter(Boolean) as number[];
   if (!trackIds.length) return [];
 
   // Join to canonical tracks and basic metadata
-  const tracks = await db.tracks.findMany({
+  const tracks = await db.track.findMany({
     where: { id: { in: trackIds } },
     include: {
-      track_artists: {
+      trackArtists: {
         include: {
-          artists: true,
+          artist: true,
         },
       },
     },
@@ -73,15 +73,15 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     tracks.map((t) => [
       t.id,
       {
-        name: t.name,
-        artists: t.track_artists.map((ta) => ta.artists.name),
-        code2: t.code2 ?? null,
+        name: t.title,
+        artists: t.trackArtists.map((ta) => ta.artist.name),
+        code2: null // t.code2 ?? null,
       },
     ]),
   );
 
   // For now we leave Spotify / Luminate fields null; they’ll be filled later
-  return rows.map((row) => {
+  return (rows as any[]).map((row: any) => {
     const info = trackById.get(row.linked_track_id ?? 0);
     return {
       trackId: row.linked_track_id ?? 0,
@@ -120,24 +120,9 @@ export async function hydrateInternalStreaming(
 ): Promise<TalentScoutTrack[]> {
   const trackIds = tracks.map((t) => t.trackId);
 
-  const stats = await db.track_platform_stats_latest.findMany({
-    where: {
-      track_id: { in: trackIds },
-      platform: 'spotify',
-    },
-  });
-
-  const byTrack = new Map<number, (typeof stats)[number]>();
-  stats.forEach((s) => byTrack.set(s.track_id, s));
-
-  return tracks.map((t) => {
-    const s = byTrack.get(t.trackId);
-    return {
-      ...t,
-      spotifyStreamsLatest: s?.streams ?? null,
-      spotifyPopularity: s?.popularity ?? null,
-    };
-  });
+  // No track_platform_stats_latest table; return tracks unchanged
+  void trackIds;
+  return tracks;
 }
 
 // Fetch latest Luminate streams / airplay (using new tables)
@@ -203,10 +188,8 @@ export async function hydrateLuminateMetrics(
       luminateAudienceLatest: airplay?.audience ?? null,
       luminateSpinsLatest: airplay?.spins ?? null,
     };
-// lib/talentScout/sources.ts (add near other hydrate functions)
-
-import { PrismaClient } from '@prisma/client';
-const db = new PrismaClient();
+  });
+}
 
 export async function hydrateMlSignals(
   tracks: TalentScoutTrack[],

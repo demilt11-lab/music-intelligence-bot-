@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     let resolvedSpotifyId = spotifyTrackId;
 
     if (trackId && (!isrc || !spotifyTrackId)) {
-      const track = await db.tracks.findUnique({
+      const track = await db.track.findUnique({
         where: { id: trackId },
         include: {
           externalIds: true, // assuming an external_ids relation from schema.[page:3]

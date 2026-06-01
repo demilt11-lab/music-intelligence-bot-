@@ -38,25 +38,25 @@ export async function buildViralFeatures(
   const tiktokGrowth7d =
     track.statistics?.tiktokGrowth7d ?? null;
 
-  const playlistCount = await db.playlistTrack.count({
+  const playlistCount = await db.playlistMembershipEvent.count({
     where: { trackId },
   });
 
-  const playlistAdds7d = await db.playlistMembershipEvents.count({
+  const playlistAdds7d = await db.playlistMembershipEvent.count({
     where: {
       trackId,
-      addedAt: {
+      eventDate: {
         gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
       },
     },
   });
 
+  const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const airplayTotals = await radioService.getTrackAirplayTotals(
-    trackId,
-    // since 7 days ago
+    { type: 'track', id: trackId, since: since7d, station: undefined, limit: 50 },
   );
 
-  const radioSpins7d = airplayTotals?.totalSpins ?? null;
+  const radioSpins7d = airplayTotals?.obj?.stations?.length ?? null;
 
   return {
     trackId,

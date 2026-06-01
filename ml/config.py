@@ -2,13 +2,14 @@
 from pathlib import Path
 import logging
 
-ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = ROOT / "data"
-MODEL_DIR = ROOT / "models"
-LOG_DIR = ROOT / "logs"
-METRICS_DIR = LOG_DIR / "metrics"
+ROOT          = Path(__file__).resolve().parents[1]
+DATA_DIR      = ROOT / "data"
+MODEL_DIR     = ROOT / "models"
+NEURAL_DIR    = MODEL_DIR / "neural"    # PyTorch checkpoints
+LOG_DIR       = ROOT / "logs"
+METRICS_DIR   = LOG_DIR / "metrics"
 
-for d in (DATA_DIR, MODEL_DIR, LOG_DIR, METRICS_DIR):
+for d in (DATA_DIR, MODEL_DIR, NEURAL_DIR, LOG_DIR, METRICS_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 def configure_logging(name: str) -> logging.Logger:

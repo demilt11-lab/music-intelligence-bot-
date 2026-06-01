@@ -117,7 +117,7 @@ export async function queryCurators(
       take: params.limit,
       include: {
         curatorMetrics: {
-          orderBy: { timestamp: 'desc' },
+          orderBy: { date: 'desc' },
           take: 1,
         },
       },

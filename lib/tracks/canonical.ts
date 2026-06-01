@@ -33,10 +33,10 @@ export async function resolveTrackByExternalIds(opts: {
 
   if (!clauses.length) return null;
 
-  const external = await db.externalTrackId.findFirst({
+  const external = await db.externalId.findFirst({
     where: { OR: clauses as any[] },
-    select: { trackId: true },
+    select: { entityId: true },
   });
 
-  return external?.trackId ?? null;
+  return external?.entityId ?? null;
 }

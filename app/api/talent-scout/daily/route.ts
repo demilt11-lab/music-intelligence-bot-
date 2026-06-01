@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
     const limit = Number(searchParams.get('limit') ?? '50');
     const mode = (searchParams.get('mode') ?? 'ugc_early') as 'ugc_early' | 'general';
 
-    let tracks = await ScoutSources.fetchTopUgcBreakoutTracks({ date, code2, limit });
+    let tracks = await ScoutSources.fetchTopTiktokBreakoutTracks({ date, code2, limit });
     tracks = await ScoutSources.hydrateInternalStreaming(tracks);
     tracks = await ScoutSources.hydrateLuminateMetrics(tracks);
     tracks = await ScoutSources.hydrateMlSignals(tracks, date);

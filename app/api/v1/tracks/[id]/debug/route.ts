@@ -28,23 +28,21 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     }
 
     const track = await tracksService.getTrackById(trackId);
-    const charts = await db.trackChart.findMany({
+    const charts = await db.chartRow.findMany({
       where: { trackId },
+      take: 20,
     });
+    const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const airplayTotals = await radioService.getTrackAirplayTotals(
-      trackId,
+      { type: 'track', id: trackId, since, station: undefined, limit: 50 },
     );
-    const broadcastMarkets =
-      await radioService.getTrackBroadcastMarkets(trackId);
+    const broadcastMarkets = await radioService.getTrackBroadcastMarkets(
+      { type: 'track', id: trackId, since },
+    );
 
-    const playlists = await db.playlistTrack.findMany({
+    const playlists = await db.playlistMembershipEvent.findMany({
       where: { trackId },
-      include: { playlist: true },
-    });
-
-    const songwriters = await db.songwriterTrack.findMany({
-      where: { trackId },
-      include: { songwriter: true },
+      take: 20,
     });
 
     const res = NextResponse.json(
@@ -54,7 +52,6 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
           charts,
           radio: { airplayTotals, broadcastMarkets },
           playlists,
-          songwriters,
         },
       },
       { status: 200 },

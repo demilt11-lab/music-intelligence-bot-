@@ -28,12 +28,13 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const url = new URL(req.url);
     const since = url.searchParams.get('since') || undefined;
 
+    const sinceStr = since ?? new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const airplayTotals = await radioService.getTrackAirplayTotals(
-      trackId,
-      since,
+      { type: 'track', id: trackId, since: sinceStr, station: undefined, limit: 50 },
     );
-    const broadcastMarkets =
-      await radioService.getTrackBroadcastMarkets(trackId, since);
+    const broadcastMarkets = await radioService.getTrackBroadcastMarkets(
+      { type: 'track', id: trackId, since: sinceStr },
+    );
 
     const res = NextResponse.json(
       {

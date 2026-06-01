@@ -146,4 +146,7 @@ async function main() {
   console.log('');
   console.log('✅  Seed complete. Test your endpoints:');
   console.log('   GET /api/integrations/internal/radios');
-  console.log('   GET /api/integrations
+  console.log('   GET /api/integrations/internal/radio-spins');
+}
+
+main().catch((e) => { console.error(e); process.exit(1); });

@@ -32,11 +32,9 @@ export async function GET(req: NextRequest) {
     db.artistTrajectorySnapshot.count({ where }),
   ]);
 
-  const artistIds = [
-    ...new Set(rows.map((r) => r.artistId)),
-  ];
+  const artistIds = Array.from(new Set(rows.map((r) => Number(r.artistId))));
 
-  const artists = await db.artists.findMany({
+  const artists = await db.artist.findMany({
     where: { id: { in: artistIds } },
   });
 
@@ -49,7 +47,7 @@ export async function GET(req: NextRequest) {
     return {
       artistId: row.artistId.toString(),
       name: a?.name ?? null,
-      code2: a?.code2 ?? null,
+      code2: a?.country ?? null,
       primaryGenre: row.primaryGenre,
       primaryCode2: row.primaryCode2,
       status: row.status,

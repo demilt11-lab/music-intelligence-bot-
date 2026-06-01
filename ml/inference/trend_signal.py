@@ -203,8 +203,8 @@ def generate_alerts(
             language=language,
         ))
 
-    # 2. Rising trajectory alert
-    if trajectory_state in ("rising", "resurging"):
+    # 2. Rising trajectory alert — matches lowercased TRAJ_LABELS values
+    if trajectory_state in ("growing", "about_to_break"):
         tiktok_growth = float(features.get("tiktok_growth_rate_7d") or 0)
         playlist_adds = int(features.get("playlist_adds_7d") or 0)
         score = min(

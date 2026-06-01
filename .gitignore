@@ -4,8 +4,8 @@
 # Python
 __pycache__/
 *.py[cod]
-*.pyc
 *.pyo
+*.pyc
 .venv/
 venv/
 *.egg-info/
@@ -37,6 +37,8 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Editor
 .vscode/

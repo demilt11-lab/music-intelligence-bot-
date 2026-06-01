@@ -2,16 +2,57 @@ openapi: 3.0.3
 info:
   title: Music Intelligence API
   version: 1.0.0
+  description: |
+    The Music Intelligence API provides real-time and predictive analytics for
+    tracks and artists across Spotify, TikTok, YouTube, Apple Music, and radio.
+
+    All endpoints require an API key passed via the `x-api-key` header.
+    Contact your account manager to obtain credentials and configure scopes.
+
+    ## Authentication
+    Pass your API key in every request:
+    ```
+    x-api-key: YOUR_API_KEY
+    ```
+
+    ## Rate Limiting
+    Default rate limit is 1,000 requests per minute per tenant.
+    Exceed this and you will receive HTTP 429.
+
+    ## Response Envelope
+    All successful responses are wrapped:
+    ```json
+    { "obj": <data>, "offset": 0, "total": 100 }
+    ```
+    Errors:
+    ```json
+    { "error": "message" }
+    ```
+
+    ## BigInt Fields
+    Large counters (streams, views, followers) are returned as **strings**
+    to avoid JavaScript precision loss.
+
+servers:
+  - url: https://api.music-intelligence.io
+    description: Production
+
+security:
+  - ApiKeyAuth: []
+
 paths:
+
+  # ── Tracks ──────────────────────────────────────────────────────────────
+
   /api/v1/tracks/{id}:
     get:
       summary: Get track metadata and stats
+      description: Returns metadata, platform statistics, and external platform IDs for a single track.
+      tags: [Tracks]
+      security:
+        - ApiKeyAuth: []
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
+        - $ref: '#/components/parameters/TrackId'
       responses:
         '200':
           description: Track found
@@ -22,10 +63,519 @@ paths:
                 properties:
                   obj:
                     $ref: '#/components/schemas/TrackResponse'
-        '404':
-          description: Track not found
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/tracks/{id}/trend:
+    get:
+      summary: Get ML trend prediction for a track
+      description: |
+        Returns the latest ML-generated trend classification for a track.
+        The model classifies tracks as `VIRAL`, `TRENDING`, `POPULAR`, or `NONE`
+        using audio features, playlist signals, and UGC velocity from TikTok and Spotify.
+      tags: [Tracks]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TrackId'
+      responses:
+        '200':
+          description: Trend prediction found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    $ref: '#/components/schemas/TrackTrendResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/tracks/{id}/trajectory:
+    get:
+      summary: Get cross-platform trajectory for a track
+      description: |
+        Returns a multi-dimensional trajectory analysis across Spotify, TikTok,
+        YouTube, playlists, and radio. Each dimension is classified as
+        `rising`, `peaking`, `stable`, or `declining` with a confidence score.
+      tags: [Tracks]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TrackId'
+      responses:
+        '200':
+          description: Trajectory computed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    $ref: '#/components/schemas/TrackTrajectoryResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/tracks/{id}/features:
+    get:
+      summary: Get viral feature signals for a track
+      description: Returns raw feature signals used by the ML models (streams, velocities, playlist adds, TikTok growth, radio spins).
+      tags: [Tracks]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/TrackId'
+      responses:
+        '200':
+          description: Features returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    $ref: '#/components/schemas/ViralFeatures'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/tracks/bulk:
+    get:
+      summary: Bulk fetch track metadata
+      description: Returns metadata for multiple tracks in one request. Pass comma-separated IDs via `ids`.
+      tags: [Tracks]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: query
+          name: ids
+          required: true
+          schema:
+            type: string
+          description: Comma-separated list of track IDs (max 50).
+      responses:
+        '200':
+          description: Tracks returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TrackResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ── Artists ─────────────────────────────────────────────────────────────
+
+  /api/v1/artists/{id}:
+    get:
+      summary: Get artist metadata and latest trajectory snapshot
+      description: Returns artist profile, platform external IDs, and the latest ML trajectory snapshot.
+      tags: [Artists]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ArtistId'
+      responses:
+        '200':
+          description: Artist found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    $ref: '#/components/schemas/ArtistResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/artists/{id}/trajectory:
+    get:
+      summary: Get full artist trajectory with live ML prediction
+      description: |
+        Returns the artist's current ML-predicted status, 90-day streaming
+        history, and a fresh trajectory prediction from the ML service.
+
+        The ML model classifies artists as:
+        - `ABOUT_TO_BREAK` — high breakout probability, rising on all signals
+        - `GROWING` — steady upward momentum
+        - `STABLE` — no clear trend
+        - `DECLINING` — negative stream and engagement deltas
+
+        Signals used: Spotify stream deltas (7d/28d/90d), playlist adds,
+        follower growth, TikTok velocity, airplay velocity, track viral probabilities.
+      tags: [Artists]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ArtistId'
+      responses:
+        '200':
+          description: Trajectory returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    $ref: '#/components/schemas/ArtistTrajectoryResponse'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/v1/artists/breaking:
+    get:
+      summary: List breaking and emerging artists
+      description: |
+        Returns artists ranked by breakout probability. Filter by status,
+        genre, or country. Useful for talent discovery and A&R workflows.
+      tags: [Artists]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [ABOUT_TO_BREAK, GROWING, STABLE, DECLINING]
+          description: Filter by trajectory status.
+        - in: query
+          name: genre
+          schema:
+            type: string
+          description: Filter by primary genre (e.g. `hip-hop`, `pop`).
+        - in: query
+          name: code2
+          schema:
+            type: string
+          description: Filter by ISO alpha-2 country code (e.g. `US`, `GB`).
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Artists returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BreakingArtistRow'
+                  offset:
+                    type: integer
+                  total:
+                    type: integer
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/artist/trajectory/predict:
+    post:
+      summary: Batch ML artist trajectory prediction
+      description: |
+        Accepts a list of artist IDs, fetches their latest feature snapshots,
+        and returns fresh ML predictions for each. Also writes predictions
+        back to the database.
+      tags: [Artists]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [artistIds]
+              properties:
+                artistIds:
+                  type: array
+                  items:
+                    type: integer
+                  description: List of artist IDs to predict.
+      responses:
+        '200':
+          description: Predictions returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ArtistPredictionResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ── Charts ───────────────────────────────────────────────────────────────
+
+  /api/v1/charts/tiktok/tracks:
+    get:
+      summary: TikTok track charts (popular / breakout)
+      description: |
+        Returns a ranked list of tracks from TikTok's popular or breakout charts.
+        Use `chartType=breakout` to find early-stage viral tracks before they peak.
+      tags: [Charts]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: query
+          name: chartType
+          required: true
+          schema:
+            type: string
+            enum: [popular, breakout]
+          description: Chart type to fetch.
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+          description: Chart date (YYYY-MM-DD). Required unless `latest=true`.
+        - in: query
+          name: latest
+          schema:
+            type: boolean
+          description: If true, returns the most recent available snapshot.
+        - in: query
+          name: code2
+          schema:
+            type: string
+          description: Optional country filter (ISO alpha-2).
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Chart returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TikTokTrackChartRow'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /api/v1/charts/tiktok/videos:
+    get:
+      summary: TikTok video charts
+      description: Returns the daily ranked TikTok video chart with engagement metrics.
+      tags: [Charts]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+          description: Chart date (YYYY-MM-DD). Required unless `latest=true`.
+        - in: query
+          name: latest
+          schema:
+            type: boolean
+          description: If true, returns the most recent available snapshot.
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: Video chart returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    type: object
+                    properties:
+                      length:
+                        type: integer
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/TikTokVideoChartRow'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ── Talent Scout ─────────────────────────────────────────────────────────
+
+  /api/v1/talent-scout:
+    get:
+      summary: Daily talent scout — early-stage artist and track discovery
+      description: |
+        Returns tracks ranked by breakout potential using UGC signals, internal
+        streaming data, Luminate metrics, and ML viral probabilities.
+
+        Two modes:
+        - `ugc_early` (default) — emphasises early TikTok/UGC traction before mainstream momentum
+        - `general` — broader ranking across all signal types
+      tags: [Talent Scout]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: query
+          name: date
+          schema:
+            type: string
+            format: date
+          description: Target date (YYYY-MM-DD). Defaults to most recent available.
+        - in: query
+          name: code2
+          schema:
+            type: string
+            default: GLOBAL
+          description: Country filter (ISO alpha-2) or `GLOBAL`.
+        - in: query
+          name: mode
+          schema:
+            type: string
+            enum: [ugc_early, general]
+            default: ugc_early
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Ranked tracks returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TalentScoutRow'
+                  meta:
+                    type: object
+                    properties:
+                      date:
+                        type: string
+                        nullable: true
+                      code2:
+                        type: string
+                      limit:
+                        type: integer
+                      mode:
+                        type: string
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ── Search ───────────────────────────────────────────────────────────────
+
+  /api/v1/search:
+    get:
+      summary: Free-text search across artists, tracks, playlists, and more
+      tags: [Search]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+          description: Search query.
+        - in: query
+          name: type
+          schema:
+            type: string
+            default: all
+            enum: [all, artists, tracks, playlists, curators, albums, stations, cities, songwriters]
+      responses:
+        '200':
+          description: Search results returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  obj:
+                    type: object
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+# ── Components ─────────────────────────────────────────────────────────────
+
 components:
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+
+  parameters:
+    TrackId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+      description: Internal track ID.
+    ArtistId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: integer
+      description: Internal artist ID.
+    Limit:
+      in: query
+      name: limit
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Offset:
+      in: query
+      name: offset
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: API key lacks required scope
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
   schemas:
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
     TrackResponse:
       type: object
       properties:
@@ -36,6 +586,13 @@ components:
         isrc:
           type: string
           nullable: true
+        externalIds:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Platform IDs keyed by platform name (e.g. spotify, apple_music, tiktok).
         artists:
           type: array
           items:
@@ -54,6 +611,7 @@ components:
                 spotifyStreams:
                   type: string
                   nullable: true
+                  description: Spotify streams (string to preserve BigInt precision).
                 spotifyPopularity:
                   type: integer
                   nullable: true
@@ -72,3 +630,357 @@ components:
                 viralScore:
                   type: number
                   nullable: true
+
+    TrackTrendResponse:
+      type: object
+      properties:
+        trackId:
+          type: integer
+        prediction:
+          type: object
+          nullable: true
+          properties:
+            label:
+              type: string
+              enum: [VIRAL, TRENDING, POPULAR, NONE]
+            probViral:
+              type: number
+              format: float
+            probTrending:
+              type: number
+              format: float
+            probPopular:
+              type: number
+              format: float
+            probNone:
+              type: number
+              format: float
+            modelName:
+              type: string
+            modelVersion:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+        label:
+          type: object
+          nullable: true
+          description: ETL-generated ground-truth label (used for model training).
+          properties:
+            label:
+              type: string
+              enum: [VIRAL, TRENDING, POPULAR, NONE]
+            date:
+              type: string
+              format: date
+
+    TrackTrajectoryResponse:
+      type: object
+      properties:
+        trackId:
+          type: integer
+        overall:
+          $ref: '#/components/schemas/TrajectoryLabel'
+        dimensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrajectoryLabel'
+
+    TrajectoryLabel:
+      type: object
+      properties:
+        dimension:
+          type: string
+          description: Platform dimension (e.g. spotify, tiktok, youtube, playlists, radio, global).
+        state:
+          type: string
+          enum: [rising, peaking, stable, declining, low_signal]
+        confidence:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        reason:
+          type: string
+
+    ViralFeatures:
+      type: object
+      properties:
+        trackId:
+          type: integer
+        isrc:
+          type: string
+          nullable: true
+        spotifyStreams:
+          type: number
+          nullable: true
+        spotifyPopularity:
+          type: number
+          nullable: true
+        tiktokVideoCount:
+          type: number
+          nullable: true
+        youtubeViews:
+          type: number
+          nullable: true
+        streamVelocity7d:
+          type: number
+          nullable: true
+        tiktokGrowth7d:
+          type: number
+          nullable: true
+        playlistCount:
+          type: integer
+          nullable: true
+        playlistAdds7d:
+          type: integer
+          nullable: true
+        radioSpins7d:
+          type: number
+          nullable: true
+
+    ArtistResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Artist ID as string.
+        name:
+          type: string
+        code2:
+          type: string
+          nullable: true
+        externalIds:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        trajectory:
+          $ref: '#/components/schemas/ArtistTrajectorySnapshot'
+          nullable: true
+
+    ArtistTrajectorySnapshot:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ABOUT_TO_BREAK, GROWING, STABLE, DECLINING]
+        breakProbability:
+          type: number
+          format: float
+        statusScore:
+          type: number
+          format: float
+        streams28dDelta:
+          type: number
+        playlistsDelta28d:
+          type: number
+          nullable: true
+        followersDelta28d:
+          type: number
+          nullable: true
+        tiktokVelocityScore:
+          type: number
+          nullable: true
+        airplayVelocityScore:
+          type: number
+          nullable: true
+        primaryGenre:
+          type: string
+          nullable: true
+        primaryCode2:
+          type: string
+          nullable: true
+        date:
+          type: string
+          format: date
+
+    ArtistTrajectoryResponse:
+      type: object
+      properties:
+        artist:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            code2:
+              type: string
+              nullable: true
+        snapshot:
+          $ref: '#/components/schemas/ArtistTrajectorySnapshot'
+          nullable: true
+        mlPrediction:
+          type: object
+          nullable: true
+          description: Fresh prediction from the ML inference service.
+          properties:
+            status:
+              type: string
+              enum: [ABOUT_TO_BREAK, GROWING, STABLE, DECLINING]
+            breakProbability:
+              type: number
+              format: float
+            modelName:
+              type: string
+              nullable: true
+            modelVersion:
+              type: string
+              nullable: true
+        history:
+          type: array
+          description: 90-day daily stream history.
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              totalStreams:
+                type: string
+              streams7d:
+                type: number
+                nullable: true
+              streams28d:
+                type: number
+                nullable: true
+              streams90d:
+                type: number
+                nullable: true
+              playlistCount:
+                type: integer
+                nullable: true
+              followerCount:
+                type: integer
+                nullable: true
+              playlistReach:
+                type: string
+                nullable: true
+
+    BreakingArtistRow:
+      type: object
+      properties:
+        artistId:
+          type: string
+        name:
+          type: string
+          nullable: true
+        code2:
+          type: string
+          nullable: true
+        primaryGenre:
+          type: string
+          nullable: true
+        primaryCode2:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [ABOUT_TO_BREAK, GROWING, STABLE, DECLINING]
+        statusScore:
+          type: number
+        breakProbability:
+          type: number
+        streams28dDelta:
+          type: number
+        playlistsDelta28d:
+          type: number
+          nullable: true
+        followersDelta28d:
+          type: number
+          nullable: true
+        tiktokVelocityScore:
+          type: number
+          nullable: true
+        airplayVelocityScore:
+          type: number
+          nullable: true
+        date:
+          type: string
+          format: date
+
+    ArtistPredictionResult:
+      type: object
+      properties:
+        artistId:
+          type: string
+        status:
+          type: string
+          enum: [ABOUT_TO_BREAK, GROWING, STABLE, DECLINING]
+        breakProbability:
+          type: number
+          format: float
+        modelName:
+          type: string
+        modelVersion:
+          type: string
+
+    TikTokTrackChartRow:
+      type: object
+      properties:
+        rank:
+          type: integer
+        trackId:
+          type: integer
+          nullable: true
+        trackName:
+          type: string
+          nullable: true
+        artistName:
+          type: string
+          nullable: true
+        chartType:
+          type: string
+        date:
+          type: string
+          format: date
+
+    TikTokVideoChartRow:
+      type: object
+      properties:
+        rank:
+          type: integer
+        videoId:
+          type: string
+        videoName:
+          type: string
+          nullable: true
+        views:
+          type: string
+          description: View count as string (BigInt).
+        likes:
+          type: string
+          nullable: true
+        comments:
+          type: string
+          nullable: true
+
+    TalentScoutRow:
+      type: object
+      properties:
+        trackId:
+          type: integer
+          nullable: true
+        trackName:
+          type: string
+          nullable: true
+        artistName:
+          type: string
+          nullable: true
+        scoutScore:
+          type: number
+          description: Composite score combining UGC, streaming, and ML signals.
+        ugcViews:
+          type: string
+          nullable: true
+        ugcGrowth7d:
+          type: number
+          nullable: true
+        probViral:
+          type: number
+          nullable: true
+        luminateStreams:
+          type: string
+          nullable: true

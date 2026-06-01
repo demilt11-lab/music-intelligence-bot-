@@ -20,7 +20,7 @@ import { successResponse } from '@/lib/shared/response';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { trackId: string; chartType: string } },
+  { params }: { params: { id: string; chartType: string } },
 ): Promise<NextResponse> {
   try {
     const searchParams = request.nextUrl.searchParams;

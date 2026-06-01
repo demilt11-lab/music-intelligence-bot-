@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     // For each artist, compute maxTrackProbViral (quick call into DB)
     const items: MlRequestItem[] = [];
     for (const s of snapshots) {
-      const artistId = s.artistId;
+      const artistId = Number(s.artistId);
       const tracks = await db.track.findMany({
         where: {
           trackArtists: {
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
     for (const r of mlJson.items) {
       const snapshot =
         snapshots.find(
-          (s) => s.artistId === r.artist_id,
+          (s) => Number(s.artistId) === r.artist_id,
         );
       if (!snapshot) continue;
 
