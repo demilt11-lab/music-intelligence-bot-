@@ -1,0 +1,27 @@
+name: Artist ETL
+
+on:
+  schedule:
+    - cron: "0 5 * * *" # 5:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  artist-etl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Run artist ETL
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # add any other env vars
+        run: npm run etl:artist-all
