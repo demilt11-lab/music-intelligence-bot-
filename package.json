@@ -131,4 +131,17 @@
     "ml:artist-spotify-trend:predict": "python ml/artist_spotify_trend_model.py --mode predict --input output/artist_spotify_trend_training.csv --output output/artist_spotify_trend_predictions.csv"
   }
 }
+{
+  "scripts": {
+    // ...your existing scripts
+
+    // unified artist trajectory ML
+    "export:artist-trajectory-features": "ts-node scripts/export_artist_trajectory_features.ts",
+    "ml:artist-trajectory:train": "python ml/artist_trajectory_model.py --mode train --input output/artist_trajectory_features.csv",
+    "ml:artist-trajectory:predict": "python ml/artist_trajectory_model.py --mode predict --input output/artist_trajectory_features.csv --output output/artist_trajectory_predictions.csv",
+    "ml:artist-trajectory:import": "ts-node scripts/import_artist_trajectory_predictions.ts",
+
+    "ml:artist-trajectory:full": "npm run export:artist-trajectory-features && npm run ml:artist-trajectory:train && npm run ml:artist-trajectory:predict && npm run ml:artist-trajectory:import"
+  }
+}
 }
