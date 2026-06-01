@@ -1388,4 +1388,26 @@ model TrackTrendPrediction {
   @@unique([trackId, genre, code2, modelName, modelVersion])
   @@map("track_trend_predictions")
 }
+model ArtistTrajectorySnapshot {
+  id          Int      @id @default(autoincrement())
+  artistId    Int
+  date        DateTime
+
+  // existing growth metrics...
+
+  primaryGenre   String?
+  primaryCode2   String?
+  breakoutCities Json?   // or breakoutRegions as JSON
+
+  status         String
+  statusScore    Float
+  breakProbability Float?
+
+  createdAt     DateTime @default(now())
+
+  @@index([artistId, date])
+  @@index([status])
+  @@index([primaryGenre])
+  @@index([primaryCode2])
+}
 }
