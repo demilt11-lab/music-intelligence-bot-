@@ -209,7 +209,114 @@ export async function buildArtistTrajectorySnapshots(dateStr: string) {
     const followers = history.map((h) =>
       h.totalFollowers ? Number(h.totalFollowers) : 0,
     );
+  for (const [artistId, history] of byArtist.entries()) {
+    if (!history.length) continue;
 
+    // ... your existing rolling sums + deltas ...
+
+    // Core classification from growth metrics
+    const {
+      status,
+      statusScore,
+      breakProbability,
+    } = classifyStatus({
+      streams28dDelta,
+      playlistsDelta28d,
+      followersDelta28d,
+    });
+
+    // Get recent tracks for this artist
+    const recentTracks = await db.track.findMany({
+      where: {
+        trackArtists: {
+          some: { artistId },
+        },
+      },
+      orderBy: {
+        releaseDate: "desc",
+      },
+      take: 10, // last N releases
+    });
+
+    const trackIds = recentTracks.map((t) => t.id);
+    let breakoutRegionsJson: any = null;
+    let breakoutGenresJson: any = null;
+    let primaryGenre: string | null = null;
+    let primaryCode2: string | null = null;
+
+    if (trackIds.length > 0) {
+      const preds =
+        await db.trackTrendPrediction.findMany({
+          where: {
+            trackId: { in: trackIds },
+          },
+        });
+
+      const breakout = inferBreakoutRegionAndGenre(
+        preds.map((p) => ({
+          trackId: p.trackId,
+          genre: p.genre,
+          code2: p.code2,
+          probViral: p.probViral,
+          probTrending: p.probTrending,
+          probPopular: p.probPopular,
+        })),
+      );
+
+      primaryGenre = breakout.primaryGenre;
+      primaryCode2 = breakout.primaryCode2;
+      breakoutRegionsJson = {
+        regions: breakout.breakoutRegions,
+        genres: breakout.breakoutGenres,
+      };
+    }
+
+    // Fallback to latestDaily if ML predictions absent
+    const latestDaily =
+      await db.artistDailyStats.findFirst({
+        where: {
+          artistId,
+          date: latest.date,
+        },
+      });
+
+    if (!primaryGenre) {
+      primaryGenre =
+        latestDaily?.genres?.[0] ?? null;
+    }
+    if (!primaryCode2) {
+      primaryCode2 =
+        latestDaily?.primaryCode2 ?? null;
+    }
+
+    await db.artistTrajectorySnapshot.create({
+      data: {
+        artistId,
+        date: latest.date,
+        streams7d,
+        streams28d,
+        streams90d,
+        streams7dDelta,
+        streams28dDelta,
+        streams90dDelta,
+        listeners28d: null,
+        listenersDelta28d: null,
+        followersDelta28d,
+        playlistsDelta28d,
+        editorialAdds28d: null,
+        removals28d: null,
+        tiktokVelocityScore: null,
+        chartVelocityScore: null,
+        airplayVelocityScore: null,
+        primaryGenre,
+        primaryCode2,
+        breakoutCities: breakoutRegionsJson,
+        status,
+        statusScore,
+        breakProbability,
+      },
+    });
+  }
     const streams7dSeries = rollingSum(streams, 7);
     const streams28dSeries = rollingSum(streams, 28);
     const streams90dSeries = rollingSum(streams, 90);
