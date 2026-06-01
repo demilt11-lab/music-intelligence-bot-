@@ -274,4 +274,38 @@ if (require.main === module) {
     breakProbability: 0.2,
   };
 }
+  // After computing streams/playlist/follower deltas
+const recentTracks = await db.track.findMany({
+  where: {
+    trackArtists: {
+      some: { artistId },
+    },
+  },
+  take: 10, // latest few tracks
+  orderBy: { releaseDate: "desc" },
+});
+
+const predictions =
+  await db.trackTrendPrediction.findMany({
+    where: {
+      trackId: {
+        in: recentTracks.map((t) => t.id),
+      },
+    },
+  });
+
+let maxProbViral = 0;
+let breakGenre: string | null = null;
+let breakCode2: string | null = null;
+
+for (const p of predictions) {
+  if (p.probViral > maxProbViral) {
+    maxProbViral = p.probViral;
+    breakGenre = p.genre;
+    breakCode2 = p.code2;
+  }
+}
+
+// You can inject this into classifyStatus as an extra signal
+// and store breakGenre/breakCode2 in snapshot
 }
