@@ -230,7 +230,7 @@ def compute_loss(
     Missing targets are skipped (mask = label != -1).
     Returns (total_loss, {task: loss_value}).
     """
-    total   = torch.tensor(0.0, requires_grad=True)
+    total: Optional[torch.Tensor] = None
     per_task: Dict[str, float] = {}
 
     task_map = [
@@ -257,7 +257,9 @@ def compute_loss(
         loss = F.cross_entropy(logits, labels, weight=weight)
         weighted = TASK_WEIGHTS[task] * loss
 
-        total = total + weighted
+        total = weighted if total is None else total + weighted
         per_task[task] = float(loss)
 
+    if total is None:
+        total = torch.tensor(0.0)
     return total, per_task

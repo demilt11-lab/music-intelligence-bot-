@@ -35,9 +35,7 @@ from ml.neural.song_analyzer import (
 )
 from ml.neural.temporal_encoder import TemporalEncoder, build_sequence_tensor
 from ml.neural.network import AUDIO_IN, STREAMING_IN, UGC_IN, RADIO_IN
-from ml.neural.dataset import (
-    _audio_from_row, _streaming_from_row, _ugc_from_row, _radio_from_row,
-)
+from ml.neural.dataset import _safe_float, _log, _clip
 from ml.inference.trend_signal import generate_alerts, alerts_to_dict
 from ml.inference.metrics_writer import update_from_batch_result
 
@@ -92,15 +90,7 @@ def _get_viral_index() -> ViralSoundIndex:
 
 def _build_feature_tensors(record: Dict[str, Any]) -> Dict[str, torch.Tensor]:
     """Converts a flat TrackFeatureRow dict → branch tensors."""
-    from ml.neural.dataset import (
-        MusicDataset,
-        _safe_float, _log, _clip,
-    )
     import math
-
-    # Reuse per-branch tensor builders from dataset.py
-    # (imported via name mangling workaround below)
-    dataset_mod = __import__("ml.neural.dataset", fromlist=["_audio_fn"])
 
     def audio(row):
         bpm    = _safe_float(row.get("bpm") or row.get("tempo"), 120.0)

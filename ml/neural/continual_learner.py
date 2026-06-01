@@ -179,13 +179,16 @@ class EWCState:
         if not self.fisher:
             return torch.tensor(0.0)
 
-        penalty = torch.tensor(0.0, requires_grad=True)
+        penalty: Optional[torch.Tensor] = None
         for name, param in model.named_parameters():
             if name in self.fisher:
                 f = self.fisher[name].to(param.device)
                 m = self.means[name].to(param.device)
-                penalty = penalty + (f * (param - m) ** 2).sum()
+                term = (f * (param - m) ** 2).sum()
+                penalty = term if penalty is None else penalty + term
 
+        if penalty is None:
+            return torch.tensor(0.0)
         return EWC_LAMBDA * penalty
 
     def save(self, path: Path = EWC_STATE_PATH):

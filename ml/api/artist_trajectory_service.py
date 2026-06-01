@@ -345,8 +345,7 @@ def neural_predict_batch(req: NeuralBatchRequest, background_tasks: BackgroundTa
     background_tasks.add_task(_batch_update)
 
     # Return predictions without online update (update runs async)
-    _, nb = _get_neural()
-    results = nb(records, daily_histories=histories)
+    results = npredict_batch(records, daily_histories=histories)
     return {"items": results}
 
 

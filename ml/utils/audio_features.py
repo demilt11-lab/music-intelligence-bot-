@@ -74,3 +74,41 @@ def extract_from_audio_file(file_path: str) -> Dict:
 
         # Key via chroma
         chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+        chroma_mean = chroma.mean(axis=1).tolist()
+        key_info = detect_key_from_chroma(chroma_mean)
+
+        # Energy (RMS)
+        rms = librosa.feature.rms(y=y)[0]
+        energy = float(np.clip(rms.mean() * 10, 0.0, 1.0))
+
+        # Danceability proxy: beat strength regularity
+        onset_env = librosa.onset.onset_strength(y=y, sr=sr)
+        danceability = float(np.clip(onset_env.mean() / 10.0, 0.0, 1.0))
+
+        # Valence proxy: major key + fast tempo → positive affect
+        valence = float(np.clip(
+            (0.5 if key_info["mode"] == "major" else 0.0) +
+            (min(bpm, 180) - 60) / 240,
+            0.0, 1.0,
+        ))
+
+        # Loudness (LUFS approximation via dBFS)
+        loudness = float(librosa.amplitude_to_db(rms).mean())
+
+        return {
+            "bpm": round(bpm, 1),
+            "musical_key": key_info["key"],
+            "mode": key_info["mode"],
+            "key_confidence": key_info["confidence"],
+            "energy": round(energy, 4),
+            "danceability": round(danceability, 4),
+            "valence": round(valence, 4),
+            "loudness": round(loudness, 2),
+        }
+
+    except ImportError:
+        logger.warning("librosa not installed — audio analysis unavailable")
+        return {}
+    except Exception as exc:
+        logger.error("Audio feature extraction failed for %s: %s", file_path, exc)
+        return {}

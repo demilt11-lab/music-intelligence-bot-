@@ -24,7 +24,7 @@ Design choice: LSTM over Transformer for temporal data of this length because:
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -143,7 +143,7 @@ class TemporalEncoder(nn.Module):
 def build_sequence_tensor(
     daily_stats_list: list,
     max_len: int = 90,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Converts a list of daily stat sequences to a padded tensor.
 

@@ -294,10 +294,6 @@ NUMERIC_BASE_FEATURES = [
 
 def engineer_features(row: Dict) -> Dict[str, float]:
     """
-# --- continuation of feature_engineering.py ---
-
-def engineer_features(row: Dict) -> Dict[str, float]:
-    """
     Master feature engineering function.
     Takes one raw row and returns a flat dict of ML-ready features.
     """
