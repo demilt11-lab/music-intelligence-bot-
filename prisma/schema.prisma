@@ -37,6 +37,8 @@ model Track {
   airplayChartRows      AirplayTrackChartRow[]
   radioAirplayFacts     RadioAirplayFact[]
   playlistMembershipEvents PlaylistMembershipEvent[]
+  trendLabels              TrackTrendLabel[]
+  trendPredictions         TrackTrendPrediction[]
 
   @@map("tracks")
 }
@@ -833,6 +835,7 @@ model TrackVersionCluster {
 
   @@unique([trackId, clusterId])
   @@map("track_version_clusters")
+}
 
 model Radio {
   id          String       @id @default(cuid())
@@ -861,254 +864,146 @@ model RadioSpin {
   @@index([songUuid, airedAtUtc])
 }
 
-model Tenant {
-  id        Int         @id @default(autoincrement())
-  name      String
-  slug      String      @unique
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-
-  users     TenantUser[]
-  apiKeys   ApiKey[]
-}
-
-model TenantUser {
-  id        Int        @id @default(autoincrement())
-  tenantId  Int
-  email     String
-  role      TenantRole
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-
-  @@unique([tenantId, email])
-}
-
-enum TenantRole {
-  ADMIN
-  ANALYST
-  VIEWER
-}
-
-model ApiKey {
-  id         Int       @id @default(autoincrement())
-  tenantId   Int
-  keyHash    String    @unique
-  label      String
-  scopes     String    // CSV or JSON string, e.g. "search:read,tracks:read"
-  expiresAt  DateTime?
-  isRevoked  Boolean   @default(false)
-  createdAt  DateTime  @default(now())
-  lastUsedAt DateTime?
-
-  tenant     Tenant    @relation(fields: [tenantId], references: [id])
-}
-
-model RequestLog {
-  id         Int      @id @default(autoincrement())
-  tenantId   Int
-  endpoint   String
-  method     String
-  statusCode Int
-  latencyMs  Int
-  createdAt  DateTime @default(now())
-}
-
-model CatalogTrack {
-  id             Int      @id @default(autoincrement())
-  tenantId       Int
-  clientTrackId  String
-  isrc           String?
-  name           String?
-  artistName     String?
-  spotifyTrackId String?
-  tiktokSoundId  String?
-  youtubeVideoId String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-
-  @@unique([tenantId, clientTrackId])
-}
-
-model Tenant {
-  id        Int         @id @default(autoincrement())
-  name      String
-  slug      String      @unique
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-
-  users     TenantUser[]
-  apiKeys   ApiKey[]
-  catalog   CatalogTrack[]
-}
-
-model TenantUser {
-  id        Int        @id @default(autoincrement())
-  tenantId  Int
-  email     String
-  role      TenantRole
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-
-  @@unique([tenantId, email])
-}
-
-enum TenantRole {
-  ADMIN
-  ANALYST
-  VIEWER
-}
-
-model ApiKey {
-  id         Int       @id @default(autoincrement())
-  tenantId   Int
-  keyHash    String    @unique
-  label      String
-  scopes     String    // e.g. "search:read,tracks:read,catalog:write"
-  expiresAt  DateTime?
-  isRevoked  Boolean   @default(false)
-  createdAt  DateTime  @default(now())
-  lastUsedAt DateTime?
-
-  tenant     Tenant    @relation(fields: [tenantId], references: [id])
-}
-
-model CatalogTrack {
-  id             Int      @id @default(autoincrement())
-  tenantId       Int
-  clientTrackId  String
-  isrc           String?
-  name           String?
-  artistName     String?
-  spotifyTrackId String?
-  tiktokSoundId  String?
-  youtubeVideoId String?
-  canonicalTrackId Int?   // optional: link to your internal track id later
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-
-  @@unique([tenantId, clientTrackId])
-}
-
-model RequestLog {
-  id         Int      @id @default(autoincrement())
-  tenantId   Int
-  endpoint   String
-  method     String
-  statusCode Int
-  latencyMs  Int
-  createdAt  DateTime @default(now())
-}
-
-model Tenant {
-  id        Int         @id @default(autoincrement())
-  name      String
-  slug      String      @unique
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-
-  users     TenantUser[]
-  apiKeys   ApiKey[]
-  catalog   CatalogTrack[]
-}
-
-model TenantUser {
-  id        Int        @id @default(autoincrement())
-  tenantId  Int
-  email     String
-  role      TenantRole
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
-
-  @@unique([tenantId, email])
-}
-
-enum TenantRole {
-  ADMIN
-  ANALYST
-  VIEWER
-}
-
-model ApiKey {
-  id         Int       @id @default(autoincrement())
-  tenantId   Int
-  keyHash    String    @unique
-  label      String
-  scopes     String    // e.g. "search:read,tracks:read,catalog:write"
-  expiresAt  DateTime?
-  isRevoked  Boolean   @default(false)
-  createdAt  DateTime  @default(now())
-  lastUsedAt DateTime?
-
-  tenant     Tenant    @relation(fields: [tenantId], references: [id])
-}
-
-model CatalogTrack {
-  id              Int      @id @default(autoincrement())
-  tenantId        Int
-  clientTrackId   String
-  isrc            String?
-  name            String?
-  artistName      String?
-  spotifyTrackId  String?
-  tiktokSoundId   String?
-  youtubeVideoId  String?
-  canonicalTrackId Int?    // optional: link to your internal track id later
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  tenant Tenant @relation(fields: [tenantId], references: [id])
-
-  @@unique([tenantId, clientTrackId])
-}
-
-model RequestLog {
-  id         Int      @id @default(autoincrement())
-  tenantId   Int
-  endpoint   String
-  method     String
-  statusCode Int
-  latencyMs  Int
-  createdAt  DateTime @default(now())
-}
 enum TenantEnvironment {
   SANDBOX
   PROD
 }
 
-model Tenant {
-  id          Int                 @id @default(autoincrement())
-  name        String
-  slug        String              @unique
-  environment TenantEnvironment   @default(SANDBOX)
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-
-  users     TenantUser[]
-  apiKeys   ApiKey[]
-  catalog   CatalogTrack[]
+enum TenantRole {
+  ADMIN
+  ANALYST
+  VIEWER
 }
+
 model Plan {
-  id     Int     @id @default(autoincrement())
-  name   String  @unique
-  scopes String  // "search:read,tracks:read,tracks:features:read"
+  id      Int      @id @default(autoincrement())
+  name    String   @unique
+  scopes  String
   tenants Tenant[]
 }
 
 model Tenant {
-  // existing fields...
-  planId  Int?
-  plan    Plan?  @relation(fields: [planId], references: [id])
+  id          Int               @id @default(autoincrement())
+  name        String
+  slug        String            @unique
+  environment TenantEnvironment @default(SANDBOX)
+  planId      Int?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  plan                Plan?                @relation(fields: [planId], references: [id])
+  users               TenantUser[]
+  apiKeys             ApiKey[]
+  catalog             CatalogTrack[]
+  watchlistItems      WatchlistItem[]
+  digestSubscriptions DigestSubscription[]
+  alertRules          AlertRule[]
 }
+
+model TenantUser {
+  id        Int        @id @default(autoincrement())
+  tenantId  Int
+  email     String
+  role      TenantRole
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+}
+
+model ApiKey {
+  id         Int       @id @default(autoincrement())
+  tenantId   Int
+  keyHash    String    @unique
+  label      String
+  scopes     String
+  expiresAt  DateTime?
+  isRevoked  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+}
+
+model CatalogTrack {
+  id               Int      @id @default(autoincrement())
+  tenantId         Int
+  clientTrackId    String
+  isrc             String?
+  name             String?
+  artistName       String?
+  spotifyTrackId   String?
+  tiktokSoundId    String?
+  youtubeVideoId   String?
+  canonicalTrackId Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, clientTrackId])
+}
+
+model RequestLog {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int
+  endpoint   String
+  method     String
+  statusCode Int
+  latencyMs  Int
+  createdAt  DateTime @default(now())
+}
+
+model WatchlistItem {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int
+  entityType String
+  entityId   Int
+  notes      String?
+  addedAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, entityType, entityId])
+  @@map("watchlist_items")
+}
+
+model DigestSubscription {
+  id         Int       @id @default(autoincrement())
+  tenantId   Int
+  email      String?
+  webhookUrl String?
+  frequency  String    @default("daily")
+  isActive   Boolean   @default(true)
+  lastSentAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("digest_subscriptions")
+}
+
+model AlertRule {
+  id          Int       @id @default(autoincrement())
+  tenantId    Int
+  entityType  String
+  entityId    Int?
+  metric      String
+  threshold   Float
+  operator    String    @default("gt")
+  channel     String
+  destination String
+  isActive    Boolean   @default(true)
+  lastFiredAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("alert_rules")
+}
+
 model LuminateStream {
   id              Int      @id @default(autoincrement())
   /// 'song' | 'artist' | 'release_group'
@@ -1129,13 +1024,8 @@ model LuminateStream {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  @@unique([entityType, entityId, date, locationId, marketId, contentType, commercialModel, serviceType], map: "luminate_streams_unique_key")
   @@map("luminate_streams")
-
-  /// Prevent duplicates per entity/date/dimension combo
-  @@unique(
-    [entityType, entityId, date, locationId, marketId, contentType, commercialModel, serviceType],
-    map: "luminate_streams_unique_key"
-  )
 }
 model LuminateSales {
   id                  Int      @id @default(autoincrement())
@@ -1163,23 +1053,8 @@ model LuminateSales {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  @@unique([entityType, entityId, date, locationId, marketId, distributionChannel, purchaseMethod, storeStrata, productFormat, releaseType], map: "luminate_sales_unique_key")
   @@map("luminate_sales")
-
-  @@unique(
-    [
-      entityType,
-      entityId,
-      date,
-      locationId,
-      marketId,
-      distributionChannel,
-      purchaseMethod,
-      storeStrata,
-      productFormat,
-      releaseType
-    ],
-    map: "luminate_sales_unique_key"
-  )
 }
 model LuminateAirplay {
   id         Int      @id @default(autoincrement())
@@ -1200,12 +1075,8 @@ model LuminateAirplay {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  @@unique([entityType, entityId, date, locationId, marketId, formatId], map: "luminate_airplay_unique_key")
   @@map("luminate_airplay")
-
-  @@unique(
-    [entityType, entityId, date, locationId, marketId, formatId],
-    map: "luminate_airplay_unique_key"
-  )
 }
 model UgcTrackMetrics {
   id             Int      @id @default(autoincrement())
@@ -1346,12 +1217,19 @@ model ArtistTrajectorySnapshot {
   statusScore    Float
   breakProbability Float?
 
+  spotifyBreakProb    Float?
+  spotifyModelName    String?
+  spotifyModelVersion String?
+
   createdAt     DateTime @default(now())
 
+  @@index([artistId, date])
   @@index([status])
   @@index([primaryGenre])
   @@index([primaryCode2])
+  @@map("artist_trajectory_snapshots")
 }
+
 model TrackTrendLabel {
   id          Int      @id @default(autoincrement())
   trackId     Int
@@ -1387,28 +1265,6 @@ model TrackTrendPrediction {
 
   @@unique([trackId, genre, code2, modelName, modelVersion])
   @@map("track_trend_predictions")
-}
-model ArtistTrajectorySnapshot {
-  id          Int      @id @default(autoincrement())
-  artistId    Int
-  date        DateTime
-
-  // existing growth metrics...
-
-  primaryGenre   String?
-  primaryCode2   String?
-  breakoutCities Json?   // or breakoutRegions as JSON
-
-  status         String
-  statusScore    Float
-  breakProbability Float?
-
-  createdAt     DateTime @default(now())
-
-  @@index([artistId, date])
-  @@index([status])
-  @@index([primaryGenre])
-  @@index([primaryCode2])
 }
 model ArtistSpotifyReleaseStats {
   id                Int      @id @default(autoincrement())
@@ -1449,29 +1305,4 @@ model ArtistSpotifyReleaseStats {
   @@unique([artistId, snapshotDate])
   @@index([artistId, snapshotDate])
   @@map("artist_spotify_release_stats")
-}
-
-model ArtistTrajectorySnapshot {
-  id          Int      @id @default(autoincrement())
-  artistId    Int
-  date        DateTime
-
-  // ... existing metrics ...
-
-  status         String
-  statusScore    Float
-  breakProbability Float?
-
-  // NEW: Spotify-specific breakout probability
-  spotifyBreakProb   Float?  // probability artist becomes popular on Spotify (model output)
-  spotifyModelName   String? // which model produced it
-  spotifyModelVersion String?
-
-  createdAt     DateTime @default(now())
-
-  @@index([artistId, date])
-  @@index([status])
-  @@index([primaryGenre])
-  @@index([primaryCode2])
-}
 }
