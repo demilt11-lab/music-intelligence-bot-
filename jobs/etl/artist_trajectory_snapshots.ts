@@ -220,4 +220,58 @@ if (require.main === module) {
       console.error(err);
       process.exit(1);
     });
+  function classifyStatus(args: {
+  streams28dDelta: number;
+  playlistsDelta28d: number;
+  followersDelta28d: number;
+  tiktokVelocityScore?: number;
+  airplayVelocityScore?: number;
+}) {
+  const {
+    streams28dDelta,
+    playlistsDelta28d,
+    followersDelta28d,
+    tiktokVelocityScore = 0,
+    airplayVelocityScore = 0,
+  } = args;
+
+  const viralBoost =
+    tiktokVelocityScore * 0.3 + airplayVelocityScore * 0.2;
+
+  if (
+    streams28dDelta + viralBoost > 1.0 &&
+    playlistsDelta28d > 0.5 &&
+    followersDelta28d > 0.2
+  ) {
+    return {
+      status: "ABOUT_TO_BREAK",
+      statusScore: 0.9 + viralBoost * 0.1,
+      breakProbability: 0.8 + viralBoost * 0.1,
+    };
+  }
+
+  if (streams28dDelta + viralBoost > 0.2) {
+    return {
+      status: "GROWING",
+      statusScore:
+        0.6 + Math.min(streams28dDelta + viralBoost, 1.0) * 0.2,
+      breakProbability:
+        0.4 + Math.min(streams28dDelta + viralBoost, 1.0) * 0.3,
+    };
+  }
+
+  if (streams28dDelta < -0.2 && playlistsDelta28d < -0.1) {
+    return {
+      status: "DECLINING",
+      statusScore: 0.7,
+      breakProbability: 0.1,
+    };
+  }
+
+  return {
+    status: "STABLE",
+    statusScore: 0.5,
+    breakProbability: 0.2,
+  };
+}
 }
