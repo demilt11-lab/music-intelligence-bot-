@@ -10,7 +10,9 @@ predictor = Predictor()
 
 
 def score_batch(records: List[Dict[str, Any]], explain: bool = False) -> List[Dict[str, Any]]:
-    results = [predictor.predict(rec, explain=explain) for rec in records]
+    # Call predict_batch directly — builds feature matrices once for the whole
+    # batch instead of once per record.
+    results = predictor.predict_batch(records, explain=explain)
     update_from_batch_result(results)
     logger.info("Scored batch of %d records", len(records))
     return results

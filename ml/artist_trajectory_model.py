@@ -8,9 +8,11 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 
-MODEL_PATH = "output/artist_trajectory_model.joblib"
-SCALER_PATH = "output/artist_trajectory_scaler.joblib"
-MODEL_NAME = "artist_trajectory"
+from ml.config import MODEL_DIR
+
+MODEL_PATH  = str(MODEL_DIR / "artist_trajectory_model.joblib")
+SCALER_PATH = str(MODEL_DIR / "artist_trajectory_scaler.joblib")
+MODEL_NAME  = "artist_trajectory"
 MODEL_VERSION = "v1"
 
 # Map existing status labels to integers

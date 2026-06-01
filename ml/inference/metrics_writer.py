@@ -79,15 +79,26 @@ def update_from_batch_result(results: List[dict]):
     trend_labels = []
 
     for r in results:
+        # XGBoost results use viral_probabilities.30d
+        # Neural results use viral_probability (scalar) — handle both
         vp = r.get("viral_probabilities", {})
         if vp.get("30d") is not None:
             viral_probs.append(float(vp["30d"]))
+        elif r.get("viral_probability") is not None:
+            viral_probs.append(float(r["viral_probability"]))
+
         pp = r.get("popularity_probabilities", {})
         if pp.get("30d") is not None:
             pop_probs.append(float(pp["30d"]))
+        elif r.get("popular_probability") is not None:
+            pop_probs.append(float(r["popular_probability"]))
+
+        # XGBoost: trend_prediction.label  /  Neural: trend_prediction.label
         tp = r.get("trend_prediction", {})
         if tp.get("label"):
             trend_labels.append(tp["label"])
+        elif r.get("trend_label"):
+            trend_labels.append(r["trend_label"])
 
     if viral_probs:
         update_viral_prob_metrics(viral_probs)
