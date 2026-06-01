@@ -154,4 +154,55 @@ if (require.main === module) {
       console.error(err);
       process.exit(1);
     });
+    // TikTok / Shorts velocity per artist per day (example for TikTok global chart)
+  const tiktokRows = await db.$queryRawUnsafe<{
+    artist_id: bigint;
+    date: Date;
+    tiktok_score: number;
+  }>(
+    `
+    SELECT
+      ta.artist_id,
+      tt.date::date AS date,
+      AVG(tt.rank_score) AS tiktok_score
+    FROM tiktok_track_chart_global_daily tt
+    JOIN tracks t ON t.id = tt.track_id
+    JOIN track_artists ta ON ta.track_id = t.id
+    WHERE tt.date::date = $1::date
+    GROUP BY ta.artist_id, tt.date::date
+    `,
+    dateParam,
+  );
+
+  const tiktokMap = new Map(
+    tiktokRows.map((r) => [
+      playlistKey(r),
+      r.tiktok_score,
+    ]),
+  );
+
+  // Airplay per artist per day
+  const airplayRows = await db.$queryRawUnsafe<{
+    artist_id: bigint;
+    date: Date;
+    airplay_plays: bigint;
+  }>(
+    `
+    SELECT
+      ra.artist_id,
+      ra.date::date AS date,
+      SUM(ra.plays) AS airplay_plays
+    FROM radio_airplay_facts ra
+    WHERE ra.date::date = $1::date
+    GROUP BY ra.artist_id, ra.date::date
+    `,
+    dateParam,
+  );
+
+  const airplayMap = new Map(
+    airplayRows.map((r) => [
+      playlistKey(r),
+      r.airplay_plays,
+    ]),
+  );
 }
