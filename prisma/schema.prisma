@@ -1283,4 +1283,73 @@ model TalentScoutScore {
   @@map("talent_scout_scores")
   @@unique([trackId, code2, date])
 }
+model ArtistDailyStats {
+  id               BigInt    @id @default(autoincrement())
+  artistId         BigInt
+  date             DateTime
+
+  totalStreams     BigInt
+  totalListeners   BigInt?
+  totalFollowers   BigInt?
+
+  platformStreams   Json?
+  platformListeners Json?
+  platformFollowers Json?
+
+  playlistCount          Int?
+  editorialPlaylistCount Int?
+  indiePlaylistCount     Int?
+  playlistReach          BigInt?
+
+  chartCountries Json?
+  airplayPlays   BigInt?
+  airplayMarkets Json?
+
+  genres        String[]
+  primaryCode2  String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([artistId, date])
+}
+
+model ArtistTrajectorySnapshot {
+  id          BigInt   @id @default(autoincrement())
+  artistId    BigInt
+  date        DateTime
+
+  // rolling windows
+  streams7d       BigInt
+  streams28d      BigInt
+  streams90d      BigInt
+  streams7dDelta  Float
+  streams28dDelta Float
+  streams90dDelta Float
+
+  listeners28d       BigInt?
+  listenersDelta28d  Float?
+  followersDelta28d  Float?
+  playlistsDelta28d  Float?
+  editorialAdds28d   Int?
+  removals28d        Int?
+
+  tiktokVelocityScore   Float?
+  chartVelocityScore    Float?
+  airplayVelocityScore  Float?
+
+  primaryGenre   String?
+  primaryCode2   String?
+  breakoutCities Json?
+
+  status         String // ABOUT_TO_BREAK | GROWING | DECLINING | STABLE
+  statusScore    Float
+  breakProbability Float?
+
+  createdAt     DateTime @default(now())
+
+  @@index([status])
+  @@index([primaryGenre])
+  @@index([primaryCode2])
+}
 }
