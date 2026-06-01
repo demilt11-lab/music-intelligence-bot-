@@ -205,4 +205,28 @@ if (require.main === module) {
       r.airplay_plays,
     ]),
   );
+      const tiktokScore = tiktokMap.get(key);
+    const airplayPlays = airplayMap.get(key);
+
+    await db.artistDailyStats.upsert({
+      where: { artistId_date: { artistId: row.artist_id, date: row.date } },
+      update: {
+        // ...
+        airplayPlays: airplayPlays ?? null,
+        // store chartCountries / airplayMarkets in later iterations if you want
+      },
+      create: {
+        artistId: row.artist_id,
+        date: row.date,
+        totalStreams: row.total_streams,
+        platformStreams: row.platform_streams,
+        playlistCount: playlist?.playlist_count ?? null,
+        editorialPlaylistCount: playlist?.editorial_playlist_count ?? null,
+        indiePlaylistCount: playlist?.indie_playlist_count ?? null,
+        playlistReach: playlist?.playlist_reach ?? null,
+        genres: genreInfo?.genres ?? [],
+        primaryCode2: genreInfo?.primary_code2 ?? null,
+        airplayPlays: airplayPlays ?? null,
+      },
+    });
 }
