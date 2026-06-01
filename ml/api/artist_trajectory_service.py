@@ -29,7 +29,22 @@ from ml.artist_trajectory_model import (
 )
 from ml.inference.service import score_batch
 from ml.inference.metrics_writer import update_from_batch_result
-from ml.config import configure_logging
+from ml.config import configure_logging, MODEL_DIR
+
+# Neural predictor — imported lazily so the service starts even if models aren't trained yet
+_neural_predict       = None
+_neural_predict_batch = None
+
+def _get_neural():
+    global _neural_predict, _neural_predict_batch
+    if _neural_predict is None:
+        try:
+            from ml.inference.neural_predictor import predict, predict_batch
+            _neural_predict       = predict
+            _neural_predict_batch = predict_batch
+        except Exception as e:
+            logger.warning("Neural predictor not available: %s", e)
+    return _neural_predict, _neural_predict_batch
 
 logger = configure_logging("ml.api")
 
@@ -240,6 +255,99 @@ def predict_tracks_batch(req: BatchTrackRequest, background_tasks: BackgroundTas
             for i in range(len(results))
         ]
     }
+
+
+# ── Neural Track Prediction (continual-learning model) ───────────────────────
+
+class DailyStatPoint(BaseModel):
+    streams:        Optional[float] = None
+    tiktok_growth:  Optional[float] = None
+    playlist_adds:  Optional[float] = None
+    radio_spins:    Optional[float] = None
+    viral_score:    Optional[float] = None
+
+
+class NeuralTrackRequest(BaseModel):
+    """Single-track neural prediction with optional temporal history and ground truth."""
+    features:       TrackFeatureInput
+    daily_history:  Optional[List[DailyStatPoint]] = Field(
+        None, description="Up to 90 days of daily stats for the temporal encoder."
+    )
+    known_targets:  Optional[Dict[str, int]] = Field(
+        None,
+        description="Ground-truth labels (triggers online learning update). "
+                    "Keys: viral (0/1), popular (0/1), trend (0-3), traj (0-3)."
+    )
+    explain:        bool = False
+
+
+class NeuralBatchRequest(BaseModel):
+    items: List[NeuralTrackRequest]
+
+
+@app.post("/v1/track/neural/predict")
+def neural_predict_single(req: NeuralTrackRequest, background_tasks: BackgroundTasks):
+    """
+    Neural prediction for a single track.
+    Returns viral/popularity probabilities, trend label, trajectory label,
+    audio similarity to known viral hits, and optional trend alerts.
+
+    If known_targets is supplied, the model performs an online gradient update
+    in the background — the model learns from this input immediately.
+    """
+    npredict, _ = _get_neural()
+    if npredict is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Neural model not loaded. Run: npm run ml:neural:train"
+        )
+
+    record = req.features.model_dump(exclude={"explain"})
+    history = [s.model_dump() for s in req.daily_history] if req.daily_history else None
+
+    if req.known_targets:
+        # Online update runs in background — doesn't block response
+        def _update():
+            npredict(record, daily_history=history, known_targets=req.known_targets)
+
+        background_tasks.add_task(_update)
+        # Still return the prediction without waiting for the update
+        result = npredict(record, daily_history=history, explain=req.explain)
+    else:
+        result = npredict(record, daily_history=history, explain=req.explain)
+
+    return result
+
+
+@app.post("/v1/track/neural/predict/batch")
+def neural_predict_batch(req: NeuralBatchRequest, background_tasks: BackgroundTasks):
+    """
+    Batch neural prediction. Accepts up to 200 tracks.
+    Tracks with known_targets trigger background online learning updates.
+    """
+    _, npredict_batch = _get_neural()
+    if npredict_batch is None:
+        raise HTTPException(status_code=503, detail="Neural model not loaded.")
+
+    if len(req.items) > 200:
+        raise HTTPException(status_code=400, detail="max batch size is 200")
+
+    records  = [item.features.model_dump(exclude={"explain"}) for item in req.items]
+    histories = [
+        [s.model_dump() for s in item.daily_history] if item.daily_history else None
+        for item in req.items
+    ]
+    targets = [item.known_targets for item in req.items]
+
+    def _batch_update():
+        npredict_batch(records, daily_histories=histories, known_targets_batch=targets)
+
+    background_tasks.add_task(_batch_update)
+
+    # Return predictions without online update (update runs async)
+    _, nb = _get_neural()
+    results = nb(records, daily_histories=histories)
+    return {"items": results}
 
 
 # ── Feedback Ingestion ────────────────────────────────────────────────────────

@@ -61,9 +61,12 @@
 
     "ml:retrain": "python -m ml.training.retrain_scheduler",
 
+    "ml:neural:train": "python -m ml.neural.trainer",
+    "ml:neural:full": "npm run ml:feedback:collect && npm run export:viral-training && npm run export:popularity-training && npm run export:trend-training && npm run ml:neural:train",
+
     "ml:service:start": "uvicorn ml.api.artist_trajectory_service:app --host 0.0.0.0 --port 8000 --reload",
 
-    "ml:all:train": "npm run ml:viral:full && npm run ml:popularity:full && npm run ml:trend:full && npm run ml:artist-trajectory:full"
+    "ml:all:train": "npm run ml:viral:full && npm run ml:popularity:full && npm run ml:trend:full && npm run ml:artist-trajectory:full && npm run ml:neural:train"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
