@@ -1450,4 +1450,28 @@ model ArtistSpotifyReleaseStats {
   @@index([artistId, snapshotDate])
   @@map("artist_spotify_release_stats")
 }
+
+model ArtistTrajectorySnapshot {
+  id          Int      @id @default(autoincrement())
+  artistId    Int
+  date        DateTime
+
+  // ... existing metrics ...
+
+  status         String
+  statusScore    Float
+  breakProbability Float?
+
+  // NEW: Spotify-specific breakout probability
+  spotifyBreakProb   Float?  // probability artist becomes popular on Spotify (model output)
+  spotifyModelName   String? // which model produced it
+  spotifyModelVersion String?
+
+  createdAt     DateTime @default(now())
+
+  @@index([artistId, date])
+  @@index([status])
+  @@index([primaryGenre])
+  @@index([primaryCode2])
+}
 }
