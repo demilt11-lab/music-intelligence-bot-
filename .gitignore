@@ -1,1 +1,45 @@
+# Claude
 .claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+ml/output/
+output/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# Environment — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
