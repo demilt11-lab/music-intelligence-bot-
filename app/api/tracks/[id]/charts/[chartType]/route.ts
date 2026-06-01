@@ -25,7 +25,7 @@ export async function GET(
   try {
     const searchParams = request.nextUrl.searchParams;
     const validatedParams = validateTrackChartParams(
-      params.trackId,
+      params.id,
       params.chartType,
       searchParams,
     );
