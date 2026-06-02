@@ -1,5 +1,4 @@
 // jobs/etl/artist_trajectory_snapshots.ts
-import "dotenv/config";
 import { db } from "@/lib/db";
 
 type TrackTrendPred = {

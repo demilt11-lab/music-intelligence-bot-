@@ -1,5 +1,4 @@
 // jobs/etl/artist_spotify_release_stats.ts
-import "dotenv/config";
 import { db } from "@/lib/db";
 
 type ArtistTrackRow = {

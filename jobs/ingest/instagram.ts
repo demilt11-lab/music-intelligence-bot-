@@ -8,7 +8,6 @@
  * - Computes instagramReels7d, instagramPlays7d, instagramGrowth7d per track
  */
 
-import 'dotenv/config';
 import { db } from '@/lib/db';
 import {
   searchHashtagId,

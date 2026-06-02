@@ -1,5 +1,4 @@
 // jobs/etl/evaluate_predictions.ts
-import "dotenv/config";
 import { db } from "@/lib/db";
 
 const WINDOW_DAYS = 30;

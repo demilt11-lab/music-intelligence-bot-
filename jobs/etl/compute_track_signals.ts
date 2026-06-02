@@ -1,5 +1,4 @@
 // jobs/etl/compute_track_signals.ts
-import "dotenv/config";
 import { db } from "@/lib/db";
 
 // ─────────────────────────────────────────────

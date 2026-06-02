@@ -1,6 +1,5 @@
 // jobs/etl/compute_artist_signals.ts
 // Feature engineering ETL: compute artist-level signals from aggregated track signals.
-import "dotenv/config";
 import { db } from "@/lib/db";
 
 // ─── Math helpers ─────────────────────────────────────────────────────────────

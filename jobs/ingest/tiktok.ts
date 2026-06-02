@@ -10,7 +10,6 @@
  * - Fetches top TikTok creators/artists → TiktokUserChartSnapshot + TiktokUserChartRow
  */
 
-import "dotenv/config";
 import { db } from "@/lib/db";
 import { queryVideos, queryCreators } from "@/lib/tiktok/client";
 import { resolveTiktokSound } from "@/lib/tiktok/resolver";
