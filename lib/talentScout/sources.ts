@@ -1,8 +1,6 @@
 // lib/talentScout/sources.ts
 
-import { PrismaClient } from '@prisma/client';
-
-const db = new PrismaClient();
+import { db } from '@/lib/db';
 
 export type TalentScoutTrack = {
   trackId: number;
