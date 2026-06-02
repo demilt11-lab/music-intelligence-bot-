@@ -11,7 +11,7 @@
  */
 
 import { db } from "@/lib/db";
-import { queryVideos, queryCreators } from "@/lib/tiktok/client";
+import { queryVideos, queryCreators, searchSounds } from "@/lib/tiktok/client";
 import { resolveTiktokSound } from "@/lib/tiktok/resolver";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -57,6 +57,7 @@ async function fetchTrendingVideos(): Promise<VideoRecord[]> {
 
   const all: VideoRecord[] = [];
   let rank = 1;
+  let researchApiWorking = false;
 
   for (const hashtag of MUSIC_HASHTAGS) {
     console.log(`[tiktok] Fetching videos for #${hashtag}…`);
@@ -82,6 +83,7 @@ async function fetchTrendingVideos(): Promise<VideoRecord[]> {
       }
 
       for (const v of resp.data?.videos ?? []) {
+        researchApiWorking = true;
         all.push({
           videoId: v.id,
           soundId: v.music_id ?? v.music?.id ?? "",
@@ -95,12 +97,49 @@ async function fetchTrendingVideos(): Promise<VideoRecord[]> {
         });
       }
     } catch (err) {
-      console.error(`[tiktok] Failed to fetch #${hashtag}:`, err);
+      console.warn(`[tiktok] Research API failed for #${hashtag}:`, (err as Error).message);
     }
 
     await sleep(200);
   }
 
+  if (all.length > 0) return all;
+
+  // ── RapidAPI fallback when Research API is unavailable ──
+  console.log("[tiktok] Research API returned 0 results — falling back to RapidAPI sound search…");
+  const MUSIC_KEYWORDS = ["pop 2024", "hip hop trending", "r&b viral", "new music", "trending song"];
+  for (const keyword of MUSIC_KEYWORDS) {
+    console.log(`[tiktok] RapidAPI: searching sounds for "${keyword}"…`);
+    try {
+      const resp = await searchSounds(keyword);
+      if (resp.code !== 0 && resp.code !== 200) {
+        console.warn(`[tiktok] RapidAPI error for "${keyword}": ${resp.msg}`);
+        continue;
+      }
+      for (const item of resp.data?.music_list ?? []) {
+        const info = item.music_info;
+        if (!info?.id) continue;
+        // Use first video ID as a proxy videoId (best we can do without video API)
+        const proxyVideoId = item.music_videos?.[0]?.video_id ?? `rapidapi-${info.id}`;
+        all.push({
+          videoId: proxyVideoId,
+          soundId: info.id,
+          soundTitle: info.title ?? "Unknown",
+          soundAuthor: info.author ?? "Unknown",
+          views: BigInt(item.music_videos?.[0]?.play_count ?? 0),
+          likes: BigInt(0),
+          shares: BigInt(0),
+          comments: BigInt(0),
+          rank: rank++,
+        });
+      }
+    } catch (err) {
+      console.warn(`[tiktok] RapidAPI failed for "${keyword}":`, (err as Error).message);
+    }
+    await sleep(300);
+  }
+
+  console.log(`[tiktok] RapidAPI fallback returned ${all.length} sound records`);
   return all;
 }
 
@@ -118,13 +157,13 @@ async function upsertVideoChartSnapshot(
     where: {
       chartName_countryCode_snapshotDate: {
         chartName: "tiktok_trending_sounds",
-        countryCode: null as unknown as string,
+        countryCode: "GLOBAL",
         snapshotDate: dateOnly,
       },
     },
     create: {
       chartName: "tiktok_trending_sounds",
-      countryCode: null,
+      countryCode: "GLOBAL",
       snapshotDate: dateOnly,
     },
     update: {},
@@ -370,13 +409,13 @@ async function ingestCreators(today: Date): Promise<void> {
     where: {
       chartName_countryCode_snapshotDate: {
         chartName: "tiktok_top_music_creators",
-        countryCode: null as unknown as string,
+        countryCode: "GLOBAL",
         snapshotDate: dateOnly,
       },
     },
     create: {
       chartName: "tiktok_top_music_creators",
-      countryCode: null,
+      countryCode: "GLOBAL",
       snapshotDate: dateOnly,
     },
     update: {},
