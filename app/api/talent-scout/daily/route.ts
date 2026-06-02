@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
         code2,
         limit,
         mode,
+        dbCounts: { tracks: trackCount, chartRows: chartRowCount, scores: scoreCount },
         description:
           'NOV8TE proprietary daily UGC trend-spotting list combining internal ML, UGC, streaming, and Luminate metrics.',
       },
