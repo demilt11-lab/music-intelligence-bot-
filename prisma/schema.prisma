@@ -1310,3 +1310,41 @@ model TrackTrendPrediction {
   @@unique([trackId, genre, code2, modelName, modelVersion])
   @@map("track_trend_predictions")
 }
+
+model PredictionOutcome {
+  id             Int       @id @default(autoincrement())
+  trackId        Int?
+  artistId       Int?
+  predictionType String    // "trend_label" | "break_probability" | "viral_score"
+  predictedValue String    // The predicted value (e.g. "VIRAL", "0.85")
+  predictedAt    DateTime
+  evaluatedAt    DateTime?
+  actualValue    String?   // What actually happened 30 days later
+  wasCorrect     Boolean?
+  modelName      String
+  modelVersion   String?
+  createdAt      DateTime  @default(now())
+
+  @@index([trackId, predictedAt])
+  @@index([artistId, predictedAt])
+  @@index([predictionType, predictedAt])
+  @@map("prediction_outcomes")
+}
+
+model ModelAccuracyReport {
+  id                 Int      @id @default(autoincrement())
+  modelName          String
+  evaluationDate     DateTime
+  windowDays         Int      // e.g. 30
+  totalPredictions   Int
+  correctPredictions Int
+  accuracy           Float    // correctPredictions / totalPredictions
+  precision          Float?
+  recall             Float?
+  f1Score            Float?
+  notes              String?
+  createdAt          DateTime @default(now())
+
+  @@unique([modelName, evaluationDate, windowDays])
+  @@map("model_accuracy_reports")
+}
