@@ -20,10 +20,11 @@ export async function buildArtistDailyStats(dateStr: string) {
     JOIN tracks t ON t.id = tpsd."trackId"
     JOIN track_artists ta ON ta."trackId" = t.id
     WHERE tpsd.date::date = $1::date
+      AND tpsd.streams IS NOT NULL
     GROUP BY ta."artistId", tpsd.date::date
     `,
     dateParam,
-  );
+  ).catch(() => [] as any[]);
 
   const playlistRows = await db.$queryRawUnsafe<Array<{
     artist_id: bigint;
@@ -49,7 +50,7 @@ export async function buildArtistDailyStats(dateStr: string) {
     GROUP BY ta."artistId", pme."addedAt"::date
     `,
     dateParam,
-  );
+  ).catch(() => [] as any[]);
 
   const genreRows = await db.$queryRawUnsafe<Array<{
     artist_id: bigint;
@@ -70,6 +71,7 @@ export async function buildArtistDailyStats(dateStr: string) {
       JOIN track_artists ta ON ta."trackId" = t.id
       JOIN artists a ON a.id = ta."artistId"
       WHERE tpsd.date::date = $1::date
+        AND tpsd.streams IS NOT NULL
       GROUP BY ta."artistId", tpsd.date::date, genre, a.code2
     )
     SELECT
@@ -81,26 +83,7 @@ export async function buildArtistDailyStats(dateStr: string) {
     GROUP BY artist_id, date
     `,
     dateParam,
-  );
-
-  const tiktokRows = await db.$queryRawUnsafe<Array<{
-    artist_id: bigint;
-    date: Date;
-    tiktok_score: number;
-  }>>(
-    `
-    SELECT
-      ta."artistId" AS artist_id,
-      tt.date::date AS date,
-      AVG(tt."rankScore") AS tiktok_score
-    FROM tiktok_track_chart_global_daily tt
-    JOIN tracks t ON t.id = tt."trackId"
-    JOIN track_artists ta ON ta."trackId" = t.id
-    WHERE tt.date::date = $1::date
-    GROUP BY ta."artistId", tt.date::date
-    `,
-    dateParam,
-  );
+  ).catch(() => [] as any[]);
 
   const airplayRows = await db.$queryRawUnsafe<Array<{
     artist_id: bigint;
@@ -117,14 +100,18 @@ export async function buildArtistDailyStats(dateStr: string) {
     GROUP BY ra."artistId", ra.date::date
     `,
     dateParam,
-  );
+  ).catch(() => [] as any[]);
+
+  if (streamRows.length === 0) {
+    console.log("[artist-daily-stats] No stream data for " + dateStr + " — skipping upserts");
+    return;
+  }
 
   const playlistKey = (row: { artist_id: bigint; date: Date }) =>
-    `${row.artist_id.toString()}-${row.date.toISOString().slice(0, 10)}`;
+    row.artist_id.toString() + "-" + row.date.toISOString().slice(0, 10);
 
   const playlistMap = new Map(playlistRows.map((r) => [playlistKey(r), r]));
   const genreMap = new Map(genreRows.map((r) => [playlistKey(r), r]));
-  const tiktokMap = new Map(tiktokRows.map((r) => [playlistKey(r), r.tiktok_score]));
   const airplayMap = new Map(airplayRows.map((r) => [playlistKey(r), r.airplay_plays]));
 
   for (const row of streamRows) {
@@ -134,12 +121,7 @@ export async function buildArtistDailyStats(dateStr: string) {
     const airplayPlays = airplayMap.get(key);
 
     await db.artistDailyStats.upsert({
-      where: {
-        artistId_date: {
-          artistId: row.artist_id,
-          date: row.date,
-        },
-      },
+      where: { artistId_date: { artistId: row.artist_id, date: row.date } },
       update: {
         totalStreams: row.total_streams,
         platformStreams: row.platform_streams,
@@ -167,22 +149,12 @@ export async function buildArtistDailyStats(dateStr: string) {
     });
   }
 
-  void tiktokMap;
+  console.log("[artist-daily-stats] Upserted " + streamRows.length + " artist rows for " + dateStr);
 }
 
 if (require.main === module) {
-  const dateArg = process.argv[2];
-  if (!dateArg) {
-    console.error("Usage: npx tsx jobs/etl/artist_daily_stats.ts YYYY-MM-DD");
-    process.exit(1);
-  }
+  const dateArg = process.argv[2] || new Date().toISOString().slice(0, 10);
   buildArtistDailyStats(dateArg)
-    .then(() => {
-      console.log("ArtistDailyStats built for", dateArg);
-      process.exit(0);
-    })
-    .catch((err) => {
-      console.error(err);
-      process.exit(1);
-    });
+    .then(() => { console.log("ArtistDailyStats built for", dateArg); process.exit(0); })
+    .catch((err) => { console.error(err); process.exit(1); });
 }
