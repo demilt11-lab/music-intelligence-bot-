@@ -12,11 +12,13 @@ export async function GET(req: NextRequest) {
     const mode = (searchParams.get('mode') ?? 'ugc_early') as 'ugc_early' | 'general';
 
     let tracks = await ScoutSources.fetchTopTiktokBreakoutTracks({ date, code2, limit });
+    console.log(`[talent-scout-daily] fetchTopTiktokBreakoutTracks returned ${tracks.length} tracks for code2=${code2}`);
     tracks = await ScoutSources.hydrateInternalStreaming(tracks);
     tracks = await ScoutSources.hydrateLuminateMetrics(tracks);
     tracks = await ScoutSources.hydrateMlSignals(tracks, date);
 
     const ranked = ScoutScore.rankTalentTracks(tracks, mode);
+    console.log(`[talent-scout-daily] ranked ${ranked.length} tracks`);
 
     return NextResponse.json({
       obj: ranked,
