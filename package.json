@@ -26,8 +26,6 @@
     "ingest:tiktok": "tsx jobs/ingest/tiktok.ts",
     "ingest:youtube": "tsx jobs/ingest/youtube.ts",
     "ingest:radiostats": "tsx jobs/ingest/radiostats.ts",
-    "ingest:tiktok": "tsx jobs/ingest/tiktok.ts",
-    "ingest:youtube": "tsx jobs/ingest/youtube.ts",
     "export:artist-training": "tsx scripts/export_artist_trajectory_training.ts",
     "export:artist-trajectory-features": "tsx scripts/export_artist_trajectory_features.ts",
     "export:track-trend-training": "tsx scripts/export_track_trend_training.ts",
@@ -58,7 +56,9 @@
     "ml:neural:train": "python -m ml.neural.trainer",
     "ml:neural:full": "npm run ml:feedback:collect && npm run export:viral-training && npm run export:popularity-training && npm run export:trend-training && npm run ml:neural:train",
     "ml:service:start": "uvicorn ml.api.artist_trajectory_service:app --host 0.0.0.0 --port 8000 --reload",
-    "ml:all:train": "npm run ml:viral:full && npm run ml:popularity:full && npm run ml:trend:full && npm run ml:artist-trajectory:full && npm run ml:neural:train"
+    "ml:all:train": "npm run ml:viral:full && npm run ml:popularity:full && npm run ml:trend:full && npm run ml:artist-trajectory:full && npm run ml:neural:train",
+    "ingest:googletrends": "npx tsx jobs/ingest/googletrends.ts",
+    "ingest:shazam": "npx tsx jobs/ingest/shazam.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
@@ -82,6 +82,7 @@
     "tailwindcss": "^3.4.19",
     "tsx": "^4.19.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5"
+    "typescript": "^5",
+    "google-trends-api": "^4.9.2"
   }
 }
