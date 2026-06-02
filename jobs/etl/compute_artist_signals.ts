@@ -355,7 +355,7 @@ export async function computeArtistSignals(dateStr?: string): Promise<void> {
 }
 
 if (require.main === module) {
-  const dateArg = process.argv[2];
+  const dateArg = process.argv[2] || new Date().toISOString().slice(0, 10);
   computeArtistSignals(dateArg)
     .then(() => process.exit(0))
     .catch((err) => {

@@ -828,13 +828,7 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
 // ─────────────────────────────────────────────
 
 if (require.main === module) {
-  const dateArg = process.argv[2];
-  if (!dateArg) {
-    console.error(
-      "Usage: ts-node jobs/etl/compute_track_signals.ts YYYY-MM-DD",
-    );
-    process.exit(1);
-  }
+  const dateArg = process.argv[2] || new Date().toISOString().slice(0, 10);
   computeTrackSignals(dateArg)
     .then(() => {
       console.log("TrackSignals computed for", dateArg);
