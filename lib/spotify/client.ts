@@ -291,6 +291,9 @@ export async function getPopularTracks(_market: string, limit = 50): Promise<Spo
     'genre:trap',
   ];
 
+  // Verify credentials work before looping — throws SpotifyError if bad
+  await getAccessToken();
+
   const tracks: SpotifyTrack[] = [];
   const seen = new Set<string>();
 
@@ -305,8 +308,8 @@ export async function getPopularTracks(_market: string, limit = 50): Promise<Spo
         }
       }
       await delay(120);
-    } catch {
-      // skip failed query
+    } catch (err) {
+      console.warn(`[spotify] search failed for "${q}":`, (err as Error).message);
     }
   }
 
