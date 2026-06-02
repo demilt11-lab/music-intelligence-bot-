@@ -42,7 +42,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   limit?: number;
 }): Promise<TalentScoutTrack[]> {
   const limit = opts.limit ?? 50;
-  const code2 = opts.code2 ?? ‘GLOBAL’;
+  const code2 = opts.code2 ?? 'GLOBAL';
 
   // Find the most recent TikTok typed chart snapshot on or before the requested date
   const snapshotWhere = opts.date
@@ -51,14 +51,14 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
 
   const snapshot = await db.tiktokTypedTrackChartSnapshot.findFirst({
     where: snapshotWhere,
-    orderBy: { snapshotDate: ‘desc’ },
+    orderBy: { snapshotDate: 'desc' },
   });
 
   if (!snapshot) return [];
 
   const rows = await db.tiktokTypedTrackChartRow.findMany({
     where: { snapshotId: snapshot.id, trackId: { not: null } },
-    orderBy: { rank: ‘asc’ },
+    orderBy: { rank: 'asc' },
     take: limit,
   });
 
@@ -69,9 +69,9 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   const ugcRows = await db.ugcTrackMetrics.findMany({
     where: {
       trackId: { in: trackIds },
-      code2: code2 === ‘GLOBAL’ ? undefined : code2,
+      code2: code2 === 'GLOBAL' ? undefined : code2,
     },
-    orderBy: { date: ‘desc’ },
+    orderBy: { date: 'desc' },
   });
   const ugcByTrack = new Map<number, typeof ugcRows[number]>();
   for (const r of ugcRows) {
@@ -104,9 +104,9 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     const ugc = ugcByTrack.get(tid);
     return {
       trackId: tid,
-      name: info?.name ?? ‘Unknown’,
+      name: info?.name ?? 'Unknown',
       artists: info?.artists ?? [],
-      code2: code2 === ‘GLOBAL’ ? null : code2,
+      code2: code2 === 'GLOBAL' ? null : code2,
       tiktokScore: computeTiktokScore({ rank: row.rank, views: row.views, velocity: ugc?.views7dGrowth ?? null }),
       tiktokViews: row.views ?? BigInt(0),
       tiktokLikes: BigInt(0),
