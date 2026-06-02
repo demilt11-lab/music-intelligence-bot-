@@ -30,4 +30,4 @@ jobs:
           META_APP_ID: ${{ secrets.META_APP_ID }}
           META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
-        run: npx ts-node --project tsconfig.json jobs/ingest/instagram.ts
+        run: npx tsx jobs/ingest/instagram.ts
