@@ -24,10 +24,10 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-        run: npx ts-node jobs/etl/compute_track_signals.ts
+        run: npx tsx jobs/etl/compute_track_signals.ts
 
       - name: Compute artist signals
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-        run: npx ts-node jobs/etl/compute_artist_signals.ts
+        run: npx tsx jobs/etl/compute_artist_signals.ts
