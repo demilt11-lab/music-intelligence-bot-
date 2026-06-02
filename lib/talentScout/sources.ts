@@ -42,29 +42,48 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   limit?: number;
 }): Promise<TalentScoutTrack[]> {
   const limit = opts.limit ?? 50;
-  const code2 = opts.code2 ?? 'GLOBAL';
+  const code2 = opts.code2 ?? ‘GLOBAL’;
 
-  // Use your existing TikTok breakout chart tables
-  const rows = await (db as any).tiktok_track_chart_breakout.findMany({
-    where: {
-      code2,
-      source_date: opts.date ? new Date(opts.date) : undefined,
-    },
-    orderBy: { rank: 'asc' },
+  // Find the most recent TikTok typed chart snapshot on or before the requested date
+  const snapshotWhere = opts.date
+    ? { snapshotDate: { lte: new Date(opts.date) } }
+    : {};
+
+  const snapshot = await db.tiktokTypedTrackChartSnapshot.findFirst({
+    where: snapshotWhere,
+    orderBy: { snapshotDate: ‘desc’ },
+  });
+
+  if (!snapshot) return [];
+
+  const rows = await db.tiktokTypedTrackChartRow.findMany({
+    where: { snapshotId: snapshot.id, trackId: { not: null } },
+    orderBy: { rank: ‘asc’ },
     take: limit,
   });
 
-  const trackIds = (rows as any[]).map((r: any) => r.linked_track_id).filter(Boolean) as number[];
+  const trackIds = rows.map((r) => r.trackId!).filter(Boolean) as number[];
   if (!trackIds.length) return [];
+
+  // Load UGC metrics for velocity data
+  const ugcRows = await db.ugcTrackMetrics.findMany({
+    where: {
+      trackId: { in: trackIds },
+      code2: code2 === ‘GLOBAL’ ? undefined : code2,
+    },
+    orderBy: { date: ‘desc’ },
+  });
+  const ugcByTrack = new Map<number, typeof ugcRows[number]>();
+  for (const r of ugcRows) {
+    if (!ugcByTrack.has(r.trackId)) ugcByTrack.set(r.trackId, r);
+  }
 
   // Join to canonical tracks and basic metadata
   const tracks = await db.track.findMany({
     where: { id: { in: trackIds } },
     include: {
       trackArtists: {
-        include: {
-          artist: true,
-        },
+        include: { artist: true },
       },
     },
   });
@@ -75,23 +94,23 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
       {
         name: t.title,
         artists: t.trackArtists.map((ta) => ta.artist.name),
-        code2: null // t.code2 ?? null,
       },
     ]),
   );
 
-  // For now we leave Spotify / Luminate fields null; they’ll be filled later
-  return (rows as any[]).map((row: any) => {
-    const info = trackById.get(row.linked_track_id ?? 0);
+  return rows.map((row) => {
+    const tid = row.trackId!;
+    const info = trackById.get(tid);
+    const ugc = ugcByTrack.get(tid);
     return {
-      trackId: row.linked_track_id ?? 0,
-      name: info?.name ?? 'Unknown',
+      trackId: tid,
+      name: info?.name ?? ‘Unknown’,
       artists: info?.artists ?? [],
-      code2: info?.code2 ?? null,
-      tiktokScore: computeTiktokScore(row),
-      tiktokViews: row.views,
-      tiktokLikes: row.likes,
-      tiktokVelocity: row.velocity ?? 0,
+      code2: code2 === ‘GLOBAL’ ? null : code2,
+      tiktokScore: computeTiktokScore({ rank: row.rank, views: row.views, velocity: ugc?.views7dGrowth ?? null }),
+      tiktokViews: row.views ?? BigInt(0),
+      tiktokLikes: BigInt(0),
+      tiktokVelocity: ugc?.views7dGrowth ?? 0,
       spotifyStreamsLatest: null,
       spotifyPopularity: null,
       luminateStreamsLatest: null,
@@ -109,8 +128,8 @@ function computeTiktokScore(row: {
   views: bigint | string | null;
 }) {
   const rankComponent = row.rank ? 1 / row.rank : 0;
-  const velocityComponent = row.velocity ?? 0;
-  const viewsComponent = Number(row.views ?? 0) > 0 ? Math.log10(Number(row.views)) : 0;
+  const velocityComponent = Math.min(row.velocity ?? 0, 5) / 5;
+  const viewsComponent = Number(row.views ?? 0) > 0 ? Math.log10(Number(row.views)) / 10 : 0;
   return rankComponent * 0.5 + velocityComponent * 0.3 + viewsComponent * 0.2;
 }
 
