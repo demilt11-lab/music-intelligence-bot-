@@ -10,8 +10,8 @@ export type TalentScoutTrack = {
   code2: string | null;
 
   tiktokScore: number;
-  tiktokViews: bigint | string;
-  tiktokLikes: bigint | string;
+  tiktokViews: string;
+  tiktokLikes: string;
   tiktokVelocity: number;
 
   spotifyStreamsLatest: string | null;
@@ -67,8 +67,8 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
           artists: info?.artists ?? [],
           code2: code2 === 'GLOBAL' ? null : code2,
           tiktokScore: computeTiktokScore({ rank: i + 1, views: ugc.views7d, velocity: ugc.views7dGrowth }),
-          tiktokViews: ugc.views7d,
-          tiktokLikes: BigInt(0),
+          tiktokViews: String(ugc.views7d),
+          tiktokLikes: '0',
           tiktokVelocity: ugc.views7dGrowth,
           spotifyStreamsLatest: null,
           spotifyPopularity: null,
@@ -111,8 +111,8 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
           artists: info?.artists ?? [],
           code2: latestScore.code2 === 'GLOBAL' ? null : latestScore.code2,
           tiktokScore: s.viralScore * Math.max(0, 1 - i / scoreRows.length),
-          tiktokViews: BigInt(0),
-          tiktokLikes: BigInt(0),
+          tiktokViews: '0',
+          tiktokLikes: '0',
           tiktokVelocity: 0,
           spotifyStreamsLatest: null,
           spotifyPopularity: null,
@@ -211,7 +211,7 @@ async function loadTrackMeta(trackIds: number[]) {
 function computeTiktokScore(row: {
   rank: number | null;
   velocity: number | null;
-  views: bigint | string | null;
+  views: string | null;
 }) {
   const rankComponent = row.rank ? 1 / row.rank : 0;
   const velocityComponent = Math.min(row.velocity ?? 0, 5) / 5;
@@ -228,7 +228,8 @@ export async function hydrateInternalStreaming(
 export async function hydrateLuminateMetrics(
   tracks: TalentScoutTrack[],
 ): Promise<TalentScoutTrack[]> {
-  const trackIds = tracks.map((t) => t.trackId);
+  const trackIds = tracks.map((t) => t.trackId).filter((id) => id > 0);
+  if (!trackIds.length) return tracks;
 
   const luminateStreams = await db.luminateStream.groupBy({
     by: ['entityId'],
@@ -276,7 +277,8 @@ export async function hydrateMlSignals(
   date?: string,
 ): Promise<TalentScoutTrack[]> {
   if (!tracks.length) return tracks;
-  const trackIds = tracks.map((t) => t.trackId);
+  const trackIds = tracks.map((t) => t.trackId).filter((id) => id > 0);
+  if (!trackIds.length) return tracks;
 
   const referenceDate = date ?? new Date().toISOString().slice(0, 10);
   const refDateStart = new Date(referenceDate);
