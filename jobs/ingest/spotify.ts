@@ -10,7 +10,6 @@ import {
   getTrackAudioFeatures,
   getTrackDetails,
   getPlaylistTracks,
-  getNewReleases,
   getPopularTracks,
   searchTracks,
   delay,
@@ -164,32 +163,7 @@ async function ingestTopCharts(): Promise<void> {
   const snapshotDate = new Date();
   snapshotDate.setUTCHours(0, 0, 0, 0);
 
-  // Use markets that work with client credentials (no editorial playlist access needed)
-  const markets = ['US', 'GB', 'AU', 'CA', 'BR', 'DE', 'FR', 'MX'];
-
-  // Seed DB with new releases (always works with client credentials)
-  console.log('  Fetching new releases...');
-  try {
-    const albums = await getNewReleases('US', 50);
-    console.log(`  Got ${albums.length} new release albums`);
-    for (const album of albums.slice(0, 20)) {
-      try {
-        // Search for the most popular track from each new release
-        const tracks = await searchTracks(`album:"${album.name}" artist:"${album.artists[0]?.name}"`, 3);
-        for (const track of tracks) {
-          const { created } = await resolveSpotifyTrack(track);
-          if (created) stats.tracksCreated++;
-          stats.chartTracksProcessed++;
-        }
-        await delay(150);
-      } catch {
-        // ignore per-album failures
-      }
-    }
-  } catch (err) {
-    console.warn('  [WARN] New releases fetch failed:', (err as Error).message);
-    stats.errors++;
-  }
+  const markets = ['global', 'US', 'GB', 'AU', 'CA', 'BR', 'DE', 'FR', 'MX'];
 
   // Seed with popular tracks per market via search
   for (const market of markets) {
