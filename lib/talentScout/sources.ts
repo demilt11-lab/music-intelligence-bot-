@@ -9,7 +9,7 @@ export type TalentScoutTrack = {
   code2: string | null;
 
   // TikTok
-  tiktokScore: number; // e.g. normalized rank / velocity
+  tiktokScore: number;
   tiktokViews: bigint | string;
   tiktokLikes: bigint | string;
   tiktokVelocity: number;
@@ -20,7 +20,7 @@ export type TalentScoutTrack = {
 
   // Luminate
   luminateStreamsLatest: string | null;
-  luminateAudienceLatest: string | null; // from airplay
+  luminateAudienceLatest: string | null;
   luminateSpinsLatest: string | null;
 
   // Proprietary
@@ -28,24 +28,17 @@ export type TalentScoutTrack = {
   rightsComplexityScore: number | null;
 };
 
-type DateRange = {
-  since: string;
-  until: string;
-};
-
-// Pull top TikTok breakout tracks for a given date/country (or GLOBAL)
+// Pull top breakout tracks — prefers UGC data, falls back to talent scout scores from ETL
 export async function fetchTopTiktokBreakoutTracks(opts: {
   date?: string;
-  code2?: string; // ISO code2 or GLOBAL
+  code2?: string;
   limit?: number;
 }): Promise<TalentScoutTrack[]> {
   const limit = opts.limit ?? 50;
   const code2 = opts.code2 ?? 'GLOBAL';
-
-  // Find the most recent UGC date on or before requested date
   const dateFilter = opts.date ? { lte: new Date(opts.date) } : undefined;
 
-  // Resolve which code2 to query — fall back to GLOBAL if no country-specific data
+  // ── Try UGC metrics first (populated when TikTok API is configured) ──
   const resolvedCode2 = code2 === 'GLOBAL' ? 'GLOBAL' : (
     await db.ugcTrackMetrics.findFirst({
       where: { code2, ...(dateFilter ? { date: dateFilter } : {}) },
@@ -53,73 +46,99 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     })
   )?.code2 ?? 'GLOBAL';
 
-  // Get latest date available for that code2
-  const latest = await db.ugcTrackMetrics.findFirst({
-    where: {
-      code2: resolvedCode2,
-      ...(dateFilter ? { date: dateFilter } : {}),
-    },
+  const latestUgc = await db.ugcTrackMetrics.findFirst({
+    where: { code2: resolvedCode2, ...(dateFilter ? { date: dateFilter } : {}) },
     orderBy: { date: 'desc' },
     select: { date: true },
   });
 
-  if (!latest) return [];
+  if (latestUgc) {
+    const ugcRows = await db.ugcTrackMetrics.findMany({
+      where: { date: latestUgc.date, code2: resolvedCode2, views7d: { gt: 0 } },
+      orderBy: { views7d: 'desc' },
+      take: limit,
+    });
+    if (ugcRows.length) {
+      const trackById = await loadTrackMeta(ugcRows.map((r) => r.trackId));
+      return ugcRows.map((ugc, i) => {
+        const info = trackById.get(ugc.trackId);
+        return {
+          trackId: ugc.trackId,
+          name: info?.name ?? 'Unknown',
+          artists: info?.artists ?? [],
+          code2: code2 === 'GLOBAL' ? null : code2,
+          tiktokScore: computeTiktokScore({ rank: i + 1, views: ugc.views7d, velocity: ugc.views7dGrowth }),
+          tiktokViews: ugc.views7d,
+          tiktokLikes: BigInt(0),
+          tiktokVelocity: ugc.views7dGrowth,
+          spotifyStreamsLatest: null,
+          spotifyPopularity: null,
+          luminateStreamsLatest: null,
+          luminateAudienceLatest: null,
+          luminateSpinsLatest: null,
+          viralScore: null,
+          rightsComplexityScore: null,
+        };
+      });
+    }
+  }
 
-  // Fetch top tracks by views7d for that date
-  const ugcRows = await db.ugcTrackMetrics.findMany({
+  // ── Fallback: use talent_scout_scores populated by the ETL ──
+  const scoreCode2 = code2 === 'GLOBAL' ? 'GLOBAL' : code2;
+
+  // Try requested code2 first, then GLOBAL
+  const latestScore = await db.talentScoutScore.findFirst({
     where: {
-      date: latest.date,
-      code2: resolvedCode2,
-      views7d: { gt: 0 },
+      code2: { in: [scoreCode2, 'GLOBAL'] },
+      ...(dateFilter ? { date: dateFilter } : {}),
     },
-    orderBy: { views7d: 'desc' },
+    orderBy: { date: 'desc' },
+    select: { date: true, code2: true },
+  });
+
+  if (!latestScore) return [];
+
+  const scoreRows = await db.talentScoutScore.findMany({
+    where: { date: latestScore.date, code2: latestScore.code2 },
+    orderBy: { viralScore: 'desc' },
     take: limit,
   });
 
-  if (!ugcRows.length) return [];
+  if (!scoreRows.length) return [];
 
-  const trackIds = ugcRows.map((r) => r.trackId);
+  const trackById = await loadTrackMeta(scoreRows.map((r) => r.trackId));
 
-  // Join to canonical tracks and basic metadata
-  const tracks = await db.track.findMany({
-    where: { id: { in: trackIds } },
-    include: {
-      trackArtists: {
-        include: { artist: true },
-      },
-    },
-  });
-
-  const trackById = new Map(
-    tracks.map((t) => [
-      t.id,
-      {
-        name: t.title,
-        artists: t.trackArtists.map((ta) => ta.artist.name),
-      },
-    ]),
-  );
-
-  return ugcRows.map((ugc, i) => {
-    const info = trackById.get(ugc.trackId);
+  return scoreRows.map((s, i) => {
+    const info = trackById.get(s.trackId);
     return {
-      trackId: ugc.trackId,
+      trackId: s.trackId,
       name: info?.name ?? 'Unknown',
       artists: info?.artists ?? [],
-      code2: code2 === 'GLOBAL' ? null : code2,
-      tiktokScore: computeTiktokScore({ rank: i + 1, views: ugc.views7d, velocity: ugc.views7dGrowth }),
-      tiktokViews: ugc.views7d,
+      code2: latestScore.code2 === 'GLOBAL' ? null : latestScore.code2,
+      tiktokScore: s.viralScore * Math.max(0, 1 - i / scoreRows.length),
+      tiktokViews: BigInt(0),
       tiktokLikes: BigInt(0),
-      tiktokVelocity: ugc.views7dGrowth,
+      tiktokVelocity: 0,
       spotifyStreamsLatest: null,
       spotifyPopularity: null,
       luminateStreamsLatest: null,
       luminateAudienceLatest: null,
       luminateSpinsLatest: null,
-      viralScore: null,
-      rightsComplexityScore: null,
+      viralScore: s.viralScore,
+      rightsComplexityScore: s.rightsComplexityScore,
     };
   });
+}
+
+async function loadTrackMeta(trackIds: number[]) {
+  const tracks = await db.track.findMany({
+    where: { id: { in: trackIds } },
+    include: { trackArtists: { include: { artist: true } } },
+  });
+  return new Map(tracks.map((t) => [t.id, {
+    name: t.title,
+    artists: t.trackArtists.map((ta) => ta.artist.name),
+  }]));
 }
 
 function computeTiktokScore(row: {
@@ -137,10 +156,7 @@ function computeTiktokScore(row: {
 export async function hydrateInternalStreaming(
   tracks: TalentScoutTrack[],
 ): Promise<TalentScoutTrack[]> {
-  const trackIds = tracks.map((t) => t.trackId);
-
-  // No track_platform_stats_latest table; return tracks unchanged
-  void trackIds;
+  void tracks.map((t) => t.trackId);
   return tracks;
 }
 
@@ -152,10 +168,7 @@ export async function hydrateLuminateMetrics(
 
   const luminateStreams = await db.luminateStream.groupBy({
     by: ['entityId'],
-    where: {
-      entityType: 'track',
-      entityId: { in: trackIds },
-    },
+    where: { entityType: 'track', entityId: { in: trackIds } },
     _max: { date: true },
   });
 
@@ -163,10 +176,7 @@ export async function hydrateLuminateMetrics(
   luminateStreams.forEach((g) => latestByTrack.set(g.entityId, g._max.date!));
 
   const streamRows = await db.luminateStream.findMany({
-    where: {
-      entityType: 'track',
-      entityId: { in: trackIds },
-    },
+    where: { entityType: 'track', entityId: { in: trackIds } },
   });
 
   const latestStreamByTrack = new Map<number, string>();
@@ -178,23 +188,14 @@ export async function hydrateLuminateMetrics(
   }
 
   const airplayRows = await db.luminateAirplay.findMany({
-    where: {
-      entityType: 'track',
-      entityId: { in: trackIds },
-    },
+    where: { entityType: 'track', entityId: { in: trackIds } },
   });
 
-  const latestAirplayByTrack = new Map<
-    number,
-    { audience: string | null; spins: string | null }
-  >();
+  const latestAirplayByTrack = new Map<number, { audience: string | null; spins: string | null }>();
   for (const r of airplayRows) {
     const prev = latestAirplayByTrack.get(r.entityId);
     if (!prev || r.date > (prev as any).date) {
-      latestAirplayByTrack.set(r.entityId, {
-        audience: r.audience,
-        spins: r.spins,
-      });
+      latestAirplayByTrack.set(r.entityId, { audience: r.audience, spins: r.spins });
     }
   }
 
@@ -217,10 +218,7 @@ export async function hydrateMlSignals(
   if (!tracks.length) return tracks;
   const trackIds = tracks.map((t) => t.trackId);
 
-  // Use provided date, or fallback to today (UTC)
-  const referenceDate =
-    date ??
-    new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const referenceDate = date ?? new Date().toISOString().slice(0, 10);
   const refDateStart = new Date(referenceDate);
   const refDateEnd = new Date(referenceDate);
   refDateEnd.setUTCDate(refDateEnd.getUTCDate() + 1);
@@ -228,10 +226,7 @@ export async function hydrateMlSignals(
   const mlRows = await db.talentScoutScore.findMany({
     where: {
       trackId: { in: trackIds },
-      date: {
-        gte: refDateStart,
-        lt: refDateEnd,
-      },
+      date: { gte: refDateStart, lt: refDateEnd },
     },
   });
 
