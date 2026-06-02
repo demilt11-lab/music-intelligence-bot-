@@ -45,11 +45,19 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   // Find the most recent UGC date on or before requested date
   const dateFilter = opts.date ? { lte: new Date(opts.date) } : undefined;
 
-  // Get latest date available
+  // Resolve which code2 to query — fall back to GLOBAL if no country-specific data
+  const resolvedCode2 = code2 === 'GLOBAL' ? 'GLOBAL' : (
+    await db.ugcTrackMetrics.findFirst({
+      where: { code2, ...(dateFilter ? { date: dateFilter } : {}) },
+      select: { code2: true },
+    })
+  )?.code2 ?? 'GLOBAL';
+
+  // Get latest date available for that code2
   const latest = await db.ugcTrackMetrics.findFirst({
     where: {
+      code2: resolvedCode2,
       ...(dateFilter ? { date: dateFilter } : {}),
-      ...(code2 !== 'GLOBAL' ? { code2 } : {}),
     },
     orderBy: { date: 'desc' },
     select: { date: true },
@@ -61,7 +69,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   const ugcRows = await db.ugcTrackMetrics.findMany({
     where: {
       date: latest.date,
-      ...(code2 !== 'GLOBAL' ? { code2 } : {}),
+      code2: resolvedCode2,
       views7d: { gt: 0 },
     },
     orderBy: { views7d: 'desc' },
