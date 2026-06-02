@@ -34,11 +34,11 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Export track trend training data
-        run: npx ts-node scripts/export_track_trend_training.ts
+        run: npx tsx scripts/export_track_trend_training.ts
         continue-on-error: false
 
       - name: Export artist trajectory features
-        run: npx ts-node scripts/export_artist_trajectory_features.ts
+        run: npx tsx scripts/export_artist_trajectory_features.ts
         continue-on-error: false
 
       - name: Train track trend model
@@ -50,7 +50,7 @@ jobs:
         continue-on-error: false
 
       - name: Import track trend predictions
-        run: npx ts-node scripts/import_track_trend_predictions.ts
+        run: npx tsx scripts/import_track_trend_predictions.ts
         continue-on-error: false
 
       - name: Train artist trajectory model
@@ -62,7 +62,7 @@ jobs:
         continue-on-error: false
 
       - name: Import artist trajectory predictions
-        run: npx ts-node scripts/import_artist_trajectory_predictions.ts
+        run: npx tsx scripts/import_artist_trajectory_predictions.ts
         continue-on-error: false
 
       - name: Upload model artifacts

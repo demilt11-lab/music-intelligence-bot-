@@ -1,12 +1,12 @@
-name: Ingest TikTok
+name: Ingest Instagram Reels
 
 on:
   schedule:
-    - cron: "0 */12 * * *" # every 12 hours
+    - cron: "0 */10 * * *" # every 10 hours
   workflow_dispatch:
 
 jobs:
-  ingest-tiktok:
+  ingest-instagram:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,11 +20,11 @@ jobs:
       - name: Install deps
         run: npm install
 
-      - name: Run TikTok ingestion
+      - name: Run Instagram Reels ingestion
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
-          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
-        run: npx tsx jobs/ingest/tiktok.ts
+          META_APP_ID: ${{ secrets.META_APP_ID }}
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+        run: npx ts-node --project tsconfig.json jobs/ingest/instagram.ts
