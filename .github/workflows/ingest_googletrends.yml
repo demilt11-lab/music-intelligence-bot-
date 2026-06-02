@@ -1,12 +1,12 @@
-name: Ingest Spotify
+name: Ingest Google Trends
 
 on:
   schedule:
-    - cron: "0 */6 * * *" # every 6 hours
+    - cron: "0 7 * * *" # daily at 7am UTC — before ETL compute signals at 8am
   workflow_dispatch:
 
 jobs:
-  ingest-spotify:
+  ingest-googletrends:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -25,10 +25,8 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
 
-      - name: Run Spotify ingestion
+      - name: Run Google Trends ingestion
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
-          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
-        run: npx tsx jobs/ingest/spotify.ts
+        run: npx tsx jobs/ingest/googletrends.ts

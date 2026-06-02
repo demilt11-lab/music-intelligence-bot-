@@ -1,34 +1,28 @@
-name: Ingest Spotify
+name: anomaly-detection
 
 on:
   schedule:
-    - cron: "0 */6 * * *" # every 6 hours
+    - cron: "0 */2 * * *"
   workflow_dispatch:
 
 jobs:
-  ingest-spotify:
+  detect:
+    name: Detect anomalies
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Use Node 20
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: "20"
-
-      - name: Install deps
+      - name: Install dependencies
         run: npm install
       - name: Run database migrations
         run: npx prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-
-      - name: Run Spotify ingestion
+      - name: Run anomaly detection
+        run: npx tsx jobs/etl/anomaly_detection.ts
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
-          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
-        run: npx tsx jobs/ingest/spotify.ts

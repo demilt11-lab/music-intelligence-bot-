@@ -1,0 +1,30 @@
+name: Evaluate Predictions
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Monday 9:00 UTC — weekly
+  workflow_dispatch:
+
+jobs:
+  evaluate-predictions:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Log and evaluate predictions
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          npx tsx jobs/etl/log_predictions.ts && \
+          npx tsx jobs/etl/evaluate_predictions.ts

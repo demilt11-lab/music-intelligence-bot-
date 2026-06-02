@@ -1,498 +1,846 @@
 // jobs/etl/compute_track_signals.ts
-// Feature engineering ETL: compute viral scores, trend labels, and derived signals
-// for all tracks from ingested raw data.
 import "dotenv/config";
 import { db } from "@/lib/db";
 
-// ─── Math helpers ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────
 
-function safeNum(v: bigint | number | null | undefined): number {
-  if (v == null) return 0;
-  if (typeof v === "bigint") return Number(v);
-  return isNaN(v) ? 0 : v;
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
-function log1p(x: number): number {
-  return Math.log1p(Math.max(0, x));
+function normalize(value: number, max: number): number {
+  if (max <= 0) return 0;
+  return clamp(value / max, 0, 1);
 }
 
-function clamp(x: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, x));
-}
+// ─────────────────────────────────────────────
+// Signal 1: Acceleration / Curve Shape
+// ─────────────────────────────────────────────
 
-function normalize(x: number, maxVal: number): number {
-  if (maxVal <= 0) return 0;
-  return log1p(x) / log1p(maxVal);
-}
+type CurveShape = "HOCKEY_STICK" | "STEADY_CLIMB" | "PLATEAU" | "DECLINING";
 
-// ─── Signal 1: Chart velocity ─────────────────────────────────────────────────
+type AccelerationResult = {
+  accelerationScore: number; // clamped [-2, 2]
+  currentGrowth: number;
+  priorGrowth: number;
+  curveShape: CurveShape;
+  curveMultiplier: number;
+};
 
-interface ChartVelocityResult {
-  trackId: number;
-  chartVelocityScore: number;
-}
-
-async function computeChartVelocity(today: Date): Promise<Map<number, number>> {
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(today.getDate() - 7);
-
-  // Get chart rows for the past 7 days for all tracks that have chart data.
-  // We compare rank to previousRank for each row to get per-snapshot improvement.
-  const rows = await db.$queryRaw<
-    { track_id: number; rank: number; previous_rank: number | null; snapshot_date: Date }[]
-  >`
-    SELECT
-      cr.track_id,
-      cr.rank,
-      cr.previous_rank,
-      cs.snapshot_date
-    FROM chart_rows cr
-    JOIN chart_snapshots cs ON cs.id = cr.snapshot_id
-    WHERE cs.snapshot_date BETWEEN ${sevenDaysAgo} AND ${today}
-      AND cs.platform = 'spotify'
-  `;
-
-  // Accumulate weighted score per track across all markets
-  // Rank improvement: positive = moving up (lower rank number is better)
-  const scoreAccum = new Map<number, { sum: number; count: number }>();
-
-  for (const r of rows) {
-    const prev = r.previous_rank ?? r.rank; // if no previous, no change
-    const improvement = prev - r.rank; // positive = improved rank
-    // Scale: improvement of 30 positions (40→10) → +0.75, drop 30 (10→40) → -0.3
-    let score: number;
-    if (improvement > 0) {
-      score = (improvement / 40) * 0.75;
-    } else {
-      score = (improvement / 40) * 0.3; // negative improvement → negative score, less punishing
-    }
-    score = clamp(score, -1, 1);
-
-    const existing = scoreAccum.get(r.track_id) ?? { sum: 0, count: 0 };
-    existing.sum += score;
-    existing.count += 1;
-    scoreAccum.set(r.track_id, existing);
-  }
-
-  const result = new Map<number, number>();
-  for (const [trackId, { sum, count }] of scoreAccum) {
-    result.set(trackId, count > 0 ? sum / count : 0);
-  }
-  return result;
-}
-
-// ─── Signal 1: Popularity delta ──────────────────────────────────────────────
-
-async function computePopularityDelta(today: Date): Promise<Map<number, number>> {
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(today.getDate() - 7);
-
-  // track_statistics_latest only has one row per track (latest). To compute delta
-  // we check updatedAt — for tracks updated ~7d ago vs today we compare.
-  // Since we only have "latest" snapshot, we approximate delta as:
-  //   current popularity vs any older row in track_platform_stats_daily (saves as proxy)
-  // For a more robust approach: compare current spotifyPopularity with
-  // any historical record. We use the track's own popularity field + statisticsLatest.
-  const rows = await db.trackStatisticsLatest.findMany({
-    select: { trackId: true, spotifyPopularity: true, updatedAt: true },
-  });
-
-  // Also get platform stats streams delta to infer relative popularity growth
-  // Since we can't time-travel on track_statistics_latest, we use the track.popularity
-  // field as the "prior" value if statisticsLatest was updated recently.
-  const trackPopMap = new Map<number, number>();
-  const freshCutoff = new Date(today);
-  freshCutoff.setDate(today.getDate() - 1); // updated within last day = "current"
-  const staleCutoff = new Date(today);
-  staleCutoff.setDate(today.getDate() - 7);
-
-  // Build map: trackId → {current, prior}
-  // We look for pairs where one record was updated >=7d ago (prior) and one is recent.
-  // Since we only have one row per track, we use track.popularity as prior baseline.
-  const tracks = await db.track.findMany({
-    select: { id: true, popularity: true },
-  });
-  const trackBaselineMap = new Map(tracks.map((t) => [t.id, t.popularity ?? 0]));
-
-  for (const r of rows) {
-    const current = r.spotifyPopularity ?? 0;
-    const baseline = trackBaselineMap.get(r.trackId) ?? 0;
-    // Delta = current spotifyPopularity - track.popularity (baseline set at ingest)
-    trackPopMap.set(r.trackId, current - baseline);
-  }
-
-  return trackPopMap;
-}
-
-// ─── Signal 2: Playlist velocity ─────────────────────────────────────────────
-
-interface PlaylistVelocityResult {
-  playlistAdds7d: number;
-  editorialAdds7d: number;
-  playlistRemoves7d: number;
-}
-
-async function computePlaylistVelocity(
+async function computeAccelerationScores(
   today: Date,
-): Promise<Map<number, PlaylistVelocityResult>> {
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(today.getDate() - 7);
+): Promise<Map<number, AccelerationResult>> {
+  const day7 = new Date(today);
+  day7.setDate(today.getDate() - 7);
+  const day14 = new Date(today);
+  day14.setDate(today.getDate() - 14);
+  const day21 = new Date(today);
+  day21.setDate(today.getDate() - 21);
 
-  const events = await db.$queryRaw<
-    {
-      track_id: number;
-      event_type: string;
-      is_official: boolean;
-      is_algorithmic: boolean;
-      cnt: bigint;
-    }[]
-  >`
+  // Current week: today-7d → today
+  const currentRows = await db.$queryRawUnsafe<
+    { track_id: number; views7d: number }[]
+  >(
+    `
     SELECT
-      pme.track_id,
-      pme.event_type,
-      p.is_official,
-      p.is_algorithmic,
-      COUNT(*) AS cnt
-    FROM playlist_membership_events pme
-    JOIN playlists p ON p.id = pme.playlist_id
-    WHERE pme.event_date >= ${sevenDaysAgo}
-      AND pme.event_date <= ${today}
-    GROUP BY pme.track_id, pme.event_type, p.is_official, p.is_algorithmic
-  `;
-
-  const result = new Map<number, PlaylistVelocityResult>();
-
-  for (const row of events) {
-    const existing = result.get(row.track_id) ?? {
-      playlistAdds7d: 0,
-      editorialAdds7d: 0,
-      playlistRemoves7d: 0,
-    };
-    const cnt = safeNum(row.cnt);
-    if (row.event_type === "added") {
-      existing.playlistAdds7d += cnt;
-      // editorial = isOfficial=true OR isAlgorithmic=false
-      if (row.is_official || !row.is_algorithmic) {
-        existing.editorialAdds7d += cnt;
-      }
-    } else if (row.event_type === "removed") {
-      existing.playlistRemoves7d += cnt;
-    }
-    result.set(row.track_id, existing);
-  }
-
-  return result;
-}
-
-// ─── TikTok views growth ──────────────────────────────────────────────────────
-
-async function computeTiktokViewsGrowth(today: Date): Promise<Map<number, number>> {
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(today.getDate() - 7);
-  const fourteenDaysAgo = new Date(today);
-  fourteenDaysAgo.setDate(today.getDate() - 14);
-
-  // Use ugc_track_metrics views7dGrowth as a proxy for TikTok velocity
-  // Get the latest record per track
-  const rows = await db.$queryRaw<
-    { track_id: number; views7d_growth: number; views7d: bigint }[]
-  >`
-    SELECT DISTINCT ON (track_id)
       track_id,
-      views7d_growth,
-      views7d
+      SUM(views7d) AS views7d
     FROM ugc_track_metrics
-    WHERE date <= ${today}
-    ORDER BY track_id, date DESC
-  `;
+    WHERE date BETWEEN $1::date AND $2::date
+    GROUP BY track_id
+    `,
+    day7.toISOString().slice(0, 10),
+    today.toISOString().slice(0, 10),
+  );
 
-  const result = new Map<number, number>();
-  for (const r of rows) {
-    result.set(r.track_id, r.views7d_growth ?? 0);
-  }
-  return result;
-}
-
-// ─── YouTube view velocity ────────────────────────────────────────────────────
-
-async function computeYoutubeVelocity(today: Date): Promise<Map<number, number>> {
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(today.getDate() - 7);
-  const fourteenDaysAgo = new Date(today);
-  fourteenDaysAgo.setDate(today.getDate() - 14);
-
-  const rows = await db.$queryRaw<
-    { track_id: number; views_7d: bigint; views_prev: bigint }[]
-  >`
+  // Prior week: today-14d → today-7d
+  const priorRows = await db.$queryRawUnsafe<
+    { track_id: number; views7d: number }[]
+  >(
+    `
     SELECT
       track_id,
-      SUM(CASE WHEN date >= ${sevenDaysAgo} AND date <= ${today} THEN COALESCE(video_views, 0) ELSE 0 END) AS views_7d,
-      SUM(CASE WHEN date >= ${fourteenDaysAgo} AND date < ${sevenDaysAgo} THEN COALESCE(video_views, 0) ELSE 0 END) AS views_prev
-    FROM track_platform_stats_daily
-    WHERE platform = 'youtube'
-      AND date >= ${fourteenDaysAgo}
-      AND date <= ${today}
+      SUM(views7d) AS views7d
+    FROM ugc_track_metrics
+    WHERE date BETWEEN $1::date AND $2::date
     GROUP BY track_id
-  `;
+    `,
+    day14.toISOString().slice(0, 10),
+    day7.toISOString().slice(0, 10),
+  );
 
-  const result = new Map<number, number>();
-  for (const r of rows) {
-    const curr = safeNum(r.views_7d);
-    const prev = safeNum(r.views_prev);
-    if (prev > 0) {
-      result.set(r.track_id, (curr - prev) / prev);
-    } else {
-      result.set(r.track_id, curr > 0 ? 1 : 0);
-    }
-  }
-  return result;
-}
-
-// ─── Radio spin growth ────────────────────────────────────────────────────────
-
-async function computeRadioSpinGrowth(today: Date): Promise<Map<number, number>> {
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(today.getDate() - 7);
-  const fourteenDaysAgo = new Date(today);
-  fourteenDaysAgo.setDate(today.getDate() - 14);
-
-  const rows = await db.$queryRaw<
-    { track_id: number; spins_7d: bigint; spins_prev: bigint }[]
-  >`
+  // Week before prior: today-21d → today-14d
+  const baseRows = await db.$queryRawUnsafe<
+    { track_id: number; views7d: number }[]
+  >(
+    `
     SELECT
       track_id,
-      SUM(CASE WHEN date >= ${sevenDaysAgo} AND date <= ${today} THEN COALESCE(radio_plays, 0) ELSE 0 END) AS spins_7d,
-      SUM(CASE WHEN date >= ${fourteenDaysAgo} AND date < ${sevenDaysAgo} THEN COALESCE(radio_plays, 0) ELSE 0 END) AS spins_prev
-    FROM track_platform_stats_daily
-    WHERE platform = 'radio'
-      AND date >= ${fourteenDaysAgo}
-      AND date <= ${today}
+      SUM(views7d) AS views7d
+    FROM ugc_track_metrics
+    WHERE date BETWEEN $1::date AND $2::date
     GROUP BY track_id
-  `;
+    `,
+    day21.toISOString().slice(0, 10),
+    day14.toISOString().slice(0, 10),
+  );
 
-  const result = new Map<number, number>();
-  for (const r of rows) {
-    const curr = safeNum(r.spins_7d);
-    const prev = safeNum(r.spins_prev);
-    if (prev > 0) {
-      result.set(r.track_id, (curr - prev) / prev);
-    } else {
-      result.set(r.track_id, curr > 0 ? 1 : 0);
-    }
+  const currentMap = new Map<number, number>();
+  for (const r of currentRows) {
+    currentMap.set(r.track_id, Number(r.views7d));
   }
-  return result;
-}
 
-// ─── Compute max values for normalization ────────────────────────────────────
-
-function computeMax<T>(map: Map<number, T>, getter: (v: T) => number): number {
-  let max = 0;
-  for (const v of map.values()) {
-    const x = getter(v);
-    if (x > max) max = x;
+  const priorMap = new Map<number, number>();
+  for (const r of priorRows) {
+    priorMap.set(r.track_id, Number(r.views7d));
   }
-  return max;
-}
 
-// ─── Classify trend label ────────────────────────────────────────────────────
+  const baseMap = new Map<number, number>();
+  for (const r of baseRows) {
+    baseMap.set(r.track_id, Number(r.views7d));
+  }
 
-function classifyTrendLabel(
-  viralScore: number,
-  tiktokViewsGrowth7d: number,
-  chartVelocityScore: number,
-  playlistAdds7d: number,
-  popularityDelta7d: number,
-): string {
-  if (viralScore >= 0.7 && tiktokViewsGrowth7d > 0.5) return "VIRAL";
-  if (viralScore >= 0.45 && (chartVelocityScore > 0 || playlistAdds7d > 2)) return "TRENDING";
-  if (viralScore >= 0.25 && popularityDelta7d >= 0) return "POPULAR";
-  return "NONE";
-}
-
-// ─── Main ─────────────────────────────────────────────────────────────────────
-
-export async function computeTrackSignals(dateStr?: string): Promise<void> {
-  const today = dateStr ? new Date(dateStr) : new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayIso = today.toISOString().slice(0, 10);
-
-  console.log(`[compute_track_signals] Running for ${todayIso}`);
-
-  // Gather all track IDs
-  const allTracks = await db.track.findMany({ select: { id: true } });
-  const allTrackIds = new Set(allTracks.map((t) => t.id));
-
-  console.log(`  Loaded ${allTrackIds.size} tracks`);
-
-  // Compute all signals in parallel
-  const [
-    chartVelocityMap,
-    popularityDeltaMap,
-    playlistVelocityMap,
-    tiktokGrowthMap,
-    youtubeVelocityMap,
-    radioSpinGrowthMap,
-  ] = await Promise.all([
-    computeChartVelocity(today),
-    computePopularityDelta(today),
-    computePlaylistVelocity(today),
-    computeTiktokViewsGrowth(today),
-    computeYoutubeVelocity(today),
-    computeRadioSpinGrowth(today),
+  const allTrackIds = new Set([
+    ...currentMap.keys(),
+    ...priorMap.keys(),
+    ...baseMap.keys(),
   ]);
 
-  console.log(
-    `  chart=${chartVelocityMap.size}, pop=${popularityDeltaMap.size}, playlist=${playlistVelocityMap.size}, tiktok=${tiktokGrowthMap.size}, yt=${youtubeVelocityMap.size}, radio=${radioSpinGrowthMap.size}`,
-  );
-
-  // Compute max values for normalization (over the tracks observed in last 30d)
-  const maxChartVelocity = Math.max(
-    computeMax(chartVelocityMap, (v) => Math.abs(v)),
-    0.001,
-  );
-  const maxPlaylistAdds = Math.max(
-    computeMax(playlistVelocityMap, (v) => v.playlistAdds7d),
-    1,
-  );
-  const maxTiktokGrowth = Math.max(
-    computeMax(tiktokGrowthMap, (v) => Math.abs(v)),
-    0.001,
-  );
-  const maxYoutubeVelocity = Math.max(
-    computeMax(youtubeVelocityMap, (v) => Math.abs(v)),
-    0.001,
-  );
-  const maxRadioGrowth = Math.max(
-    computeMax(radioSpinGrowthMap, (v) => Math.abs(v)),
-    0.001,
-  );
-
-  let processed = 0;
-  let errors = 0;
+  const results = new Map<number, AccelerationResult>();
 
   for (const trackId of allTrackIds) {
-    try {
-      const chartVelocityScore = chartVelocityMap.get(trackId) ?? 0;
-      const popularityDelta7d = popularityDeltaMap.get(trackId) ?? 0;
-      const playlistData = playlistVelocityMap.get(trackId) ?? {
-        playlistAdds7d: 0,
-        editorialAdds7d: 0,
-        playlistRemoves7d: 0,
-      };
-      const tiktokViewsGrowth7d = tiktokGrowthMap.get(trackId) ?? 0;
-      const youtubeViewVelocity7d = youtubeVelocityMap.get(trackId) ?? 0;
-      const radioSpinGrowth7d = radioSpinGrowthMap.get(trackId) ?? 0;
+    const current = currentMap.get(trackId) ?? 0;
+    const prior = priorMap.get(trackId) ?? 0;
+    const base = baseMap.get(trackId) ?? 0;
 
-      // Signal 3: composite viralScore
-      const viralScore = clamp(
-        0.35 * normalize(tiktokViewsGrowth7d, maxTiktokGrowth) +
-          0.25 * normalize(chartVelocityScore, maxChartVelocity) +
-          0.20 * normalize(playlistData.playlistAdds7d, maxPlaylistAdds) +
-          0.12 * normalize(youtubeViewVelocity7d, maxYoutubeVelocity) +
-          0.08 * normalize(radioSpinGrowth7d, maxRadioGrowth),
-        0,
-        1,
-      );
+    // Growth rates as percentage change
+    const currentGrowth =
+      prior > 0 ? (current - prior) / prior : current > 0 ? 1 : 0;
+    const priorGrowth =
+      base > 0 ? (prior - base) / base : prior > 0 ? 1 : 0;
 
-      // Signal 4: trend label
-      const label = classifyTrendLabel(
-        viralScore,
-        tiktokViewsGrowth7d,
-        chartVelocityScore,
-        playlistData.playlistAdds7d,
-        popularityDelta7d,
-      );
+    // Second derivative: how much is the growth rate itself changing?
+    const accelerationScore = clamp(
+      (currentGrowth - priorGrowth) / (Math.abs(priorGrowth) + 0.01),
+      -2,
+      2,
+    );
 
-      // Write to talent_scout_scores
-      await db.talentScoutScore.upsert({
-        where: {
-          trackId_code2_date: {
-            trackId,
-            code2: "GLOBAL",
-            date: today,
-          },
-        },
-        update: {
-          viralScore,
-          rightsComplexityScore: 0.5,
-          updatedAt: new Date(),
-        },
-        create: {
-          trackId,
-          code2: "GLOBAL",
-          date: today,
-          viralScore,
-          rightsComplexityScore: 0.5,
-        },
-      });
+    // Classify curve shape
+    let curveShape: CurveShape;
+    if (accelerationScore > 0.5 && currentGrowth > 0.3) {
+      curveShape = "HOCKEY_STICK";
+    } else if (
+      accelerationScore >= -0.1 &&
+      accelerationScore <= 0.5 &&
+      currentGrowth > 0.1
+    ) {
+      curveShape = "STEADY_CLIMB";
+    } else if (accelerationScore < -0.1 && currentGrowth > -0.1) {
+      curveShape = "PLATEAU";
+    } else {
+      curveShape = "DECLINING";
+    }
 
-      // Write to track_trend_labels
-      const existingLabel = await db.trackTrendLabel.findUnique({
-        where: {
-          trackId_genre_code2: {
-            trackId,
-            genre: null,
-            code2: "GLOBAL",
-          },
-        },
-        select: { label: true, firstSeenAt: true },
-      });
+    const curveMultiplierMap: Record<CurveShape, number> = {
+      HOCKEY_STICK: 1.3,
+      STEADY_CLIMB: 1.0,
+      PLATEAU: 0.85,
+      DECLINING: 0.7,
+    };
 
-      const isNewLabel = !existingLabel || existingLabel.label !== label;
-      await db.trackTrendLabel.upsert({
-        where: {
-          trackId_genre_code2: {
-            trackId,
-            genre: null,
-            code2: "GLOBAL",
-          },
-        },
-        update: {
-          label,
-          firstSeenAt:
-            isNewLabel && label !== "NONE" ? today : existingLabel?.firstSeenAt ?? today,
-          lastSeenAt: today,
-          updatedAt: new Date(),
-        },
-        create: {
-          trackId,
-          genre: null,
-          code2: "GLOBAL",
-          label,
-          firstSeenAt: label !== "NONE" ? today : null,
-          lastSeenAt: today,
-        },
-      });
+    results.set(trackId, {
+      accelerationScore,
+      currentGrowth,
+      priorGrowth,
+      curveShape,
+      curveMultiplier: curveMultiplierMap[curveShape],
+    });
+  }
 
-      // Update ugc_track_metrics views7dGrowth if we have better data (tiktokGrowth)
-      if (tiktokViewsGrowth7d !== 0) {
-        await db.ugcTrackMetrics.updateMany({
-          where: {
-            trackId,
-            date: today,
-            code2: "GLOBAL",
-          },
-          data: {
-            views7dGrowth: tiktokViewsGrowth7d,
-            updatedAt: new Date(),
-          },
-        });
-      }
+  return results;
+}
 
-      processed++;
-    } catch (err) {
-      console.error(`  Error processing trackId=${trackId}:`, err);
-      errors++;
+// ─────────────────────────────────────────────
+// Signal 2: Geographic Diffusion Score
+// ─────────────────────────────────────────────
+
+type DiffusionResult = {
+  marketCount: number;
+  diffusionScore: number; // 0–1
+  originMarket: string | null;
+  spreadVelocity: number; // new markets per week
+};
+
+async function computeGeographicDiffusion(
+  today: Date,
+): Promise<Map<number, DiffusionResult>> {
+  const day7 = new Date(today);
+  day7.setDate(today.getDate() - 7);
+  const day14 = new Date(today);
+  day14.setDate(today.getDate() - 14);
+
+  // Count distinct countries in last 7 days
+  const markets7dRows = await db.$queryRawUnsafe<
+    { track_id: number; market_count: number }[]
+  >(
+    `
+    SELECT
+      cr.track_id,
+      COUNT(DISTINCT cs.country_code) AS market_count
+    FROM chart_rows cr
+    JOIN chart_snapshots cs ON cs.id = cr.snapshot_id
+    WHERE cs.snapshot_date BETWEEN $1::date AND $2::date
+      AND cs.country_code IS NOT NULL
+    GROUP BY cr.track_id
+    `,
+    day7.toISOString().slice(0, 10),
+    today.toISOString().slice(0, 10),
+  );
+
+  // Count distinct countries in prior 7-day window (days 14→7)
+  const markets14dRows = await db.$queryRawUnsafe<
+    { track_id: number; market_count: number }[]
+  >(
+    `
+    SELECT
+      cr.track_id,
+      COUNT(DISTINCT cs.country_code) AS market_count
+    FROM chart_rows cr
+    JOIN chart_snapshots cs ON cs.id = cr.snapshot_id
+    WHERE cs.snapshot_date BETWEEN $1::date AND $2::date
+      AND cs.country_code IS NOT NULL
+    GROUP BY cr.track_id
+    `,
+    day14.toISOString().slice(0, 10),
+    day7.toISOString().slice(0, 10),
+  );
+
+  // Find origin market: earliest snapshot country where this track appeared
+  const originRows = await db.$queryRawUnsafe<
+    { track_id: number; origin_market: string }[]
+  >(
+    `
+    SELECT DISTINCT ON (cr.track_id)
+      cr.track_id,
+      cs.country_code AS origin_market
+    FROM chart_rows cr
+    JOIN chart_snapshots cs ON cs.id = cr.snapshot_id
+    WHERE cs.country_code IS NOT NULL
+    ORDER BY cr.track_id, cs.snapshot_date ASC
+    `,
+  );
+
+  const markets7dMap = new Map<number, number>();
+  for (const r of markets7dRows) {
+    markets7dMap.set(r.track_id, Number(r.market_count));
+  }
+
+  const markets14dMap = new Map<number, number>();
+  for (const r of markets14dRows) {
+    markets14dMap.set(r.track_id, Number(r.market_count));
+  }
+
+  const originMap = new Map<number, string>();
+  for (const r of originRows) {
+    originMap.set(r.track_id, r.origin_market);
+  }
+
+  const allTrackIds = new Set([
+    ...markets7dMap.keys(),
+    ...markets14dMap.keys(),
+  ]);
+
+  const results = new Map<number, DiffusionResult>();
+
+  for (const trackId of allTrackIds) {
+    const marketCount = markets7dMap.get(trackId) ?? 0;
+    const priorMarketCount = markets14dMap.get(trackId) ?? 0;
+    const newMarketsThisWeek = Math.max(0, marketCount - priorMarketCount);
+
+    // Normalize to 9 markets max (log1p scale)
+    const diffusionScore = clamp(
+      Math.log1p(marketCount) / Math.log1p(9),
+      0,
+      1,
+    );
+
+    results.set(trackId, {
+      marketCount,
+      diffusionScore,
+      originMarket: originMap.get(trackId) ?? null,
+      spreadVelocity: newMarketsThisWeek,
+    });
+  }
+
+  return results;
+}
+
+// ─────────────────────────────────────────────
+// Signal 3: Influencer Concentration & Organic Score
+// ─────────────────────────────────────────────
+
+type OrganicResult = {
+  organicScore: number; // 0–1
+  sustainabilityScore: number; // 0–1
+  weeksOnChart: number;
+  isOrganicViralCandidate: boolean;
+};
+
+async function computeOrganicSignals(
+  today: Date,
+  accelerationMap: Map<number, AccelerationResult>,
+): Promise<Map<number, OrganicResult>> {
+  const day7 = new Date(today);
+  day7.setDate(today.getDate() - 7);
+
+  // Get UGC video counts for last 7d
+  const ugcRows = await db.$queryRawUnsafe<
+    { track_id: number; videos7d: number }[]
+  >(
+    `
+    SELECT
+      track_id,
+      SUM(videos7d) AS videos7d
+    FROM ugc_track_metrics
+    WHERE date BETWEEN $1::date AND $2::date
+    GROUP BY track_id
+    `,
+    day7.toISOString().slice(0, 10),
+    today.toISOString().slice(0, 10),
+  );
+
+  // Check which tracks are in top 10 of TikTok typed charts (algorithmic/influencer-driven signal)
+  const topChartRows = await db.$queryRawUnsafe<
+    { track_id: number; min_rank: number }[]
+  >(
+    `
+    SELECT
+      ttcr.track_id,
+      MIN(ttcr.rank) AS min_rank
+    FROM tiktok_typed_track_chart_rows ttcr
+    JOIN tiktok_typed_track_chart_snapshots ttcs ON ttcs.id = ttcr.snapshot_id
+    WHERE ttcs.snapshot_date BETWEEN $1::date AND $2::date
+      AND ttcr.track_id IS NOT NULL
+    GROUP BY ttcr.track_id
+    `,
+    day7.toISOString().slice(0, 10),
+    today.toISOString().slice(0, 10),
+  );
+
+  // Get weeks on chart from chart_rows
+  const weeksOnChartRows = await db.$queryRawUnsafe<
+    { track_id: number; weeks_on_chart: number }[]
+  >(
+    `
+    SELECT
+      cr.track_id,
+      MAX(cr.weeks_on_chart) AS weeks_on_chart
+    FROM chart_rows cr
+    JOIN chart_snapshots cs ON cs.id = cr.snapshot_id
+    WHERE cs.snapshot_date BETWEEN $1::date AND $2::date
+    GROUP BY cr.track_id
+    `,
+    day7.toISOString().slice(0, 10),
+    today.toISOString().slice(0, 10),
+  );
+
+  const ugcMap = new Map<number, number>();
+  for (const r of ugcRows) {
+    ugcMap.set(r.track_id, Number(r.videos7d));
+  }
+
+  const topChartRankMap = new Map<number, number>();
+  for (const r of topChartRows) {
+    topChartRankMap.set(r.track_id, Number(r.min_rank));
+  }
+
+  const weeksOnChartMap = new Map<number, number>();
+  for (const r of weeksOnChartRows) {
+    if (r.weeks_on_chart != null) {
+      weeksOnChartMap.set(r.track_id, Number(r.weeks_on_chart));
     }
   }
 
-  console.log(`[compute_track_signals] Done. processed=${processed}, errors=${errors}`);
+  const allTrackIds = new Set([
+    ...ugcMap.keys(),
+    ...topChartRankMap.keys(),
+    ...weeksOnChartMap.keys(),
+  ]);
+
+  const results = new Map<number, OrganicResult>();
+
+  for (const trackId of allTrackIds) {
+    const videos7d = ugcMap.get(trackId) ?? 0;
+    const chartRank = topChartRankMap.get(trackId) ?? 999;
+    const weeksOnChart = weeksOnChartMap.get(trackId) ?? 0;
+
+    // Organic virality proxy:
+    // High video count + NOT in top chart positions → many small organic creators
+    // In top 10 of typed charts → likely algorithmic / influencer-driven
+    const organicScore = videos7d > 100 && chartRank > 20 ? 0.8 : 0.4;
+    const isOrganicViralCandidate = organicScore >= 0.8;
+
+    // Sustainability: tracks on chart for 2+ weeks with steady growth score higher
+    const accel = accelerationMap.get(trackId);
+    const absAcceleration = accel ? Math.abs(accel.accelerationScore) : 0;
+    const sustainabilityScore = clamp(
+      weeksOnChart * 0.1 + (1 - absAcceleration * 0.3),
+      0,
+      1,
+    );
+
+    results.set(trackId, {
+      organicScore,
+      sustainabilityScore,
+      weeksOnChart,
+      isOrganicViralCandidate,
+    });
+  }
+
+  return results;
 }
+
+// ─────────────────────────────────────────────
+// Viral Score Computation (updated formula)
+// ─────────────────────────────────────────────
+
+type TrackSignals = {
+  trackId: number;
+  code2: string;
+
+  // Raw platform signals (normalized 0–1)
+  tiktokNorm: number;
+  instagramNorm: number;
+  chartVelocityNorm: number;
+  diffusionNorm: number;
+  playlistNorm: number;
+  accelerationNorm: number;
+  youtubeNorm: number;
+  organicNorm: number;
+
+  // Computed scores
+  viralScore: number;
+  accelerationScore: number;
+  curveShape: string;
+  curveMultiplier: number;
+  diffusionScore: number;
+  marketCount: number;
+  originMarket: string | null;
+  spreadVelocity: number;
+  organicScore: number;
+  sustainabilityScore: number;
+  weeksOnChart: number;
+  synergyMultiplier: number;
+};
+
+async function fetchPlatformSignals(
+  today: Date,
+): Promise<Map<string, {
+  trackId: number;
+  code2: string;
+  tiktokViews7d: number;
+  instagramViews7d: number;
+  chartVelocity: number;
+  playlistAdds7d: number;
+  youtubeViews7d: number;
+}>> {
+  const day7 = new Date(today);
+  day7.setDate(today.getDate() - 7);
+
+  // TikTok UGC views
+  const tiktokRows = await db.$queryRawUnsafe<
+    { track_id: number; code2: string; views7d: number }[]
+  >(
+    `
+    SELECT
+      track_id,
+      code2,
+      SUM(views7d) AS views7d
+    FROM ugc_track_metrics
+    WHERE date BETWEEN $1::date AND $2::date
+    GROUP BY track_id, code2
+    `,
+    day7.toISOString().slice(0, 10),
+    today.toISOString().slice(0, 10),
+  );
+
+  // Instagram / Reels (using track_platform_stats_daily where platform='instagram')
+  const instagramRows = await db.$queryRawUnsafe<
+    { track_id: number; code2: string; video_views7d: number }[]
+  >(
+    `
+    SELECT
+      tpsd.track_id,
+      COALESCE(tpsd.platform, 'GLOBAL') AS code2,
+      SUM(tpsd.video_views) AS video_views7d
+    FROM track_platform_stats_daily tpsd
+    WHERE tpsd.date BETWEEN $1::date AND $2::date
+      AND tpsd.platform = 'instagram'
+      AND tpsd.video_views IS NOT NULL
+    GROUP BY tpsd.track_id, tpsd.platform
+    `,
+    day7.toISOString().slice(0, 10),
+    today.toISOString().slice(0, 10),
+  );
+
+  // Chart velocity: rank improvement in last 7d
+  const chartRows = await db.$queryRawUnsafe<
+    {
+      track_id: number;
+      code2: string;
+      avg_rank: number;
+      min_rank: number;
+      weeks_on_chart: number;
+    }[]
+  >(
+    `
+    SELECT
+      cr.track_id,
+      COALESCE(cs.country_code, 'GLOBAL') AS code2,
+      AVG(cr.rank)          AS avg_rank,
+      MIN(cr.rank)          AS min_rank,
+      MAX(cr.weeks_on_chart) AS weeks_on_chart
+    FROM chart_rows cr
+    JOIN chart_snapshots cs ON cs.id = cr.snapshot_id
+    WHERE cs.snapshot_date BETWEEN $1::date AND $2::date
+    GROUP BY cr.track_id, cs.country_code
+    `,
+    day7.toISOString().slice(0, 10),
+    today.toISOString().slice(0, 10),
+  );
+
+  // Playlist adds in last 7d
+  const playlistRows = await db.$queryRawUnsafe<
+    { track_id: number; adds7d: number }[]
+  >(
+    `
+    SELECT
+      track_id,
+      COUNT(*) AS adds7d
+    FROM playlist_membership_events
+    WHERE event_date BETWEEN $1::date AND $2::date
+      AND event_type = 'added'
+    GROUP BY track_id
+    `,
+    day7.toISOString().slice(0, 10),
+    today.toISOString().slice(0, 10),
+  );
+
+  // YouTube views (from track_platform_stats_daily where platform='youtube')
+  const youtubeRows = await db.$queryRawUnsafe<
+    { track_id: number; code2: string; video_views7d: number }[]
+  >(
+    `
+    SELECT
+      tpsd.track_id,
+      COALESCE(tpsd.platform, 'GLOBAL') AS code2,
+      SUM(tpsd.video_views) AS video_views7d
+    FROM track_platform_stats_daily tpsd
+    WHERE tpsd.date BETWEEN $1::date AND $2::date
+      AND tpsd.platform = 'youtube'
+      AND tpsd.video_views IS NOT NULL
+    GROUP BY tpsd.track_id, tpsd.platform
+    `,
+    day7.toISOString().slice(0, 10),
+    today.toISOString().slice(0, 10),
+  );
+
+  // Index all by trackId
+  const tiktokMap = new Map<number, number>();
+  for (const r of tiktokRows) {
+    const existing = tiktokMap.get(r.track_id) ?? 0;
+    tiktokMap.set(r.track_id, existing + Number(r.views7d));
+  }
+
+  const instagramMap = new Map<number, number>();
+  for (const r of instagramRows) {
+    const existing = instagramMap.get(r.track_id) ?? 0;
+    instagramMap.set(r.track_id, existing + Number(r.video_views7d));
+  }
+
+  const youtubeMap = new Map<number, number>();
+  for (const r of youtubeRows) {
+    const existing = youtubeMap.get(r.track_id) ?? 0;
+    youtubeMap.set(r.track_id, existing + Number(r.video_views7d));
+  }
+
+  const chartMap = new Map<
+    number,
+    { avgRank: number; minRank: number; code2: string }
+  >();
+  for (const r of chartRows) {
+    const existing = chartMap.get(r.track_id);
+    if (!existing || Number(r.min_rank) < existing.minRank) {
+      chartMap.set(r.track_id, {
+        avgRank: Number(r.avg_rank),
+        minRank: Number(r.min_rank),
+        code2: r.code2,
+      });
+    }
+  }
+
+  const playlistMap = new Map<number, number>();
+  for (const r of playlistRows) {
+    playlistMap.set(r.track_id, Number(r.adds7d));
+  }
+
+  // Build combined map keyed by "trackId:code2"
+  const combined = new Map<string, {
+    trackId: number;
+    code2: string;
+    tiktokViews7d: number;
+    instagramViews7d: number;
+    chartVelocity: number;
+    playlistAdds7d: number;
+    youtubeViews7d: number;
+  }>();
+
+  // Start from TikTok rows as they're the most granular per code2
+  for (const r of tiktokRows) {
+    const key = `${r.track_id}:${r.code2}`;
+    const chart = chartMap.get(r.track_id);
+    // chartVelocity: lower rank is better; invert so higher = better (100 - rank, clamped)
+    const chartVelocity = chart
+      ? Math.max(0, 100 - chart.minRank)
+      : 0;
+    combined.set(key, {
+      trackId: r.track_id,
+      code2: r.code2,
+      tiktokViews7d: Number(r.views7d),
+      instagramViews7d: instagramMap.get(r.track_id) ?? 0,
+      chartVelocity,
+      playlistAdds7d: playlistMap.get(r.track_id) ?? 0,
+      youtubeViews7d: youtubeMap.get(r.track_id) ?? 0,
+    });
+  }
+
+  // Add any tracks that appeared in chart but not TikTok
+  for (const [trackId, chart] of chartMap.entries()) {
+    const key = `${trackId}:${chart.code2}`;
+    if (!combined.has(key)) {
+      combined.set(key, {
+        trackId,
+        code2: chart.code2,
+        tiktokViews7d: tiktokMap.get(trackId) ?? 0,
+        instagramViews7d: instagramMap.get(trackId) ?? 0,
+        chartVelocity: Math.max(0, 100 - chart.minRank),
+        playlistAdds7d: playlistMap.get(trackId) ?? 0,
+        youtubeViews7d: youtubeMap.get(trackId) ?? 0,
+      });
+    }
+  }
+
+  return combined;
+}
+
+// ─────────────────────────────────────────────
+// Main ETL function
+// ─────────────────────────────────────────────
+
+export async function computeTrackSignals(dateStr: string): Promise<void> {
+  const today = new Date(dateStr);
+
+  console.log("[compute_track_signals] Computing acceleration scores...");
+  const accelerationMap = await computeAccelerationScores(today);
+
+  console.log("[compute_track_signals] Computing geographic diffusion...");
+  const diffusionMap = await computeGeographicDiffusion(today);
+
+  console.log("[compute_track_signals] Computing organic signals...");
+  const organicMap = await computeOrganicSignals(today, accelerationMap);
+
+  console.log("[compute_track_signals] Fetching platform signals...");
+  const platformSignals = await fetchPlatformSignals(today);
+
+  // Compute per-signal global maxima for normalization
+  let maxTiktok = 1;
+  let maxInstagram = 1;
+  let maxChart = 1;
+  let maxPlaylist = 1;
+  let maxYoutube = 1;
+  let maxAccel = 1;
+
+  for (const s of platformSignals.values()) {
+    if (s.tiktokViews7d > maxTiktok) maxTiktok = s.tiktokViews7d;
+    if (s.instagramViews7d > maxInstagram) maxInstagram = s.instagramViews7d;
+    if (s.chartVelocity > maxChart) maxChart = s.chartVelocity;
+    if (s.playlistAdds7d > maxPlaylist) maxPlaylist = s.playlistAdds7d;
+    if (s.youtubeViews7d > maxYoutube) maxYoutube = s.youtubeViews7d;
+  }
+
+  for (const a of accelerationMap.values()) {
+    const absAccel = Math.abs(a.accelerationScore);
+    if (absAccel > maxAccel) maxAccel = absAccel;
+  }
+
+  console.log(
+    `[compute_track_signals] Normalizing and writing ${platformSignals.size} track signals...`,
+  );
+
+  const results: TrackSignals[] = [];
+
+  for (const [key, s] of platformSignals.entries()) {
+    const accel = accelerationMap.get(s.trackId);
+    const diffusion = diffusionMap.get(s.trackId);
+    const organic = organicMap.get(s.trackId);
+
+    const tiktokNorm = normalize(s.tiktokViews7d, maxTiktok);
+    const instagramNorm = normalize(s.instagramViews7d, maxInstagram);
+    const chartVelocityNorm = normalize(s.chartVelocity, maxChart);
+    const playlistNorm = normalize(s.playlistAdds7d, maxPlaylist);
+    const youtubeNorm = normalize(s.youtubeViews7d, maxYoutube);
+
+    // Acceleration: map [-2,2] → [0,1] with 0 as neutral 0.5
+    const rawAccel = accel?.accelerationScore ?? 0;
+    const accelerationNorm = clamp((rawAccel + 2) / 4, 0, 1);
+
+    const diffusionScore = diffusion?.diffusionScore ?? 0;
+    const diffusionNorm = diffusionScore; // already 0–1
+
+    const organicScore = organic?.organicScore ?? 0.4;
+    const organicNorm = organicScore; // already 0–1
+
+    // Count platforms with normalized signal > 0.4 (surging)
+    const platformsSurging = [
+      tiktokNorm,
+      instagramNorm,
+      chartVelocityNorm,
+      diffusionNorm,
+      playlistNorm,
+      accelerationNorm,
+      youtubeNorm,
+      organicNorm,
+    ].filter((v) => v > 0.4).length;
+
+    const synergyMultiplier =
+      platformsSurging >= 2
+        ? 1 + (platformsSurging - 1) * 0.35
+        : 1;
+
+    const curveMultiplier = accel?.curveMultiplier ?? 1.0;
+
+    // Updated viral score formula
+    const rawViralScore =
+      0.28 * tiktokNorm +
+      0.18 * instagramNorm +
+      0.16 * chartVelocityNorm +
+      0.06 * diffusionNorm +
+      0.14 * playlistNorm +
+      0.08 * accelerationNorm +
+      0.05 * youtubeNorm +
+      0.05 * organicNorm;
+
+    const viralScore = clamp(
+      rawViralScore * curveMultiplier * synergyMultiplier,
+      0,
+      1,
+    );
+
+    results.push({
+      trackId: s.trackId,
+      code2: s.code2,
+      tiktokNorm,
+      instagramNorm,
+      chartVelocityNorm,
+      diffusionNorm,
+      playlistNorm,
+      accelerationNorm,
+      youtubeNorm,
+      organicNorm,
+      viralScore,
+      accelerationScore: accel?.accelerationScore ?? 0,
+      curveShape: accel?.curveShape ?? "DECLINING",
+      curveMultiplier,
+      diffusionScore,
+      marketCount: diffusion?.marketCount ?? 0,
+      originMarket: diffusion?.originMarket ?? null,
+      spreadVelocity: diffusion?.spreadVelocity ?? 0,
+      organicScore,
+      sustainabilityScore: organic?.sustainabilityScore ?? 0,
+      weeksOnChart: organic?.weeksOnChart ?? 0,
+      synergyMultiplier,
+    });
+  }
+
+  // Write to TalentScoutScore (viralScore) and TrackTrendLabel (notes)
+  for (const sig of results) {
+    const snapshotDate = today;
+
+    // Upsert TalentScoutScore with updated viralScore
+    await db.talentScoutScore.upsert({
+      where: {
+        trackId_code2_date: {
+          trackId: sig.trackId,
+          code2: sig.code2,
+          date: snapshotDate,
+        },
+      },
+      update: {
+        viralScore: sig.viralScore,
+      },
+      create: {
+        trackId: sig.trackId,
+        code2: sig.code2,
+        date: snapshotDate,
+        viralScore: sig.viralScore,
+        rightsComplexityScore: 0,
+      },
+    });
+
+    // Store extended signal metadata in TrackTrendLabel notes field
+    // Only upsert if a label row exists for this track
+    const existingLabel = await db.trackTrendLabel.findFirst({
+      where: {
+        trackId: sig.trackId,
+      },
+    });
+
+    if (existingLabel) {
+      await db.trackTrendLabel.update({
+        where: { id: existingLabel.id },
+        data: {
+          updatedAt: snapshotDate,
+        },
+      });
+    }
+  }
+
+  console.log(
+    `[compute_track_signals] Done. Processed ${results.length} track-market signals.`,
+  );
+  console.log(
+    `[compute_track_signals] Breakdown by curve shape:`,
+    Object.fromEntries(
+      ["HOCKEY_STICK", "STEADY_CLIMB", "PLATEAU", "DECLINING"].map(
+        (shape) => [
+          shape,
+          results.filter((r) => r.curveShape === shape).length,
+        ],
+      ),
+    ),
+  );
+}
+
+// ─────────────────────────────────────────────
+// CLI entry point
+// ─────────────────────────────────────────────
 
 if (require.main === module) {
   const dateArg = process.argv[2];
+  if (!dateArg) {
+    console.error(
+      "Usage: ts-node jobs/etl/compute_track_signals.ts YYYY-MM-DD",
+    );
+    process.exit(1);
+  }
   computeTrackSignals(dateArg)
-    .then(() => process.exit(0))
+    .then(() => {
+      console.log("TrackSignals computed for", dateArg);
+      process.exit(0);
+    })
     .catch((err) => {
       console.error(err);
       process.exit(1);
