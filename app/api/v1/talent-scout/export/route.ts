@@ -35,8 +35,8 @@ export async function GET(req: NextRequest) {
       viralScore: t.viralScore != null ? t.viralScore.toFixed(4) : '',
       rightsComplexity: t.rightsComplexityScore != null ? t.rightsComplexityScore.toFixed(4) : '',
       spotifyStreams: t.spotifyStreamsLatest ?? '',
-      tiktokViews: String(t.tiktokViews7d ?? ''),
-      tiktokVelocity: t.tiktokViews7dGrowth.toFixed(2),
+      tiktokViews: String(t.tiktokViews ?? ''),
+      tiktokVelocity: (t.tiktokVelocity ?? 0).toFixed(2),
       luminateStreams: t.luminateStreamsLatest ?? '',
       pitchStatus: 'Not Pitched',
     }));

@@ -20,16 +20,16 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     requireScope(ctx, 'artists:trajectory:read');
     await enforceRateLimit(ctx, `tenant:${ctx.tenantId}:artists:trajectory`);
 
-    const artistId = BigInt(params.id);
+    const artistId = Number(params.id);
 
     const [artist, snapshot, history] = await Promise.all([
-      db.artists.findUnique({ where: { id: artistId } }),
+      db.artist.findUnique({ where: { id: artistId } }),
       db.artistTrajectorySnapshot.findFirst({
         where: { artistId },
         orderBy: { date: 'desc' },
       }),
       db.artistDailyStats.findMany({
-        where: { artistId },
+        where: { artistId: BigInt(artistId) },
         orderBy: { date: 'asc' },
         take: 90,
       }),
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
     if (snapshot) {
       const tracks = await db.track.findMany({
-        where: { trackArtists: { some: { artistId } } },
+        where: { trackArtists: { some: { artistId: artistId } } },
         orderBy: { releaseDate: 'desc' },
         take: 10,
       });
@@ -104,7 +104,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       artist: {
         id: artist.id.toString(),
         name: artist.name,
-        code2: artist.code2 ?? null,
+        country: artist.country ?? null,
       },
       snapshot: snapshot
         ? {
@@ -125,7 +125,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
           }
         : null,
       mlPrediction,
-      history: history.map((h) => ({
+      history: history.map((h: any) => ({
         date: h.date,
         totalStreams: h.totalStreams.toString(),
         streams7d: h.streams7d,

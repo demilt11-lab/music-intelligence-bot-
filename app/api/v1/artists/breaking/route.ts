@@ -51,15 +51,15 @@ export async function GET(req: NextRequest) {
     ]);
 
     const artistIds = rows.map((r) => r.artistId);
-    const artists = await db.artists.findMany({ where: { id: { in: artistIds } } });
-    const artistMap = new Map(artists.map((a) => [a.id.toString(), a]));
+    const artists = await db.artist.findMany({ where: { id: { in: artistIds } } });
+    const artistMap = new Map(artists.map((a: any) => [a.id.toString(), a]));
 
     const obj = rows.map((row) => {
       const a = artistMap.get(row.artistId.toString());
       return {
         artistId: row.artistId.toString(),
         name: a?.name ?? null,
-        code2: a?.code2 ?? null,
+        code2: a?.country ?? null,
         primaryGenre: row.primaryGenre,
         primaryCode2: row.primaryCode2,
         status: row.status,

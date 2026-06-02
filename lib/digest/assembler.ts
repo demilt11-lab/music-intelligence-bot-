@@ -48,7 +48,7 @@ export async function assembleDigest(tenantId: number, tenantName: string, date?
     artists: t.artists,
     viralScore: t.viralScore,
     trendLabel: null,
-    tiktokVelocity: t.tiktokViews7dGrowth,
+    tiktokVelocity: t.tiktokVelocity,
     spotifyStreams: t.spotifyStreamsLatest,
   }));
 

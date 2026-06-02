@@ -25,11 +25,11 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const [prediction, label] = await Promise.all([
       db.trackTrendPrediction.findFirst({
         where: { trackId },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { predictedAt: 'desc' },
       }),
       db.trackTrendLabel.findFirst({
         where: { trackId },
-        orderBy: { date: 'desc' },
+        orderBy: { createdAt: 'desc' },
       }),
     ]);
 
@@ -45,20 +45,20 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       trackId,
       prediction: prediction
         ? {
-            label: prediction.predLabel,
+            label: prediction.label,
             probViral: prediction.probViral,
             probTrending: prediction.probTrending,
             probPopular: prediction.probPopular,
             probNone: prediction.probNone,
             modelName: prediction.modelName,
             modelVersion: prediction.modelVersion,
-            createdAt: prediction.createdAt,
+            predictedAt: prediction.predictedAt,
           }
         : null,
       label: label
         ? {
             label: label.label,
-            date: label.date,
+            createdAt: label.createdAt,
           }
         : null,
     };

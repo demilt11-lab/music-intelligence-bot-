@@ -16,18 +16,18 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     requireScope(ctx, 'artists:read');
     await enforceRateLimit(ctx, `tenant:${ctx.tenantId}:artists`);
 
-    const artistId = BigInt(params.id);
-    if (!artistId) {
+    const artistId = Number(params.id);
+    if (!Number.isFinite(artistId)) {
       return NextResponse.json({ error: 'Invalid artist id' }, { status: 400 });
     }
 
     const [artist, snapshot, externalIds] = await Promise.all([
-      db.artists.findUnique({ where: { id: artistId } }),
+      db.artist.findUnique({ where: { id: artistId } }),
       db.artistTrajectorySnapshot.findFirst({
         where: { artistId },
         orderBy: { date: 'desc' },
       }),
-      db.externalId.findMany({ where: { artistId } }),
+      db.externalId.findMany({ where: { entityType: 'artist', entityId: artistId } }),
     ]);
 
     if (!artist) {
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     const obj = {
       id: artist.id.toString(),
       name: artist.name,
-      code2: artist.code2 ?? null,
+      country: artist.country ?? null,
       externalIds: externalIds.reduce<Record<string, string[]>>((acc, e) => {
         if (!acc[e.platform]) acc[e.platform] = [];
         acc[e.platform].push(e.externalId);
