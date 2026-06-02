@@ -282,13 +282,13 @@ export async function getNewReleases(country = 'US', limit = 50): Promise<Spotif
 
 /** Popular tracks via search — works reliably with client credentials */
 export async function getPopularTracks(_market: string, limit = 50): Promise<SpotifyTrack[]> {
-  const year = new Date().getFullYear();
   const queries = [
-    `genre:pop year:${year}`,
-    `genre:hip-hop year:${year}`,
-    `genre:r-n-b year:${year}`,
-    `genre:latin year:${year}`,
-    `genre:dance year:${year}`,
+    'genre:pop',
+    'genre:hip-hop',
+    'genre:r-n-b',
+    'genre:latin',
+    'genre:dance pop',
+    'genre:trap',
   ];
 
   const tracks: SpotifyTrack[] = [];

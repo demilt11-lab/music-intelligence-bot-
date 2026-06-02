@@ -43,6 +43,8 @@ export async function GET(req: NextRequest) {
         limit,
         mode,
         dbCounts: { tracks: trackCount, chartRows: chartRowCount, scores: scoreCount },
+        tier4TrackCount: tracks.length,
+        rankedCount: ranked.length,
         tier4Error,
         description:
           'NOV8TE proprietary daily UGC trend-spotting list combining internal ML, UGC, streaming, and Luminate metrics.',

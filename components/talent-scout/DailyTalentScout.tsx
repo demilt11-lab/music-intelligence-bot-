@@ -34,6 +34,7 @@ export function DailyTalentScout() {
   const [code2, setCode2] = React.useState('US');
   const [error, setError] = React.useState<string | null>(null);
   const [dbCounts, setDbCounts] = React.useState<{ tracks: number; chartRows: number; scores: number } | null>(null);
+  const [pipelineCounts, setPipelineCounts] = React.useState<{ tier4: number; ranked: number } | null>(null);
   const [tier4Error, setTier4Error] = React.useState<string | undefined>(undefined);
   const [apiUrl, setApiUrl] = React.useState('');
 
@@ -53,6 +54,7 @@ export function DailyTalentScout() {
       setData(json.obj);
       setDbCounts(json.meta.dbCounts ?? null);
       setTier4Error((json.meta as any).tier4Error);
+      setPipelineCounts({ tier4: (json.meta as any).tier4TrackCount ?? 0, ranked: (json.meta as any).rankedCount ?? 0 });
     } catch (err: any) {
       console.error(err);
       setError(err.message ?? 'Failed to load daily scout list.');
@@ -195,6 +197,7 @@ export function DailyTalentScout() {
         <div className="text-xs text-slate-500 space-y-0.5">
           <div>
             DB: {dbCounts.tracks} tracks · {dbCounts.chartRows} chart rows · {dbCounts.scores} scores
+            {pipelineCounts && ` · Spotify: ${pipelineCounts.tier4} fetched · ${pipelineCounts.ranked} ranked`}
             {' · '}
             <a href={apiUrl} target="_blank" rel="noreferrer" className="underline">raw API</a>
           </div>
