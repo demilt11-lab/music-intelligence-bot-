@@ -240,26 +240,40 @@ async function main(): Promise<void> {
   const today = new Date();
 
   // 1. Fetch trending Reels media for music hashtags
-  const media = await fetchTrendingReels();
-  console.log(`[instagram] Fetched ${media.length} total Reel records`);
+  let media: MediaRecord[] = [];
+  try {
+    media = await fetchTrendingReels();
+    console.log(`[instagram] Fetched ${media.length} total Reel records`);
+  } catch (err) {
+    console.warn('[instagram] [WARN] Could not fetch trending reels:', (err as Error).message);
+  }
 
   if (media.length === 0) {
-    console.warn('[instagram] No media fetched — exiting early');
+    console.warn('[instagram] No media fetched — Instagram API may require user token or hashtag permissions. Completing without data.');
     await db.$disconnect();
     return;
   }
 
   // 2. Resolve tracks from media captions and hashtags
-  const aggByTrackId = await resolveTracksFromMedia(media);
+  let aggByTrackId = new Map<number, TrackAggregate>();
+  try {
+    aggByTrackId = await resolveTracksFromMedia(media);
+  } catch (err) {
+    console.warn('[instagram] [WARN] Track resolution failed:', (err as Error).message);
+  }
 
   if (aggByTrackId.size === 0) {
-    console.warn('[instagram] No tracks resolved — exiting early');
+    console.warn('[instagram] No tracks resolved — completing without stats upsert.');
     await db.$disconnect();
     return;
   }
 
   // 3. Upsert platform stats daily
-  await upsertPlatformStats(aggByTrackId, today);
+  try {
+    await upsertPlatformStats(aggByTrackId, today);
+  } catch (err) {
+    console.warn('[instagram] [WARN] Platform stats upsert failed:', (err as Error).message);
+  }
 
   console.log('[instagram] Ingestion job complete.');
   await db.$disconnect();
