@@ -10,8 +10,9 @@ type TalentScoutTrack = {
   artists: string[];
   code2: string | null;
   totalScore: number;
-  tiktokVideos7d: number;
-  tiktokVideos7dGrowth: number;
+  tiktokViews: string | number;
+  tiktokVelocity: number;
+  spotifyPopularity: number | null;
   spotifyStreamsLatest: string | null;
   luminateStreamsLatest: string | null;
   actions: {
@@ -23,7 +24,7 @@ type TalentScoutTrack = {
 
 type ApiResponse = {
   obj: TalentScoutTrack[];
-  meta: { date?: string; code2: string; mode: string };
+  meta: { date?: string; code2: string; mode: string; dbCounts?: { tracks: number; chartRows: number; scores: number } };
 };
 
 export function DailyTalentScout() {
@@ -32,23 +33,28 @@ export function DailyTalentScout() {
   const [mode, setMode] = React.useState<'ugc_early' | 'general'>('ugc_early');
   const [code2, setCode2] = React.useState('US');
   const [error, setError] = React.useState<string | null>(null);
+  const [dbCounts, setDbCounts] = React.useState<{ tracks: number; chartRows: number; scores: number } | null>(null);
+  const [pipelineCounts, setPipelineCounts] = React.useState<{ tier4: number; ranked: number } | null>(null);
+  const [tier4Error, setTier4Error] = React.useState<string | undefined>(undefined);
+  const [apiUrl, setApiUrl] = React.useState('');
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({
-        code2,
-        mode,
-        limit: '50',
-      });
-      const res = await fetch(`/api/talent-scout/daily?${params.toString()}`);
+      const params = new URLSearchParams({ code2, mode, limit: '50' });
+      const url = `/api/talent-scout/daily?${params.toString()}`;
+      setApiUrl(url);
+      const res = await fetch(url);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? `Request failed with ${res.status}`);
       }
       const json: ApiResponse = await res.json();
       setData(json.obj);
+      setDbCounts(json.meta.dbCounts ?? null);
+      setTier4Error((json.meta as any).tier4Error);
+      setPipelineCounts({ tier4: (json.meta as any).tier4TrackCount ?? 0, ranked: (json.meta as any).rankedCount ?? 0 });
     } catch (err: any) {
       console.error(err);
       setError(err.message ?? 'Failed to load daily scout list.');
@@ -90,21 +96,23 @@ export function DailyTalentScout() {
     },
     {
       key: 'ugc',
-      header: 'UGC (7d)',
-      render: (row: TalentScoutTrack) => (
-        <div className="text-xs">
-          <span className="font-medium text-slate-50">
-            {row.tiktokVideos7d.toLocaleString()} videos
-          </span>
-          <span
-            className={`ml-1 ${
-              row.tiktokVideos7dGrowth > 0 ? 'text-emerald-400' : 'text-slate-400'
-            }`}
-          >
-            {row.tiktokVideos7dGrowth.toFixed(1)}%
-          </span>
-        </div>
-      ),
+      header: 'TikTok Views',
+      render: (row: TalentScoutTrack) => {
+        const views = Number(row.tiktokViews ?? 0);
+        const velocity = row.tiktokVelocity ?? 0;
+        return (
+          <div className="text-xs">
+            <span className="font-medium text-slate-50">
+              {views > 0 ? views.toLocaleString() : '—'}
+            </span>
+            {velocity !== 0 && (
+              <span className={`ml-1 ${velocity > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                {velocity > 0 ? '+' : ''}{velocity.toFixed(1)}%
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'streams',
@@ -112,7 +120,9 @@ export function DailyTalentScout() {
       render: (row: TalentScoutTrack) => {
         const spotify = row.spotifyStreamsLatest
           ? Number(row.spotifyStreamsLatest).toLocaleString()
-          : '—';
+          : row.spotifyPopularity != null
+            ? `Pop: ${row.spotifyPopularity}`
+            : '—';
         const luminate = row.luminateStreamsLatest
           ? Number(row.luminateStreamsLatest).toLocaleString()
           : '—';
@@ -178,11 +188,22 @@ export function DailyTalentScout() {
       </div>
 
       {error && (
-        <div
-          role="alert"
-          className="rounded-md border border-red-500/60 bg-red-900/20 px-3 py-2 text-sm text-red-200"
-        >
+        <div role="alert" className="rounded-md border border-red-500/60 bg-red-900/20 px-3 py-2 text-sm text-red-200">
           {error}
+        </div>
+      )}
+
+      {dbCounts && (
+        <div className="text-xs text-slate-500 space-y-0.5">
+          <div>
+            DB: {dbCounts.tracks} tracks · {dbCounts.chartRows} chart rows · {dbCounts.scores} scores
+            {pipelineCounts && ` · Spotify: ${pipelineCounts.tier4} fetched · ${pipelineCounts.ranked} ranked`}
+            {' · '}
+            <a href={apiUrl} target="_blank" rel="noreferrer" className="underline">raw API</a>
+          </div>
+          {tier4Error && (
+            <div className="text-red-400">Spotify error: {tier4Error}</div>
+          )}
         </div>
       )}
 
