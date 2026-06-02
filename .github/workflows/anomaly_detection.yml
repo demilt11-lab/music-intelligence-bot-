@@ -16,6 +16,11 @@ jobs:
           node-version: "20"
       - name: Install dependencies
         run: npm install
+      - name: Run database migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
       - name: Run anomaly detection
         run: npx tsx jobs/etl/anomaly_detection.ts
         env:
