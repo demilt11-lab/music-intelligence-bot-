@@ -46,12 +46,12 @@ async function loadTrackSignals(today: Date): Promise<Map<number, TrackSignals>>
   const tiktokRows = await db.$queryRaw<
     { track_id: number; views7d_growth: number }[]
   >`
-    SELECT DISTINCT ON (track_id)
-      track_id,
-      views7d_growth
+    SELECT DISTINCT ON ("trackId")
+      "trackId" AS track_id,
+      "views7dGrowth" AS views7d_growth
     FROM ugc_track_metrics
     WHERE date <= ${today}
-    ORDER BY track_id, date DESC
+    ORDER BY "trackId", date DESC
   `;
 
   const tiktokMap = new Map<number, number>();
@@ -93,14 +93,14 @@ async function loadChartStreamEstimates(today: Date): Promise<Map<number, ChartS
     }[]
   >`
     SELECT
-      cr.track_id,
+      cr."trackId" AS track_id,
       cr.rank,
-      cr.weeks_on_chart,
-      cs.snapshot_date
+      cr."weeksOnChart" AS weeks_on_chart,
+      cs."snapshotDate" AS snapshot_date
     FROM chart_rows cr
-    JOIN chart_snapshots cs ON cs.id = cr.snapshot_id
-    WHERE cs.snapshot_date >= ${fourteenDaysAgo}
-      AND cs.snapshot_date <= ${today}
+    JOIN chart_snapshots cs ON cs.id = cr."snapshotId"
+    WHERE cs."snapshotDate" >= ${fourteenDaysAgo}
+      AND cs."snapshotDate" <= ${today}
       AND cs.platform = 'spotify'
   `;
 
@@ -155,14 +155,14 @@ async function loadRadioSpinGrowth(today: Date): Promise<Map<number, number>> {
     { track_id: number; spins_7d: bigint; spins_prev: bigint }[]
   >`
     SELECT
-      track_id,
-      SUM(CASE WHEN date >= ${sevenDaysAgo} AND date <= ${today} THEN COALESCE(radio_plays, 0) ELSE 0 END) AS spins_7d,
-      SUM(CASE WHEN date >= ${fourteenDaysAgo} AND date < ${sevenDaysAgo} THEN COALESCE(radio_plays, 0) ELSE 0 END) AS spins_prev
+      "trackId" AS track_id,
+      SUM(CASE WHEN date >= ${sevenDaysAgo} AND date <= ${today} THEN COALESCE("radioPlays", 0) ELSE 0 END) AS spins_7d,
+      SUM(CASE WHEN date >= ${fourteenDaysAgo} AND date < ${sevenDaysAgo} THEN COALESCE("radioPlays", 0) ELSE 0 END) AS spins_prev
     FROM track_platform_stats_daily
     WHERE platform = 'radio'
       AND date >= ${fourteenDaysAgo}
       AND date <= ${today}
-    GROUP BY track_id
+    GROUP BY "trackId"
   `;
 
   const result = new Map<number, number>();
