@@ -10,6 +10,8 @@ import {
   getTrackAudioFeatures,
   getTrackDetails,
   getPlaylistTracks,
+  getArtistDetails,
+  getPlaylistDetails,
   delay,
   SpotifyPlaylistItem,
   SpotifyTrack,
@@ -59,6 +61,8 @@ interface Stats {
   membershipEventsCreated: number;
   editorialTracksProcessed: number;
   tracksCreated: number;
+  artistFollowersUpdated: number;
+  playlistFollowersUpdated: number;
   errors: number;
 }
 
@@ -70,6 +74,8 @@ const stats: Stats = {
   membershipEventsCreated: 0,
   editorialTracksProcessed: 0,
   tracksCreated: 0,
+  artistFollowersUpdated: 0,
+  playlistFollowersUpdated: 0,
   errors: 0,
 };
 
@@ -153,6 +159,9 @@ async function ingestExistingTracks(): Promise<void> {
   console.log(`  Done. audioFeatures=${stats.audioFeaturesUpserted}, popularity=${stats.popularityUpdated}`);
 }
 
+// Collects playlist DB IDs processed during Phases 2 & 3 (for Phase 5)
+const processedPlaylistDbIds: Array<{ dbId: number; spotifyId: string }> = [];
+
 // ─── Phase 2: Top 50 chart ingestion ─────────────────────────────────────────
 
 async function ingestTopCharts(): Promise<void> {
@@ -196,6 +205,7 @@ async function ingestTopCharts(): Promise<void> {
 
       // Get or upsert the playlist DB record
       const playlist = await upsertPlaylist(playlistId, chartName, market === 'global' ? null : market);
+      processedPlaylistDbIds.push({ dbId: playlist.id, spotifyId: playlistId });
 
       // Track which tracks are currently in the playlist (for membership events)
       const currentTrackIds = new Set<number>();
@@ -278,6 +288,7 @@ async function ingestEditorialPlaylists(): Promise<void> {
       );
 
       const playlist = await upsertPlaylist(playlistId, playlistName, null, true);
+      processedPlaylistDbIds.push({ dbId: playlist.id, spotifyId: playlistId });
       const currentTrackIds = new Set<number>();
 
       for (let i = 0; i < validItems.length; i++) {
@@ -321,6 +332,86 @@ async function ingestEditorialPlaylists(): Promise<void> {
   }
 
   console.log(`  Done. editorialTracks=${stats.editorialTracksProcessed}, membershipEvents=${stats.membershipEventsCreated}`);
+}
+
+// ─── Phase 4: Artist followers + popularity ───────────────────────────────────
+
+async function ingestArtistFollowers(): Promise<void> {
+  console.log('\n[Phase 4] Fetching artist followers & popularity...');
+
+  const externalIds = await db.externalId.findMany({
+    where: { entityType: 'artist', platform: 'spotify' },
+    select: { entityId: true, externalId: true },
+  });
+
+  console.log(`  Found ${externalIds.length} artists with Spotify external IDs`);
+
+  for (const { entityId: artistId, externalId: spotifyArtistId } of externalIds) {
+    try {
+      const details = await getArtistDetails(spotifyArtistId);
+      await db.artist.update({
+        where: { id: artistId },
+        data: {
+          followersCount: BigInt(details.followers.total),
+          popularity: details.popularity,
+        },
+      });
+      stats.artistFollowersUpdated++;
+      await delay(100);
+    } catch (err) {
+      console.warn(`  [WARN] Failed for artistId=${artistId} spotifyId=${spotifyArtistId}:`, (err as Error).message);
+      stats.errors++;
+    }
+  }
+
+  console.log(`  Done. artistFollowersUpdated=${stats.artistFollowersUpdated}`);
+}
+
+// ─── Phase 5: Playlist follower counts ───────────────────────────────────────
+
+async function ingestPlaylistFollowers(): Promise<void> {
+  console.log('\n[Phase 5] Fetching playlist follower counts...');
+  console.log(`  Processing ${processedPlaylistDbIds.length} playlists from Phases 2 & 3`);
+
+  for (const { dbId, spotifyId } of processedPlaylistDbIds) {
+    try {
+      const details = await getPlaylistDetails(spotifyId);
+      const followers = BigInt(details.followers.total);
+
+      await db.playlist.update({
+        where: { id: dbId },
+        data: { followerCount: followers },
+      });
+
+      await db.spotifyPlaylistMetricsLatest.upsert({
+        where: { playlistId: dbId },
+        update: { followers },
+        create: { playlistId: dbId, followers, updatedAt: new Date() },
+      });
+
+      stats.playlistFollowersUpdated++;
+      await delay(100);
+    } catch (err) {
+      console.warn(`  [WARN] Failed for playlistDbId=${dbId} spotifyId=${spotifyId}:`, (err as Error).message);
+      stats.errors++;
+    }
+  }
+
+  console.log(`  Done. playlistFollowersUpdated=${stats.playlistFollowersUpdated}`);
+}
+
+// ─── Phase 6: Daily streams update ───────────────────────────────────────────
+
+async function ingestDailyStreams(): Promise<void> {
+  console.log('\n[Phase 6] Daily streams update...');
+  // NOTE: The Spotify Web API does not expose raw stream counts to non-Spotify-for-Artists
+  // users. The only publicly available popularity signal is the `popularity` field (0–100
+  // index), which is already captured in Phase 1 via getTrackDetails → spotifyPopularity.
+  // Raw stream counts require Spotify for Artists API access (restricted program).
+  // Skipping raw stream ingestion — update spotifyPopularity instead (already done in Phase 1).
+  console.log('  NOTE: Spotify Web API does not expose raw stream counts to non-Spotify-for-Artists users.');
+  console.log('  Popularity scores are already updated in Phase 1. Skipping raw stream ingestion.');
+  console.log('  To ingest raw streams, Spotify for Artists API access is required.');
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -402,6 +493,9 @@ async function main(): Promise<void> {
     await ingestExistingTracks();
     await ingestTopCharts();
     await ingestEditorialPlaylists();
+    await ingestArtistFollowers();
+    await ingestPlaylistFollowers();
+    await ingestDailyStreams();
   } finally {
     await db.$disconnect();
   }

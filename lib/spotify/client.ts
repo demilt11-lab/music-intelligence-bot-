@@ -225,6 +225,30 @@ export async function getArtistDetails(spotifyId: string): Promise<SpotifyArtist
   return spotifyGet<SpotifyArtist>(`/artists/${spotifyId}`);
 }
 
+export interface SpotifyPlaylistSummary {
+  id: string;
+  followers: { total: number };
+  tracks: { total: number };
+}
+
+/** Fetch minimal playlist details (followers + track count) by playlist ID */
+export async function getPlaylistDetails(playlistId: string): Promise<SpotifyPlaylistSummary> {
+  return spotifyGet<SpotifyPlaylistSummary>(`/playlists/${playlistId}`, {
+    fields: 'id,followers,tracks.total',
+  });
+}
+
+/** Fetch an artist's top tracks for a given market (defaults to US) */
+export async function getArtistTopTracks(
+  spotifyId: string,
+  market = 'US',
+): Promise<SpotifyTrack[]> {
+  const result = await spotifyGet<{ tracks: SpotifyTrack[] }>(`/artists/${spotifyId}/top-tracks`, {
+    market,
+  });
+  return result.tracks;
+}
+
 /** Search Spotify for tracks matching a query string */
 export async function searchTracks(query: string, limit = 10): Promise<SpotifyTrack[]> {
   const result = await spotifyGet<SpotifySearchResult>('/search', {
