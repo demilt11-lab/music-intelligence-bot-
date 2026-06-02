@@ -242,14 +242,26 @@ async function main(): Promise<void> {
 
   // Phase 1: Trending music per region
   for (const region of REGIONS) {
-    await ingestTrendingRegion(region);
+    try {
+      await ingestTrendingRegion(region);
+    } catch (err) {
+      console.warn(`[youtube] [WARN] Region ${region} failed:`, (err as Error).message);
+    }
   }
 
   // Phase 2: Shorts chart
-  await ingestShortsChart();
+  try {
+    await ingestShortsChart();
+  } catch (err) {
+    console.warn('[youtube] [WARN] Shorts chart failed:', (err as Error).message);
+  }
 
   // Phase 3: Refresh existing track stats
-  await refreshExistingTrackStats();
+  try {
+    await refreshExistingTrackStats();
+  } catch (err) {
+    console.warn('[youtube] [WARN] Refresh existing stats failed:', (err as Error).message);
+  }
 
   const elapsed = ((Date.now() - start) / 1000).toFixed(1);
   console.log(`[youtube] Pipeline complete in ${elapsed}s`);

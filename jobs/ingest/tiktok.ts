@@ -241,98 +241,6 @@ async function resolveAllSounds(
   return soundToTrackId;
 }
 
-// ─── UGC metrics aggregation ──────────────────────────────────────────────────
-
-async function aggregateUgcMetrics(
-  soundToTrackId: Map<string, number>,
-  today: Date
-): Promise<void> {
-  const dateOnly = new Date(
-    Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
-  );
-  const sevenDaysAgo = new Date(dateOnly.getTime() - 7 * 86_400_000);
-
-  // Group video metrics by soundId over the past 7 days
-  type SoundAgg = { videos7d: number; views7d: bigint };
-  const aggBySoundId = new Map<string, SoundAgg>();
-
-  // We need a mapping from videoId → soundId to aggregate
-  // Re-derive it from the in-memory videos list (passed via closure via main())
-  // Instead, query TiktokVideoMetricsDaily for the 7-day window
-  const rows = await db.tiktokVideoMetricsDaily.findMany({
-    where: {
-      date: {
-        gte: sevenDaysAgo,
-        lte: dateOnly,
-      },
-    },
-  });
-
-  // We can't directly join to soundId from TiktokVideoMetricsDaily since it only
-  // stores videoId. We rely on the in-memory snapshot we just ingested to map
-  // videoId → soundId. For videos not in today's batch, we skip (no mapping available).
-  // This is acceptable: we refresh mappings on each run.
-  const videoIdToSoundId = new Map<string, string>();
-  // Re-read from chart rows for today's snapshot
-  const todaySnapshot = await db.tiktokVideoChartSnapshot.findFirst({
-    where: {
-      chartName: "tiktok_trending_sounds",
-      snapshotDate: dateOnly,
-    },
-    include: { chartRows: true },
-  });
-
-  if (todaySnapshot) {
-    // We stored videoId in chart rows; match against today's video list
-    // Use a raw query to join chart rows with metrics
-    for (const row of todaySnapshot.chartRows) {
-      // We don't have soundId stored in chart rows. Use the in-memory mapping from
-      // resolveAllSounds input. Since we can't pass it here easily, re-build from
-      // today's metric rows that overlap with chart rows.
-      // Mark videoId as "known" — actual soundId mapping comes from resolveAllSounds.
-    }
-  }
-
-  // Simpler approach: aggregate directly from resolved soundToTrackId map.
-  // For each sound that was resolved, aggregate its videos' metrics from today's rows.
-  // Build videoId → soundId mapping from today's video records stored in chart snapshot.
-  // We'll derive it from tiktok_video_chart_rows and tiktok_video_metrics_daily joined.
-  // Since schema doesn't store soundId in chart rows, we use the passed-in resolvedMap
-  // and the in-memory video list. We aggregate at call time from main().
-  // NOTE: This function is restructured below in main() to pass videos directly.
-
-  console.log(
-    `[tiktok] UGC aggregation: ${rows.length} metric rows in 7-day window`
-  );
-
-  // Accumulate by trackId
-  type TrackAgg = { videos7d: number; views7d: bigint };
-  const aggByTrackId = new Map<number, TrackAgg>();
-
-  // We need videoId → soundId. For rows in our current window, we can only do this
-  // for videos whose soundId we know from today's batch (soundToTrackId keys).
-  // Build a reverse lookup from trackId → soundId (first occurrence)
-  const trackIdToSoundId = new Map<number, string>();
-  for (const [soundId, trackId] of soundToTrackId) {
-    if (!trackIdToSoundId.has(trackId)) {
-      trackIdToSoundId.set(trackId, soundId);
-    }
-  }
-
-  // For each metric row, check if videoId belongs to a known chart row
-  // We don't have that mapping persisted. Best effort: aggregate all metrics
-  // grouped by trackId using ExternalId lookup for the videos in today's batch.
-  // Since we don't have a per-video → soundId mapping in the DB, we do a bulk
-  // aggregation per trackId from today's rows only.
-  for (const row of rows) {
-    // We can't determine trackId from videoId alone without a stored mapping.
-    // Skip — handled in main() where we have the in-memory videos list.
-  }
-
-  void aggBySoundId;
-  void aggByTrackId;
-}
-
 // ─── UGC metrics (in-memory) ──────────────────────────────────────────────────
 
 async function upsertUgcMetrics(
@@ -571,32 +479,62 @@ async function main(): Promise<void> {
   const today = new Date();
 
   // 1. Fetch trending videos
-  const videos = await fetchTrendingVideos();
-  console.log(`[tiktok] Fetched ${videos.length} total video records`);
-
-  if (videos.length === 0) {
-    console.warn("[tiktok] No videos fetched — exiting early");
-    await db.$disconnect();
-    return;
+  let videos: VideoRecord[] = [];
+  try {
+    videos = await fetchTrendingVideos();
+    console.log(`[tiktok] Fetched ${videos.length} total video records`);
+  } catch (err) {
+    console.warn("[tiktok] [WARN] Could not fetch trending videos:", (err as Error).message);
   }
 
-  // 2. Upsert chart snapshot + rows
-  await upsertVideoChartSnapshot(videos, today);
+  if (videos.length > 0) {
+    // 2. Upsert chart snapshot + rows
+    try {
+      await upsertVideoChartSnapshot(videos, today);
+    } catch (err) {
+      console.warn("[tiktok] [WARN] Chart snapshot upsert failed:", (err as Error).message);
+    }
 
-  // 3. Upsert per-video daily metrics
-  await upsertVideoMetrics(videos, today);
+    // 3. Upsert per-video daily metrics
+    try {
+      await upsertVideoMetrics(videos, today);
+    } catch (err) {
+      console.warn("[tiktok] [WARN] Video metrics upsert failed:", (err as Error).message);
+    }
 
-  // 4. Resolve sounds → canonical tracks
-  const soundToTrackId = await resolveAllSounds(videos);
+    // 4. Resolve sounds → canonical tracks
+    let soundToTrackId = new Map<string, number>();
+    try {
+      soundToTrackId = await resolveAllSounds(videos);
+    } catch (err) {
+      console.warn("[tiktok] [WARN] Sound resolution failed:", (err as Error).message);
+    }
 
-  // 5. Aggregate and upsert UGC metrics
-  await upsertUgcMetrics(videos, soundToTrackId, today);
+    if (soundToTrackId.size > 0) {
+      // 5. Aggregate and upsert UGC metrics
+      try {
+        await upsertUgcMetrics(videos, soundToTrackId, today);
+      } catch (err) {
+        console.warn("[tiktok] [WARN] UGC metrics upsert failed:", (err as Error).message);
+      }
 
-  // 6. Update track_statistics_latest
-  await updateTrackStatistics(videos, soundToTrackId);
+      // 6. Update track_statistics_latest
+      try {
+        await updateTrackStatistics(videos, soundToTrackId);
+      } catch (err) {
+        console.warn("[tiktok] [WARN] Track statistics update failed:", (err as Error).message);
+      }
+    }
+  } else {
+    console.warn("[tiktok] No videos fetched — skipping downstream steps");
+  }
 
-  // 7. Ingest top creators
-  await ingestCreators(today);
+  // 7. Ingest top creators (independent of video data)
+  try {
+    await ingestCreators(today);
+  } catch (err) {
+    console.warn("[tiktok] [WARN] Creator ingestion failed:", (err as Error).message);
+  }
 
   console.log("[tiktok] Ingestion job complete.");
   await db.$disconnect();
