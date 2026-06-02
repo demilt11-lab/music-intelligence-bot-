@@ -66,7 +66,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
           name: info?.name ?? 'Unknown',
           artists: info?.artists ?? [],
           code2: code2 === 'GLOBAL' ? null : code2,
-          tiktokScore: computeTiktokScore({ rank: i + 1, views: ugc.views7d, velocity: ugc.views7dGrowth }),
+          tiktokScore: computeTiktokScore({ rank: i + 1, views: String(ugc.views7d), velocity: ugc.views7dGrowth }),
           tiktokViews: String(ugc.views7d),
           tiktokLikes: '0',
           tiktokVelocity: ugc.views7dGrowth,
