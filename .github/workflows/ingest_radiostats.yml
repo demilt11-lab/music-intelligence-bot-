@@ -1,0 +1,30 @@
+name: Ingest Radiostats / Airplay
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # 06:00 UTC daily — once per day to preserve API quota
+  workflow_dispatch:
+
+jobs:
+  ingest-radiostats:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Radiostats ingestion
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SONGSTATS_API_KEY: ${{ secrets.SONGSTATS_API_KEY }}
+        run: npx ts-node --project tsconfig.json jobs/ingest/radiostats.ts
