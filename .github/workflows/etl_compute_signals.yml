@@ -1,0 +1,33 @@
+name: ETL — Compute Signals
+
+on:
+  schedule:
+    - cron: "0 8 * * *" # 8:00 UTC daily — after ingestion jobs
+  workflow_dispatch:
+
+jobs:
+  compute-signals:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Compute track signals
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx ts-node jobs/etl/compute_track_signals.ts
+
+      - name: Compute artist signals
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx ts-node jobs/etl/compute_artist_signals.ts
