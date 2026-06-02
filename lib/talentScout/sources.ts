@@ -1,7 +1,6 @@
 // lib/talentScout/sources.ts
 
 import { db } from '@/lib/db';
-import { getPopularTracks } from '@/lib/spotify/client';
 
 export type TalentScoutTrack = {
   trackId: number;
@@ -167,17 +166,32 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     });
   }
 
-  // ── Tier 4: live Spotify API (no DB required) ──
-  console.log('[scout-sources] Tier3 empty, falling back to live Spotify Top 50...');
-  const market = code2 === 'GLOBAL' ? 'global' : code2;
-  const spotifyTracks = await getPopularTracks(market, limit);
-  console.log(`[scout-sources] Tier4 Spotify returned ${spotifyTracks.length} tracks`);
-  return spotifyTracks.map((t, i) => ({
-    trackId: -(i + 1), // negative sentinel — not in DB yet
+  // ── Tier 4: live Spotify search (no DB required) ──
+  console.log('[scout-sources] Tier3 empty, falling back to live Spotify search...');
+  const { spotifyGet } = await import('@/lib/spotify/client');
+  type RawSearch = { tracks: { items: Array<{ id: string; name: string; popularity: number; artists: Array<{ name: string }> }> } };
+  const genres = ['genre:pop', 'genre:hip-hop', 'genre:r-n-b', 'genre:latin', 'genre:dance'];
+  const seen = new Set<string>();
+  const spotifyTracks: Array<{ id: string; name: string; popularity: number; artists: Array<{ name: string }> }> = [];
+  for (const q of genres) {
+    if (spotifyTracks.length >= limit) break;
+    try {
+      const res = await spotifyGet<RawSearch>('/search', { q, type: 'track', limit: 20 });
+      for (const t of res.tracks.items) {
+        if (t.id && !seen.has(t.id)) { seen.add(t.id); spotifyTracks.push(t); }
+      }
+    } catch (err) {
+      console.warn(`[scout-sources] Tier4 search failed for "${q}":`, (err as Error).message);
+    }
+  }
+  spotifyTracks.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
+  console.log(`[scout-sources] Tier4 direct search returned ${spotifyTracks.length} tracks`);
+  return spotifyTracks.slice(0, limit).map((t, i) => ({
+    trackId: -(i + 1),
     name: t.name,
     artists: t.artists.map((a) => a.name),
     code2: code2 === 'GLOBAL' ? null : code2,
-    tiktokScore: Math.max(0, 1 - i / spotifyTracks.length),
+    tiktokScore: Math.max(0, 1 - i / Math.max(spotifyTracks.length, 1)),
     tiktokViews: '0',
     tiktokLikes: '0',
     tiktokVelocity: 0,
