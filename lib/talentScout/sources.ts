@@ -170,13 +170,17 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   console.log('[scout-sources] Tier3 empty, falling back to live Spotify search...');
   const { spotifyGet } = await import('@/lib/spotify/client');
   type RawSearch = { tracks: { items: Array<{ id: string; name: string; popularity: number; artists: Array<{ name: string }> }> } };
-  const genres = ['genre:pop', 'genre:hip-hop', 'genre:r-n-b', 'genre:latin', 'genre:dance'];
+  // Artist-name queries work reliably; genre: filters can return 0 in some Vercel environments
+  const queries = [
+    'Sabrina Carpenter', 'Kendrick Lamar', 'Bad Bunny', 'Taylor Swift', 'SZA',
+    'Drake', 'The Weeknd', 'Doja Cat', 'Tyler the Creator', 'Billie Eilish',
+  ];
   const seen = new Set<string>();
   const spotifyTracks: Array<{ id: string; name: string; popularity: number; artists: Array<{ name: string }> }> = [];
-  for (const q of genres) {
+  for (const q of queries) {
     if (spotifyTracks.length >= limit) break;
     try {
-      const res = await spotifyGet<RawSearch>('/search', { q, type: 'track', limit: 20 });
+      const res = await spotifyGet<RawSearch>('/search', { q, type: 'track', limit: 5 });
       for (const t of res.tracks.items) {
         if (t.id && !seen.has(t.id)) { seen.add(t.id); spotifyTracks.push(t); }
       }
