@@ -1,0 +1,76 @@
+name: ML Training Pipeline
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 0'
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Export track trend training data
+        run: npx ts-node scripts/export_track_trend_training.ts
+        continue-on-error: false
+
+      - name: Export artist trajectory features
+        run: npx ts-node scripts/export_artist_trajectory_features.ts
+        continue-on-error: false
+
+      - name: Train track trend model
+        run: python ml/track_trend_model.py --mode train --input output/track_trend_training.csv
+        continue-on-error: false
+
+      - name: Generate track trend predictions
+        run: python ml/track_trend_model.py --mode predict --input output/track_trend_training.csv --output output/track_trend_predictions.csv
+        continue-on-error: false
+
+      - name: Import track trend predictions
+        run: npx ts-node scripts/import_track_trend_predictions.ts
+        continue-on-error: false
+
+      - name: Train artist trajectory model
+        run: python ml/artist_trajectory_model.py --mode train --input output/artist_trajectory_features.csv
+        continue-on-error: false
+
+      - name: Generate artist trajectory predictions
+        run: python ml/artist_trajectory_model.py --mode predict --input output/artist_trajectory_features.csv --output output/artist_trajectory_predictions.csv
+        continue-on-error: false
+
+      - name: Import artist trajectory predictions
+        run: npx ts-node scripts/import_artist_trajectory_predictions.ts
+        continue-on-error: false
+
+      - name: Upload model artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ml-models-${{ github.run_id }}
+          path: |
+            output/*.joblib
+            output/*.json
+            output/*.csv
+          retention-days: 30
