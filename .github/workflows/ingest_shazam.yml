@@ -27,5 +27,6 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          SHAZAM_API_KEY: ${{ secrets.SHAZAM_API_KEY }}
+          SHAZAM_BASE_URL: ${{ secrets.SHAZAM_BASE_URL }}
         run: npx tsx jobs/ingest/shazam.ts

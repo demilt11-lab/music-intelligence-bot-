@@ -325,8 +325,11 @@ async function main(): Promise<void> {
   console.log("=== Shazam Ingestion Job ===");
   console.log(`Started at: ${new Date().toISOString()}`);
 
-  if (!process.env.RAPIDAPI_KEY) {
-    throw new Error("Required environment variable RAPIDAPI_KEY is not set");
+  if (!process.env.SHAZAM_API_KEY) {
+    throw new Error("Required environment variable SHAZAM_API_KEY is not set");
+  }
+  if (!process.env.SHAZAM_BASE_URL) {
+    throw new Error("Required environment variable SHAZAM_BASE_URL is not set");
   }
 
   const snapshotDate = toDateOnly(new Date());
