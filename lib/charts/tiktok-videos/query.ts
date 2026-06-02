@@ -42,10 +42,10 @@ export async function queryTikTokVideoChart(
         s.source_date,
         -- External TikTok video IDs as JSON array
         (
-          SELECT COALESCE(json_agg(e.external_id ORDER BY e.id), '[]'::json)
+          SELECT COALESCE(json_agg(e."externalId" ORDER BY e.id), '[]'::json)
           FROM   external_ids e
-          WHERE  e.canonical_id  = r.video_id
-            AND  e.entity_type   = 'tiktok_video'
+          WHERE  e."entityId"  = r.video_id
+            AND  e."entityType"   = 'tiktok_video'
         )::text                 AS external_ids_json,
         -- Rank history
         (
@@ -98,10 +98,10 @@ export async function queryTikTokVideoChart(
       s."snapshotDate"::text  AS source_date,
       -- External TikTok video IDs as JSON array
       (
-        SELECT COALESCE(json_agg(e.external_id ORDER BY e.id), '[]'::json)
+        SELECT COALESCE(json_agg(e."externalId" ORDER BY e.id), '[]'::json)
         FROM   external_ids e
-        WHERE  e.canonical_id  = r.video_id
-          AND  e.entity_type   = 'tiktok_video'
+        WHERE  e."entityId"  = r.video_id
+          AND  e."entityType"   = 'tiktok_video'
       )::text                 AS external_ids_json,
       -- Rank history
       (

@@ -53,8 +53,8 @@ export async function queryTikTokTypedTrackChart(
           (
             SELECT e.external_id
             FROM   external_ids e
-            WHERE  e.canonical_id = r.track_id
-              AND  e.entity_type  = 'tiktok_track'
+            WHERE  e."entityId"   = r.track_id
+              AND  e."entityType" = 'tiktok_track'
             LIMIT  1
           )                                 AS external_tiktok_track_id,
           (
