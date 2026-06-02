@@ -60,6 +60,9 @@ model Artist {
   trackArtists        TrackArtist[]
   externalIds         ExternalId[]
   tiktokUserChartRows TiktokUserChartRow[]
+  featuresDaily       ArtistFeaturesDaily[]
+  scoresDaily         ArtistScoresDaily[]
+  trainingExamples    TrainingExample[]
 
   @@map("artists")
 }
@@ -1378,4 +1381,95 @@ model AnomalyLog {
   @@index([trackId, detectedAt])
   @@index([severity, detectedAt])
   @@map("anomaly_log")
+}
+
+// ─────────────────────────────────────────────
+// Predictive A&R / Viral Score — new models
+// ─────────────────────────────────────────────
+
+model ArtistFeaturesDaily {
+  id                          Int      @id @default(autoincrement())
+  artistId                    Int
+  date                        DateTime @db.Date
+  // 7/14/30/90d Spotify listener growth %
+  listenersGrowth7d           Float?
+  listenersGrowth14d          Float?
+  listenersGrowth30d          Float?
+  listenersGrowth90d          Float?
+  // Follower growth %
+  followersGrowth7d           Float?
+  followersGrowth30d          Float?
+  // Velocity = change per day over last 7d
+  listenersVelocity7d         Float?
+  // Acceleration = velocity change vs prior 7d
+  listenersAcceleration7d     Float?
+  // TikTok
+  tiktokVideosPerDay7d        Float?
+  tiktokViewsGrowth7d         Float?
+  // Cross-platform
+  crossPlatformSpikes7d       Int?     // # platforms with >20% growth
+  // Virality ratios
+  streamsPerPlaylistAdd7d     Float?
+  savesPerStream30d           Float?
+  igEngagementPerFollower30d  Float?
+  commentsPerView30d          Float?
+  // Robustness
+  growthConsistency30d        Float?   // 0–1, how steady growth is
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  artist Artist @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@unique([artistId, date])
+  @@index([artistId, date])
+  @@map("artist_features_daily")
+}
+
+model ArtistScoresDaily {
+  id                   Int      @id @default(autoincrement())
+  artistId             Int
+  date                 DateTime @db.Date
+  heatScore            Float?   // 1–10
+  stabilityScore       Float?   // 1–10
+  platformBalanceScore Float?   // 1–10
+  breakoutProb30d      Float?   // 0–1
+  heatScoreRaw         Float?
+  stabilityScoreRaw    Float?
+  modelVersion         String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  artist Artist @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@unique([artistId, date])
+  @@index([date, breakoutProb30d])
+  @@index([date, heatScore])
+  @@map("artist_scores_daily")
+}
+
+model TrainingExample {
+  id              Int      @id @default(autoincrement())
+  artistId        Int
+  snapshotDate    DateTime @db.Date
+  breakoutLabel   Int      // 0 or 1
+  // feature snapshot (mirrors ArtistFeaturesDaily)
+  listenersGrowth7d          Float?
+  listenersGrowth30d         Float?
+  listenersGrowth90d         Float?
+  listenersVelocity7d        Float?
+  listenersAcceleration7d    Float?
+  tiktokVideosPerDay7d       Float?
+  tiktokViewsGrowth7d        Float?
+  crossPlatformSpikes7d      Int?
+  streamsPerPlaylistAdd7d    Float?
+  savesPerStream30d          Float?
+  igEngagementPerFollower30d Float?
+  growthConsistency30d       Float?
+  baselineMonthlyListeners   Float?  // listeners at snapshot_date
+  createdAt                  DateTime @default(now())
+
+  artist Artist @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@unique([artistId, snapshotDate])
+  @@map("training_examples")
 }
