@@ -95,10 +95,10 @@ export async function queryTikTokTypedTrackChart(
 
     return db.$queryRaw<any[]>`
       WITH latest_snap AS (
-        SELECT id, date::text AS charted_date
+        SELECT id, "snapshotDate"::text AS charted_date
         FROM   tiktok_typed_track_chart_snapshots
-        WHERE  chart_type = ${chartType}
-        ORDER  BY date DESC
+        WHERE  "chartType" = ${chartType}
+        ORDER  BY "snapshotDate" DESC
         LIMIT  1
       )
       SELECT
@@ -128,9 +128,9 @@ export async function queryTikTokTypedTrackChart(
             json_build_object(
               'artistId',    a.id,
               'name',        a.name,
-              'code2',       a.code2,
-              'imageUrl',    a.image_url,
-              'careerStage', a.career_stage
+              'code2',       a.country,
+              'imageUrl',    a."imageUrl",
+              'careerStage', NULL
             ) ORDER BY ta.position
           ), '[]'::json)
           FROM   track_artists ta
@@ -140,9 +140,9 @@ export async function queryTikTokTypedTrackChart(
         (
           SELECT json_build_object(
             'albumId',     al.id,
-            'name',        al.name,
+            'name',        al.title,
             'label',       al.label,
-            'releaseDate', al.release_date::text
+            'releaseDate', al."releaseDate"::text
           )
           FROM   track_albums ta2
           JOIN   albums       al ON al.id = ta2.album_id
@@ -188,9 +188,9 @@ export async function queryTikTokTypedTrackChart(
             json_build_object(
               'artistId',    a.id,
               'name',        a.name,
-              'code2',       a.code2,
-              'imageUrl',    a.image_url,
-              'careerStage', a.career_stage
+              'code2',       a.country,
+              'imageUrl',    a."imageUrl",
+              'careerStage', NULL
             ) ORDER BY ta.position
           ), '[]'::json)
           FROM   track_artists ta
@@ -200,9 +200,9 @@ export async function queryTikTokTypedTrackChart(
         (
           SELECT json_build_object(
             'albumId',     al.id,
-            'name',        al.name,
+            'name',        al.title,
             'label',       al.label,
-            'releaseDate', al.release_date::text
+            'releaseDate', al."releaseDate"::text
           )
           FROM   track_albums ta2
           JOIN   albums       al ON al.id = ta2.album_id

@@ -49,7 +49,7 @@ async function queryByCountry(params: AirplayByEntityParams): Promise<any[]> {
   return db.$queryRaw<any[]>`
     WITH plays_per_country AS (
       SELECT
-        rs.country                                   AS code2,
+        rs.country_code                              AS code2,
         SUM(f.plays)::bigint                         AS total_plays,
         json_agg(
           json_build_object(
@@ -62,7 +62,7 @@ async function queryByCountry(params: AirplayByEntityParams): Promise<any[]> {
       WHERE f.${Prisma.raw(fkCol)} = ${id}
         AND f.air_date >= ${since}::date
         ${stationFilter}
-      GROUP BY rs.country
+      GROUP BY rs.country_code
     ),
     totals AS (
       SELECT SUM(total_plays)::bigint AS grand_total FROM plays_per_country
@@ -118,10 +118,10 @@ async function queryByCity(params: AirplayByEntityParams): Promise<any[]> {
     SELECT
       p.city_id                           AS id,
       COALESCE(ci.name, '')               AS name,
-      COALESCE(ci.code2, '')              AS code2,
+      COALESCE(ci.country_code, '')        AS code2,
       ci.country                          AS country,
-      ci.lat::float                       AS lat,
-      ci.lng::float                       AS lng,
+      ci.latitude::float                  AS lat,
+      ci.longitude::float                 AS lng,
       p.total_plays::text                 AS plays,
       CASE WHEN t.grand_total > 0
         THEN ROUND(p.total_plays * 100.0 / t.grand_total, 4)::float
@@ -169,9 +169,9 @@ async function queryByStation(params: AirplayByEntityParams): Promise<any[]> {
     SELECT
       p.station_id                        AS id,
       COALESCE(rs.name, '')               AS name,
-      COALESCE(rs.country, '')            AS code2,
+      COALESCE(rs.country_code, '')        AS code2,
       rs.market                           AS city,
-      rs.country                          AS country,
+      rs.country_code                     AS country,
       p.total_plays::text                 AS plays,
       CASE WHEN t.grand_total > 0
         THEN ROUND(p.total_plays * 100.0 / t.grand_total, 4)::float

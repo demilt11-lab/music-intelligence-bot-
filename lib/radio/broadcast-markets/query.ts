@@ -45,14 +45,14 @@ async function queryCountryRatios(params: BroadcastMarketsParams): Promise<any[]
   return db.$queryRaw<any[]>`
     WITH country_plays AS (
       SELECT
-        rs.country                              AS code2,
+        rs.country_code                         AS code2,
         SUM(f.plays)::numeric                  AS market_count_data,
         COUNT(DISTINCT f.station_id)::int       AS count_of_stations
       FROM radio_airplay_facts f
       JOIN radio_stations rs ON rs.id = f.station_id
       WHERE f.${Prisma.raw(fkCol)} = ${params.id}
         AND f.air_date >= ${params.since}::date
-      GROUP BY rs.country
+      GROUP BY rs.country_code
     ),
     grand_total AS (
       SELECT SUM(market_count_data)::numeric AS total FROM country_plays
@@ -64,8 +64,8 @@ async function queryCountryRatios(params: BroadcastMarketsParams): Promise<any[]
       gt.total::text                                 AS total_market_count_data,
       cp.count_of_stations,
       c.population,
-      c.lat::float                                   AS lat,
-      c.lng::float                                   AS lng,
+      NULL::float                                    AS lat,
+      NULL::float                                    AS lng,
       CASE WHEN gt.total > 0
         THEN (cp.market_count_data / gt.total)::text
         ELSE '0'
@@ -117,15 +117,15 @@ async function queryCityRatios(params: BroadcastMarketsParams): Promise<any[]> {
         ci.name || COALESCE(', ' || ci.country, ''),
         cp.city_id::text
       )                                                              AS display_name,
-      COALESCE(ci.code2, '')                                         AS code2,
+      COALESCE(ci.country_code, '')                                   AS code2,
       cp.market_count_data::text                                     AS market_count_data,
       ci.country,
       gt.total::text                                                 AS total_market_count_data,
       cp.count_of_stations,
       cp.city_id,
       ci.population,
-      ci.lat::float                                                  AS lat,
-      ci.lng::float                                                  AS lng,
+      ci.latitude::float                                             AS lat,
+      ci.longitude::float                                            AS lng,
       CASE WHEN gt.total > 0
         THEN (cp.market_count_data / gt.total)::text
         ELSE '0'
