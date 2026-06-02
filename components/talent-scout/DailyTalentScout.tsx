@@ -193,20 +193,6 @@ export function DailyTalentScout() {
         </div>
       )}
 
-      {dbCounts && (
-        <div className="text-xs text-slate-500 space-y-0.5">
-          <div>
-            DB: {dbCounts.tracks} tracks · {dbCounts.chartRows} chart rows · {dbCounts.scores} scores
-            {pipelineCounts && ` · Spotify: ${pipelineCounts.tier4} fetched · ${pipelineCounts.ranked} ranked`}
-            {' · '}
-            <a href={apiUrl} target="_blank" rel="noreferrer" className="underline">raw API</a>
-          </div>
-          {tier4Error && (
-            <div className="text-red-400">Spotify error: {tier4Error}</div>
-          )}
-        </div>
-      )}
-
       <DataTable
         columns={columns as any}
         data={data}
