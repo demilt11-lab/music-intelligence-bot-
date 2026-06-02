@@ -175,14 +175,18 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     'Sabrina Carpenter', 'Kendrick Lamar', 'Bad Bunny', 'Taylor Swift', 'SZA',
     'Drake', 'The Weeknd', 'Doja Cat', 'Tyler the Creator', 'Billie Eilish',
   ];
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
   const spotifyTracks: Array<{ id: string; name: string; popularity: number; artists: Array<{ name: string }> }> = [];
   for (const q of queries) {
     if (spotifyTracks.length >= limit) break;
     try {
       const res = await spotifyGet<RawSearch>('/search', { q, type: 'track', limit: 5 });
       for (const t of res.tracks.items) {
-        if (t.id && !seen.has(t.id)) { seen.add(t.id); spotifyTracks.push(t); }
+        const nameKey = t.name.toLowerCase().trim();
+        if (t.id && !seenIds.has(t.id) && !seenNames.has(nameKey)) {
+          seenIds.add(t.id); seenNames.add(nameKey); spotifyTracks.push(t);
+        }
       }
     } catch (err) {
       console.warn(`[scout-sources] Tier4 search failed for "${q}":`, (err as Error).message);

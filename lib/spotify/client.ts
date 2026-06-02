@@ -280,34 +280,33 @@ export async function getNewReleases(country = 'US', limit = 50): Promise<Spotif
   return result.albums.items;
 }
 
-/** Popular tracks via search — works reliably with client credentials */
+/** Popular tracks via artist-name search — reliable with client credentials */
 export async function getPopularTracks(_market: string, limit = 50): Promise<SpotifyTrack[]> {
   const queries = [
-    'genre:pop',
-    'genre:hip-hop',
-    'genre:r-n-b',
-    'genre:latin',
-    'genre:dance pop',
-    'genre:trap',
+    'Sabrina Carpenter', 'Kendrick Lamar', 'Bad Bunny', 'Taylor Swift', 'SZA',
+    'Drake', 'The Weeknd', 'Doja Cat', 'Tyler the Creator', 'Billie Eilish',
+    'Post Malone', 'Ariana Grande', 'Olivia Rodrigo', 'Morgan Wallen', 'Luke Combs',
   ];
 
-  // Verify credentials work before looping — throws SpotifyError if bad
   await getAccessToken();
 
   const tracks: SpotifyTrack[] = [];
-  const seen = new Set<string>();
+  const seenIds = new Set<string>();
+  const seenNames = new Set<string>();
 
   for (const q of queries) {
     if (tracks.length >= limit) break;
     try {
-      const results = await searchTracks(q, 20);
+      const results = await searchTracks(q, 5);
       for (const t of results) {
-        if (!seen.has(t.id)) {
-          seen.add(t.id);
+        const nameKey = t.name.toLowerCase().trim();
+        if (t.id && !seenIds.has(t.id) && !seenNames.has(nameKey)) {
+          seenIds.add(t.id);
+          seenNames.add(nameKey);
           tracks.push(t);
         }
       }
-      await delay(120);
+      await delay(100);
     } catch (err) {
       console.warn(`[spotify] search failed for "${q}":`, (err as Error).message);
     }
