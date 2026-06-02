@@ -280,35 +280,38 @@ export async function getNewReleases(country = 'US', limit = 50): Promise<Spotif
   return result.albums.items;
 }
 
-/** Popular tracks via Top 50 chart playlist — falls back to new releases */
-export async function getPopularTracks(market: string, limit = 50): Promise<SpotifyTrack[]> {
-  const playlistId = TOP_CHART_PLAYLISTS[market] ?? TOP_CHART_PLAYLISTS['global'];
-  try {
-    const items = await getPlaylistTracks(playlistId);
-    return items
-      .filter((item): item is SpotifyPlaylistItem & { track: SpotifyTrack } =>
-        item.track !== null && item.track.id !== undefined
-      )
-      .map((item) => item.track)
-      .slice(0, limit);
-  } catch {
-    // Fallback: use new releases if playlist fetch fails
-    const albums = await getNewReleases(market, 10);
-    const tracks: SpotifyTrack[] = [];
-    for (const album of albums.slice(0, 5)) {
-      try {
-        const results = await searchTracks(
-          `artist:"${album.artists[0]?.name}" album:"${album.name}"`,
-          5,
-        );
-        tracks.push(...results);
-        await delay(150);
-      } catch {
-        // ignore
+/** Popular tracks via search — works reliably with client credentials */
+export async function getPopularTracks(_market: string, limit = 50): Promise<SpotifyTrack[]> {
+  const year = new Date().getFullYear();
+  const queries = [
+    `genre:pop year:${year}`,
+    `genre:hip-hop year:${year}`,
+    `genre:r-n-b year:${year}`,
+    `genre:latin year:${year}`,
+    `genre:dance year:${year}`,
+  ];
+
+  const tracks: SpotifyTrack[] = [];
+  const seen = new Set<string>();
+
+  for (const q of queries) {
+    if (tracks.length >= limit) break;
+    try {
+      const results = await searchTracks(q, 20);
+      for (const t of results) {
+        if (!seen.has(t.id)) {
+          seen.add(t.id);
+          tracks.push(t);
+        }
       }
+      await delay(120);
+    } catch {
+      // skip failed query
     }
-    return tracks.slice(0, limit);
   }
+
+  tracks.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0));
+  return tracks.slice(0, limit);
 }
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
