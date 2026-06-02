@@ -28,7 +28,7 @@ async function resolveLatestDate(
     `SELECT snapshot_date
        FROM airplay_track_chart_snapshots
       WHERE duration     = $1
-        AND country_code = $2
+        AND "countryCode" = $2
       ORDER BY snapshot_date DESC
       LIMIT 1`,
     duration,
@@ -147,7 +147,7 @@ export async function queryAirplayTrackChart(
     JOIN airplay_track_chart_rows r
       ON r.snapshot_id = s.id
     WHERE s.duration     = $1
-      AND s.country_code = $2
+      AND "countryCode" = $2
       AND s.snapshot_date = $3
       ${sinceClause}
       ${cityClause}
@@ -174,7 +174,7 @@ export async function queryAvailableAirplayDates(
     `SELECT DISTINCT snapshot_date
        FROM airplay_track_chart_snapshots
       WHERE duration     = $1
-        AND country_code = $2
+        AND "countryCode" = $2
       ORDER BY snapshot_date DESC`,
     duration,
     countryCode,
@@ -191,10 +191,10 @@ export async function queryAirplayCountries(): Promise<
   Array<{ code2: string; name: string }>
 > {
   return db.$queryRawUnsafe<Array<{ code2: string; name: string }>>(
-    `SELECT DISTINCT s.country_code AS code2,
-            COALESCE(c.name, s.country_code) AS name
+    `SELECT DISTINCT s."countryCode" AS code2,
+            COALESCE(c.name, s."countryCode") AS name
        FROM airplay_track_chart_snapshots s
-  LEFT JOIN countries c ON c.code2 = s.country_code
+  LEFT JOIN countries c ON c.code = s."countryCode"
       ORDER BY name ASC`,
   );
 }
@@ -215,7 +215,7 @@ export async function queryAirplayCities(
        FROM airplay_track_chart_rows r
        JOIN airplay_track_chart_snapshots s ON s.id = r.snapshot_id
        JOIN cities ci ON ci.id = r.city_id
-      WHERE s.country_code = $1
+      WHERE "countryCode" = $1
         AND r.city_id IS NOT NULL
       ORDER BY ci.name ASC`,
     countryCode,

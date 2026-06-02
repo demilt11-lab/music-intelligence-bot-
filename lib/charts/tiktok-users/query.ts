@@ -26,11 +26,10 @@ export async function queryTikTokUserChart(
   if (params.latest) {
     return db.$queryRaw<any[]>`
       WITH latest_snap AS (
-        SELECT id, date::text AS source_date
+        SELECT id, "snapshotDate"::text AS source_date
         FROM   tiktok_user_chart_snapshots
-        WHERE  chart_type = ${params.type}
-          AND  interval   = ${params.interval}
-        ORDER  BY date DESC
+        WHERE  "chartName" = ${params.type}
+        ORDER  BY "snapshotDate" DESC
         LIMIT  1
       )
       SELECT
@@ -51,10 +50,10 @@ export async function queryTikTokUserChart(
         s.source_date,
         -- External TikTok user IDs as JSON array
         (
-          SELECT COALESCE(json_agg(e.external_id ORDER BY e.id), '[]'::json)
+          SELECT COALESCE(json_agg(e."externalId" ORDER BY e.id), '[]'::json)
           FROM   external_ids e
-          WHERE  e.canonical_id = r.creator_id
-            AND  e.entity_type  = 'tiktok_user'
+          WHERE  e."entityId" = r.creator_id
+            AND  e."entityType"  = 'tiktok_user'
         )::text                 AS external_ids_json,
         -- Rank history
         (
@@ -93,13 +92,13 @@ export async function queryTikTokUserChart(
       r.metric_value::text    AS metric_value,
       r.likes::text           AS likes,
       r.followers::text       AS followers,
-      s.date::text            AS source_date,
+      s."snapshotDate"::text  AS source_date,
       -- External TikTok user IDs as JSON array
       (
-        SELECT COALESCE(json_agg(e.external_id ORDER BY e.id), '[]'::json)
+        SELECT COALESCE(json_agg(e."externalId" ORDER BY e.id), '[]'::json)
         FROM   external_ids e
-        WHERE  e.canonical_id = r.creator_id
-          AND  e.entity_type  = 'tiktok_user'
+        WHERE  e."entityId" = r.creator_id
+          AND  e."entityType"  = 'tiktok_user'
       )::text                 AS external_ids_json,
       -- Rank history
       (
@@ -116,9 +115,8 @@ export async function queryTikTokUserChart(
       )::text                 AS rank_stats_json
     FROM   tiktok_user_chart_rows      r
     JOIN   tiktok_user_chart_snapshots s ON s.id = r.snapshot_id
-    WHERE  s.chart_type = ${params.type}
-      AND  s.interval   = ${params.interval}
-      AND  s.date       = ${params.date!}::date
+    WHERE  s."chartName"    = ${params.type}
+      AND  s."snapshotDate" = ${params.date!}::date
     ORDER  BY r.rank ASC
     LIMIT  ${params.limit}
     OFFSET ${params.offset}
@@ -136,10 +134,10 @@ export async function queryAvailableTikTokUserDates(
   type: TikTokUserChartType,
 ): Promise<string[]> {
   const rows = await db.$queryRaw<Array<{ date: string }>>`
-    SELECT DISTINCT date::text AS date
+    SELECT DISTINCT "snapshotDate"::text AS date
     FROM   tiktok_user_chart_snapshots
-    WHERE  chart_type = ${type}
-    ORDER  BY date DESC
+    WHERE  "chartName" = ${type}
+    ORDER  BY "snapshotDate" DESC
   `;
   return rows.map((r) => r.date);
 }

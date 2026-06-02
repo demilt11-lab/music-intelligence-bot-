@@ -73,7 +73,7 @@ async function queryCountryRatios(params: BroadcastMarketsParams): Promise<any[]
     FROM country_plays cp
     CROSS JOIN grand_total gt
     LEFT JOIN radio_country_markets rcm ON rcm.code2 = cp.code2
-    LEFT JOIN countries c ON c.code2 = cp.code2
+    LEFT JOIN countries c ON c.code = cp.code2
     ORDER BY cp.market_count_data DESC
   `;
 }

@@ -8,107 +8,155 @@ export type TalentScoutTrack = {
   artists: string[];
   code2: string | null;
 
-  // TikTok
-  tiktokScore: number; // e.g. normalized rank / velocity
+  tiktokScore: number;
   tiktokViews: bigint | string;
   tiktokLikes: bigint | string;
   tiktokVelocity: number;
 
-  // Internal streaming (Spotify / others)
   spotifyStreamsLatest: string | null;
   spotifyPopularity: number | null;
 
-  // Luminate
   luminateStreamsLatest: string | null;
-  luminateAudienceLatest: string | null; // from airplay
+  luminateAudienceLatest: string | null;
   luminateSpinsLatest: string | null;
 
-  // Proprietary
   viralScore: number | null;
   rightsComplexityScore: number | null;
 };
 
-type DateRange = {
-  since: string;
-  until: string;
-};
-
-// Pull top TikTok breakout tracks for a given date/country (or GLOBAL)
 export async function fetchTopTiktokBreakoutTracks(opts: {
   date?: string;
-  code2?: string; // ISO code2 or GLOBAL
+  code2?: string;
   limit?: number;
 }): Promise<TalentScoutTrack[]> {
   const limit = opts.limit ?? 50;
   const code2 = opts.code2 ?? 'GLOBAL';
+  const dateFilter = opts.date ? { lte: new Date(opts.date) } : undefined;
 
-  // Find the most recent TikTok typed chart snapshot on or before the requested date
-  const snapshotWhere = opts.date
-    ? { snapshotDate: { lte: new Date(opts.date) } }
-    : {};
+  console.log(`[scout-sources] fetchTopTiktokBreakoutTracks code2=${code2} limit=${limit} date=${opts.date ?? 'latest'}`);
 
-  const snapshot = await db.tiktokTypedTrackChartSnapshot.findFirst({
-    where: snapshotWhere,
-    orderBy: { snapshotDate: 'desc' },
-  });
+  // ── Tier 1: UGC metrics (TikTok API data) ──
+  const resolvedCode2 = code2 === 'GLOBAL' ? 'GLOBAL' : (
+    await db.ugcTrackMetrics.findFirst({
+      where: { code2, ...(dateFilter ? { date: dateFilter } : {}) },
+      select: { code2: true },
+    })
+  )?.code2 ?? 'GLOBAL';
 
-  if (!snapshot) return [];
-
-  const rows = await db.tiktokTypedTrackChartRow.findMany({
-    where: { snapshotId: snapshot.id, trackId: { not: null } },
-    orderBy: { rank: 'asc' },
-    take: limit,
-  });
-
-  const trackIds = rows.map((r) => r.trackId!).filter(Boolean) as number[];
-  if (!trackIds.length) return [];
-
-  // Load UGC metrics for velocity data
-  const ugcRows = await db.ugcTrackMetrics.findMany({
-    where: {
-      trackId: { in: trackIds },
-      code2: code2 === 'GLOBAL' ? undefined : code2,
-    },
+  const latestUgc = await db.ugcTrackMetrics.findFirst({
+    where: { code2: resolvedCode2, ...(dateFilter ? { date: dateFilter } : {}) },
     orderBy: { date: 'desc' },
+    select: { date: true },
   });
-  const ugcByTrack = new Map<number, typeof ugcRows[number]>();
-  for (const r of ugcRows) {
-    if (!ugcByTrack.has(r.trackId)) ugcByTrack.set(r.trackId, r);
+
+  console.log(`[scout-sources] Tier1 latestUgc=${latestUgc?.date ?? 'null'}`);
+  if (latestUgc) {
+    const ugcRows = await db.ugcTrackMetrics.findMany({
+      where: { date: latestUgc.date, code2: resolvedCode2, views7d: { gt: 0 } },
+      orderBy: { views7d: 'desc' },
+      take: limit,
+    });
+    if (ugcRows.length) {
+      const trackById = await loadTrackMeta(ugcRows.map((r) => r.trackId));
+      return ugcRows.map((ugc, i) => {
+        const info = trackById.get(ugc.trackId);
+        return {
+          trackId: ugc.trackId,
+          name: info?.name ?? 'Unknown',
+          artists: info?.artists ?? [],
+          code2: code2 === 'GLOBAL' ? null : code2,
+          tiktokScore: computeTiktokScore({ rank: i + 1, views: ugc.views7d, velocity: ugc.views7dGrowth }),
+          tiktokViews: ugc.views7d,
+          tiktokLikes: BigInt(0),
+          tiktokVelocity: ugc.views7dGrowth,
+          spotifyStreamsLatest: null,
+          spotifyPopularity: null,
+          luminateStreamsLatest: null,
+          luminateAudienceLatest: null,
+          luminateSpinsLatest: null,
+          viralScore: null,
+          rightsComplexityScore: null,
+        };
+      });
+    }
   }
 
-  // Join to canonical tracks and basic metadata
-  const tracks = await db.track.findMany({
-    where: { id: { in: trackIds } },
-    include: {
-      trackArtists: {
-        include: { artist: true },
-      },
+  // ── Tier 2: talent_scout_scores from ETL ──
+  console.log('[scout-sources] Tier1 empty, trying Tier2 (talentScoutScore)...');
+  const scoreCode2 = code2 === 'GLOBAL' ? 'GLOBAL' : code2;
+  const latestScore = await db.talentScoutScore.findFirst({
+    where: {
+      code2: { in: [scoreCode2, 'GLOBAL'] },
+      ...(dateFilter ? { date: dateFilter } : {}),
     },
+    orderBy: { date: 'desc' },
+    select: { date: true, code2: true },
   });
 
-  const trackById = new Map(
-    tracks.map((t) => [
-      t.id,
-      {
-        name: t.title,
-        artists: t.trackArtists.map((ta) => ta.artist.name),
-      },
-    ]),
-  );
+  console.log(`[scout-sources] Tier2 latestScore=${latestScore?.date ?? 'null'} code2=${latestScore?.code2 ?? 'null'}`);
+  if (latestScore) {
+    const scoreRows = await db.talentScoutScore.findMany({
+      where: { date: latestScore.date, code2: latestScore.code2 },
+      orderBy: { viralScore: 'desc' },
+      take: limit,
+    });
+    if (scoreRows.length) {
+      const trackById = await loadTrackMeta(scoreRows.map((r) => r.trackId));
+      return scoreRows.map((s, i) => {
+        const info = trackById.get(s.trackId);
+        return {
+          trackId: s.trackId,
+          name: info?.name ?? 'Unknown',
+          artists: info?.artists ?? [],
+          code2: latestScore.code2 === 'GLOBAL' ? null : latestScore.code2,
+          tiktokScore: s.viralScore * Math.max(0, 1 - i / scoreRows.length),
+          tiktokViews: BigInt(0),
+          tiktokLikes: BigInt(0),
+          tiktokVelocity: 0,
+          spotifyStreamsLatest: null,
+          spotifyPopularity: null,
+          luminateStreamsLatest: null,
+          luminateAudienceLatest: null,
+          luminateSpinsLatest: null,
+          viralScore: s.viralScore,
+          rightsComplexityScore: s.rightsComplexityScore,
+        };
+      });
+    }
+  }
 
-  return rows.map((row) => {
-    const tid = row.trackId!;
-    const info = trackById.get(tid);
-    const ugc = ugcByTrack.get(tid);
+  // ── Tier 3: raw chart_rows from Spotify ingest ──
+  console.log('[scout-sources] Tier2 empty, trying Tier3 (chart_rows)...');
+  const chartTracks = await db.$queryRaw<
+    { trackId: number; rank: number; countryCode: string | null }[]
+  >`
+    SELECT DISTINCT ON (cr."trackId")
+      cr."trackId",
+      cr.rank,
+      cs."countryCode"
+    FROM chart_rows cr
+    JOIN chart_snapshots cs ON cs.id = cr."snapshotId"
+    WHERE cs.platform = 'spotify'
+    ORDER BY cr."trackId", cs."snapshotDate" DESC, cr.rank ASC
+    LIMIT ${limit}
+  `;
+
+  console.log(`[scout-sources] Tier3 chartTracks.length=${chartTracks.length}`);
+  if (!chartTracks.length) return [];
+
+  const trackById = await loadTrackMeta(chartTracks.map((r) => r.trackId));
+
+  return chartTracks.map((r) => {
+    const info = trackById.get(r.trackId);
     return {
-      trackId: tid,
+      trackId: r.trackId,
       name: info?.name ?? 'Unknown',
       artists: info?.artists ?? [],
-      code2: code2 === 'GLOBAL' ? null : code2,
-      tiktokScore: computeTiktokScore({ rank: row.rank, views: row.views, velocity: ugc?.views7dGrowth ?? null }),
-      tiktokViews: row.views ?? BigInt(0),
+      code2: r.countryCode,
+      tiktokScore: Math.max(0, 1 - r.rank / 100),
+      tiktokViews: BigInt(0),
       tiktokLikes: BigInt(0),
-      tiktokVelocity: ugc?.views7dGrowth ?? 0,
+      tiktokVelocity: 0,
       spotifyStreamsLatest: null,
       spotifyPopularity: null,
       luminateStreamsLatest: null,
@@ -118,6 +166,18 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
       rightsComplexityScore: null,
     };
   });
+}
+
+async function loadTrackMeta(trackIds: number[]) {
+  if (!trackIds.length) return new Map<number, { name: string; artists: string[] }>();
+  const tracks = await db.track.findMany({
+    where: { id: { in: trackIds } },
+    include: { trackArtists: { include: { artist: true } } },
+  });
+  return new Map(tracks.map((t) => [t.id, {
+    name: t.title,
+    artists: t.trackArtists.map((ta) => ta.artist.name),
+  }]));
 }
 
 function computeTiktokScore(row: {
@@ -131,18 +191,12 @@ function computeTiktokScore(row: {
   return rankComponent * 0.5 + velocityComponent * 0.3 + viewsComponent * 0.2;
 }
 
-// Fetch latest internal Spotify stats for a set of tracks
 export async function hydrateInternalStreaming(
   tracks: TalentScoutTrack[],
 ): Promise<TalentScoutTrack[]> {
-  const trackIds = tracks.map((t) => t.trackId);
-
-  // No track_platform_stats_latest table; return tracks unchanged
-  void trackIds;
   return tracks;
 }
 
-// Fetch latest Luminate streams / airplay (using new tables)
 export async function hydrateLuminateMetrics(
   tracks: TalentScoutTrack[],
 ): Promise<TalentScoutTrack[]> {
@@ -150,10 +204,7 @@ export async function hydrateLuminateMetrics(
 
   const luminateStreams = await db.luminateStream.groupBy({
     by: ['entityId'],
-    where: {
-      entityType: 'track',
-      entityId: { in: trackIds },
-    },
+    where: { entityType: 'track', entityId: { in: trackIds } },
     _max: { date: true },
   });
 
@@ -161,10 +212,7 @@ export async function hydrateLuminateMetrics(
   luminateStreams.forEach((g) => latestByTrack.set(g.entityId, g._max.date!));
 
   const streamRows = await db.luminateStream.findMany({
-    where: {
-      entityType: 'track',
-      entityId: { in: trackIds },
-    },
+    where: { entityType: 'track', entityId: { in: trackIds } },
   });
 
   const latestStreamByTrack = new Map<number, string>();
@@ -176,36 +224,23 @@ export async function hydrateLuminateMetrics(
   }
 
   const airplayRows = await db.luminateAirplay.findMany({
-    where: {
-      entityType: 'track',
-      entityId: { in: trackIds },
-    },
+    where: { entityType: 'track', entityId: { in: trackIds } },
   });
 
-  const latestAirplayByTrack = new Map<
-    number,
-    { audience: string | null; spins: string | null }
-  >();
+  const latestAirplayByTrack = new Map<number, { audience: string | null; spins: string | null }>();
   for (const r of airplayRows) {
     const prev = latestAirplayByTrack.get(r.entityId);
     if (!prev || r.date > (prev as any).date) {
-      latestAirplayByTrack.set(r.entityId, {
-        audience: r.audience,
-        spins: r.spins,
-      });
+      latestAirplayByTrack.set(r.entityId, { audience: r.audience, spins: r.spins });
     }
   }
 
-  return tracks.map((t) => {
-    const streams = latestStreamByTrack.get(t.trackId) ?? null;
-    const airplay = latestAirplayByTrack.get(t.trackId);
-    return {
-      ...t,
-      luminateStreamsLatest: streams,
-      luminateAudienceLatest: airplay?.audience ?? null,
-      luminateSpinsLatest: airplay?.spins ?? null,
-    };
-  });
+  return tracks.map((t) => ({
+    ...t,
+    luminateStreamsLatest: latestStreamByTrack.get(t.trackId) ?? null,
+    luminateAudienceLatest: latestAirplayByTrack.get(t.trackId)?.audience ?? null,
+    luminateSpinsLatest: latestAirplayByTrack.get(t.trackId)?.spins ?? null,
+  }));
 }
 
 export async function hydrateMlSignals(
@@ -215,10 +250,7 @@ export async function hydrateMlSignals(
   if (!tracks.length) return tracks;
   const trackIds = tracks.map((t) => t.trackId);
 
-  // Use provided date, or fallback to today (UTC)
-  const referenceDate =
-    date ??
-    new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const referenceDate = date ?? new Date().toISOString().slice(0, 10);
   const refDateStart = new Date(referenceDate);
   const refDateEnd = new Date(referenceDate);
   refDateEnd.setUTCDate(refDateEnd.getUTCDate() + 1);
@@ -226,10 +258,7 @@ export async function hydrateMlSignals(
   const mlRows = await db.talentScoutScore.findMany({
     where: {
       trackId: { in: trackIds },
-      date: {
-        gte: refDateStart,
-        lt: refDateEnd,
-      },
+      date: { gte: refDateStart, lt: refDateEnd },
     },
   });
 

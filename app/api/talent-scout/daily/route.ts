@@ -11,12 +11,21 @@ export async function GET(req: NextRequest) {
     const limit = Number(searchParams.get('limit') ?? '50');
     const mode = (searchParams.get('mode') ?? 'ugc_early') as 'ugc_early' | 'general';
 
+    // Debug: count rows in key tables
+    const { db } = await import('@/lib/db');
+    const trackCount = await db.track.count();
+    const chartRowCount = await db.chartRow.count();
+    const scoreCount = await db.talentScoutScore.count();
+    console.log(`[talent-scout-daily] DB counts: tracks=${trackCount}, chartRows=${chartRowCount}, scores=${scoreCount}`);
+
     let tracks = await ScoutSources.fetchTopTiktokBreakoutTracks({ date, code2, limit });
+    console.log(`[talent-scout-daily] fetchTopTiktokBreakoutTracks returned ${tracks.length} tracks for code2=${code2}`);
     tracks = await ScoutSources.hydrateInternalStreaming(tracks);
     tracks = await ScoutSources.hydrateLuminateMetrics(tracks);
     tracks = await ScoutSources.hydrateMlSignals(tracks, date);
 
     const ranked = ScoutScore.rankTalentTracks(tracks, mode);
+    console.log(`[talent-scout-daily] ranked ${ranked.length} tracks`);
 
     return NextResponse.json({
       obj: ranked,
