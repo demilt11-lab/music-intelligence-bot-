@@ -18,7 +18,15 @@ export async function GET(req: NextRequest) {
     const scoreCount = await db.talentScoutScore.count();
     console.log(`[talent-scout-daily] DB counts: tracks=${trackCount}, chartRows=${chartRowCount}, scores=${scoreCount}`);
 
-    let tracks = await ScoutSources.fetchTopTiktokBreakoutTracks({ date, code2, limit });
+    let tracks: Awaited<ReturnType<typeof ScoutSources.fetchTopTiktokBreakoutTracks>>;
+    let tier4Error: string | undefined;
+    try {
+      tracks = await ScoutSources.fetchTopTiktokBreakoutTracks({ date, code2, limit });
+    } catch (err: any) {
+      tier4Error = err.message ?? String(err);
+      console.error('[talent-scout-daily] fetchTopTiktokBreakoutTracks threw:', tier4Error);
+      tracks = [];
+    }
     console.log(`[talent-scout-daily] fetchTopTiktokBreakoutTracks returned ${tracks.length} tracks for code2=${code2}`);
     tracks = await ScoutSources.hydrateInternalStreaming(tracks);
     tracks = await ScoutSources.hydrateLuminateMetrics(tracks);
@@ -35,6 +43,7 @@ export async function GET(req: NextRequest) {
         limit,
         mode,
         dbCounts: { tracks: trackCount, chartRows: chartRowCount, scores: scoreCount },
+        tier4Error,
         description:
           'NOV8TE proprietary daily UGC trend-spotting list combining internal ML, UGC, streaming, and Luminate metrics.',
       },

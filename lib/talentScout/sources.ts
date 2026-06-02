@@ -169,31 +169,26 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
 
   // ── Tier 4: live Spotify API (no DB required) ──
   console.log('[scout-sources] Tier3 empty, falling back to live Spotify Top 50...');
-  try {
-    const market = code2 === 'GLOBAL' ? 'global' : code2;
-    const spotifyTracks = await getPopularTracks(market, limit);
-    console.log(`[scout-sources] Tier4 Spotify returned ${spotifyTracks.length} tracks`);
-    return spotifyTracks.map((t, i) => ({
-      trackId: -(i + 1), // negative sentinel — not in DB yet
-      name: t.name,
-      artists: t.artists.map((a) => a.name),
-      code2: code2 === 'GLOBAL' ? null : code2,
-      tiktokScore: Math.max(0, 1 - i / spotifyTracks.length),
-      tiktokViews: '0',
-      tiktokLikes: '0',
-      tiktokVelocity: 0,
-      spotifyStreamsLatest: null,
-      spotifyPopularity: t.popularity ?? null,
-      luminateStreamsLatest: null,
-      luminateAudienceLatest: null,
-      luminateSpinsLatest: null,
-      viralScore: null,
-      rightsComplexityScore: null,
-    }));
-  } catch (err) {
-    console.warn('[scout-sources] Tier4 Spotify live fetch failed:', (err as Error).message);
-    return [];
-  }
+  const market = code2 === 'GLOBAL' ? 'global' : code2;
+  const spotifyTracks = await getPopularTracks(market, limit);
+  console.log(`[scout-sources] Tier4 Spotify returned ${spotifyTracks.length} tracks`);
+  return spotifyTracks.map((t, i) => ({
+    trackId: -(i + 1), // negative sentinel — not in DB yet
+    name: t.name,
+    artists: t.artists.map((a) => a.name),
+    code2: code2 === 'GLOBAL' ? null : code2,
+    tiktokScore: Math.max(0, 1 - i / spotifyTracks.length),
+    tiktokViews: '0',
+    tiktokLikes: '0',
+    tiktokVelocity: 0,
+    spotifyStreamsLatest: null,
+    spotifyPopularity: t.popularity ?? null,
+    luminateStreamsLatest: null,
+    luminateAudienceLatest: null,
+    luminateSpinsLatest: null,
+    viralScore: null,
+    rightsComplexityScore: null,
+  }));
 }
 
 async function loadTrackMeta(trackIds: number[]) {
