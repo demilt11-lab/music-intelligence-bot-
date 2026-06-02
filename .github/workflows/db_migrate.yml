@@ -20,8 +20,8 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Deploy migrations
-        run: npx prisma migrate deploy
+      - name: Push schema to database
+        run: npx prisma db push --accept-data-loss
         env:
-          DATABASE_URL: ${{ secrets.DIRECT_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DATABASE_URL }}
