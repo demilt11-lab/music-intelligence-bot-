@@ -11,7 +11,6 @@
  * - 2000ms delay between Google Trends calls to avoid rate limiting
  */
 
-import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { getInterestOverTime, getRisingQueries } from "@/lib/googletrends/client";
 

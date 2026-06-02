@@ -18,7 +18,6 @@
  * location for chart signals.
  */
 
-import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { getShazamCharts, ShazamChartTrack } from "@/lib/shazam/client";
 

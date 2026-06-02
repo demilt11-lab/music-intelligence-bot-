@@ -1,5 +1,4 @@
 // jobs/etl/track_trend_labels.ts
-import "dotenv/config";
 import { db } from "@/lib/db";
 
 type TrackAggKey = {

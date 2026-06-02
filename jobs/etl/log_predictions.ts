@@ -1,5 +1,4 @@
 // jobs/etl/log_predictions.ts
-import "dotenv/config";
 import { db } from "@/lib/db";
 
 /**

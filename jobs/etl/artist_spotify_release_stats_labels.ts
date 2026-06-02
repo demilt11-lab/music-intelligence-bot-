@@ -1,5 +1,4 @@
 // jobs/etl/artist_spotify_release_stats_labels.ts
-import "dotenv/config";
 import { db } from "@/lib/db";
 
 export async function labelArtistSpotifyReleaseStats(
