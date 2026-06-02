@@ -10,8 +10,9 @@ type TalentScoutTrack = {
   artists: string[];
   code2: string | null;
   totalScore: number;
-  tiktokVideos7d: number;
-  tiktokVideos7dGrowth: number;
+  tiktokViews: string | number;
+  tiktokVelocity: number;
+  spotifyPopularity: number | null;
   spotifyStreamsLatest: string | null;
   luminateStreamsLatest: string | null;
   actions: {
@@ -90,21 +91,23 @@ export function DailyTalentScout() {
     },
     {
       key: 'ugc',
-      header: 'UGC (7d)',
-      render: (row: TalentScoutTrack) => (
-        <div className="text-xs">
-          <span className="font-medium text-slate-50">
-            {row.tiktokVideos7d.toLocaleString()} videos
-          </span>
-          <span
-            className={`ml-1 ${
-              row.tiktokVideos7dGrowth > 0 ? 'text-emerald-400' : 'text-slate-400'
-            }`}
-          >
-            {row.tiktokVideos7dGrowth.toFixed(1)}%
-          </span>
-        </div>
-      ),
+      header: 'TikTok Views',
+      render: (row: TalentScoutTrack) => {
+        const views = Number(row.tiktokViews ?? 0);
+        const velocity = row.tiktokVelocity ?? 0;
+        return (
+          <div className="text-xs">
+            <span className="font-medium text-slate-50">
+              {views > 0 ? views.toLocaleString() : '—'}
+            </span>
+            {velocity !== 0 && (
+              <span className={`ml-1 ${velocity > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
+                {velocity > 0 ? '+' : ''}{velocity.toFixed(1)}%
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'streams',
@@ -112,7 +115,9 @@ export function DailyTalentScout() {
       render: (row: TalentScoutTrack) => {
         const spotify = row.spotifyStreamsLatest
           ? Number(row.spotifyStreamsLatest).toLocaleString()
-          : '—';
+          : row.spotifyPopularity != null
+            ? `Pop: ${row.spotifyPopularity}`
+            : '—';
         const luminate = row.luminateStreamsLatest
           ? Number(row.luminateStreamsLatest).toLocaleString()
           : '—';

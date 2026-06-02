@@ -1,6 +1,7 @@
 // lib/talentScout/sources.ts
 
 import { db } from '@/lib/db';
+import { getPopularTracks } from '@/lib/spotify/client';
 
 export type TalentScoutTrack = {
   trackId: number;
@@ -142,30 +143,57 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   `;
 
   console.log(`[scout-sources] Tier3 chartTracks.length=${chartTracks.length}`);
-  if (!chartTracks.length) return [];
+  if (chartTracks.length) {
+    const trackById = await loadTrackMeta(chartTracks.map((r) => r.trackId));
+    return chartTracks.map((r) => {
+      const info = trackById.get(r.trackId);
+      return {
+        trackId: r.trackId,
+        name: info?.name ?? 'Unknown',
+        artists: info?.artists ?? [],
+        code2: r.countryCode,
+        tiktokScore: Math.max(0, 1 - r.rank / 100),
+        tiktokViews: BigInt(0),
+        tiktokLikes: BigInt(0),
+        tiktokVelocity: 0,
+        spotifyStreamsLatest: null,
+        spotifyPopularity: null,
+        luminateStreamsLatest: null,
+        luminateAudienceLatest: null,
+        luminateSpinsLatest: null,
+        viralScore: null,
+        rightsComplexityScore: null,
+      };
+    });
+  }
 
-  const trackById = await loadTrackMeta(chartTracks.map((r) => r.trackId));
-
-  return chartTracks.map((r) => {
-    const info = trackById.get(r.trackId);
-    return {
-      trackId: r.trackId,
-      name: info?.name ?? 'Unknown',
-      artists: info?.artists ?? [],
-      code2: r.countryCode,
-      tiktokScore: Math.max(0, 1 - r.rank / 100),
+  // ── Tier 4: live Spotify API (no DB required) ──
+  console.log('[scout-sources] Tier3 empty, falling back to live Spotify Top 50...');
+  try {
+    const market = code2 === 'GLOBAL' ? 'global' : code2;
+    const spotifyTracks = await getPopularTracks(market, limit);
+    console.log(`[scout-sources] Tier4 Spotify returned ${spotifyTracks.length} tracks`);
+    return spotifyTracks.map((t, i) => ({
+      trackId: -(i + 1), // negative sentinel — not in DB yet
+      name: t.name,
+      artists: t.artists.map((a) => a.name),
+      code2: code2 === 'GLOBAL' ? null : code2,
+      tiktokScore: Math.max(0, 1 - i / spotifyTracks.length),
       tiktokViews: BigInt(0),
       tiktokLikes: BigInt(0),
       tiktokVelocity: 0,
       spotifyStreamsLatest: null,
-      spotifyPopularity: null,
+      spotifyPopularity: t.popularity ?? null,
       luminateStreamsLatest: null,
       luminateAudienceLatest: null,
       luminateSpinsLatest: null,
       viralScore: null,
       rightsComplexityScore: null,
-    };
-  });
+    }));
+  } catch (err) {
+    console.warn('[scout-sources] Tier4 Spotify live fetch failed:', (err as Error).message);
+    return [];
+  }
 }
 
 async function loadTrackMeta(trackIds: number[]) {
