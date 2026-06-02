@@ -44,11 +44,11 @@ async function computeAccelerationScores(
   >(
     `
     SELECT
-      track_id,
+      "trackId" AS track_id,
       SUM(views7d) AS views7d
     FROM ugc_track_metrics
     WHERE date BETWEEN $1::date AND $2::date
-    GROUP BY track_id
+    GROUP BY "trackId"
     `,
     day7.toISOString().slice(0, 10),
     today.toISOString().slice(0, 10),
@@ -60,11 +60,11 @@ async function computeAccelerationScores(
   >(
     `
     SELECT
-      track_id,
+      "trackId" AS track_id,
       SUM(views7d) AS views7d
     FROM ugc_track_metrics
     WHERE date BETWEEN $1::date AND $2::date
-    GROUP BY track_id
+    GROUP BY "trackId"
     `,
     day14.toISOString().slice(0, 10),
     day7.toISOString().slice(0, 10),
@@ -76,11 +76,11 @@ async function computeAccelerationScores(
   >(
     `
     SELECT
-      track_id,
+      "trackId" AS track_id,
       SUM(views7d) AS views7d
     FROM ugc_track_metrics
     WHERE date BETWEEN $1::date AND $2::date
-    GROUP BY track_id
+    GROUP BY "trackId"
     `,
     day21.toISOString().slice(0, 10),
     day14.toISOString().slice(0, 10),
@@ -187,13 +187,13 @@ async function computeGeographicDiffusion(
   >(
     `
     SELECT
-      cr.track_id,
-      COUNT(DISTINCT cs.country_code) AS market_count
+      cr."trackId" AS track_id,
+      COUNT(DISTINCT cs."countryCode") AS market_count
     FROM chart_rows cr
-    JOIN chart_snapshots cs ON cs.id = cr.snapshot_id
-    WHERE cs.snapshot_date BETWEEN $1::date AND $2::date
-      AND cs.country_code IS NOT NULL
-    GROUP BY cr.track_id
+    JOIN chart_snapshots cs ON cs.id = cr."snapshotId"
+    WHERE cs."snapshotDate" BETWEEN $1::date AND $2::date
+      AND cs."countryCode" IS NOT NULL
+    GROUP BY cr."trackId"
     `,
     day7.toISOString().slice(0, 10),
     today.toISOString().slice(0, 10),
@@ -205,13 +205,13 @@ async function computeGeographicDiffusion(
   >(
     `
     SELECT
-      cr.track_id,
-      COUNT(DISTINCT cs.country_code) AS market_count
+      cr."trackId" AS track_id,
+      COUNT(DISTINCT cs."countryCode") AS market_count
     FROM chart_rows cr
-    JOIN chart_snapshots cs ON cs.id = cr.snapshot_id
-    WHERE cs.snapshot_date BETWEEN $1::date AND $2::date
-      AND cs.country_code IS NOT NULL
-    GROUP BY cr.track_id
+    JOIN chart_snapshots cs ON cs.id = cr."snapshotId"
+    WHERE cs."snapshotDate" BETWEEN $1::date AND $2::date
+      AND cs."countryCode" IS NOT NULL
+    GROUP BY cr."trackId"
     `,
     day14.toISOString().slice(0, 10),
     day7.toISOString().slice(0, 10),
@@ -222,13 +222,13 @@ async function computeGeographicDiffusion(
     { track_id: number; origin_market: string }[]
   >(
     `
-    SELECT DISTINCT ON (cr.track_id)
-      cr.track_id,
-      cs.country_code AS origin_market
+    SELECT DISTINCT ON (cr."trackId")
+      cr."trackId" AS track_id,
+      cs."countryCode" AS origin_market
     FROM chart_rows cr
-    JOIN chart_snapshots cs ON cs.id = cr.snapshot_id
-    WHERE cs.country_code IS NOT NULL
-    ORDER BY cr.track_id, cs.snapshot_date ASC
+    JOIN chart_snapshots cs ON cs.id = cr."snapshotId"
+    WHERE cs."countryCode" IS NOT NULL
+    ORDER BY cr."trackId", cs."snapshotDate" ASC
     `,
   );
 
@@ -301,11 +301,11 @@ async function computeOrganicSignals(
   >(
     `
     SELECT
-      track_id,
+      "trackId" AS track_id,
       SUM(videos7d) AS videos7d
     FROM ugc_track_metrics
     WHERE date BETWEEN $1::date AND $2::date
-    GROUP BY track_id
+    GROUP BY "trackId"
     `,
     day7.toISOString().slice(0, 10),
     today.toISOString().slice(0, 10),
@@ -317,13 +317,13 @@ async function computeOrganicSignals(
   >(
     `
     SELECT
-      ttcr.track_id,
+      ttcr."trackId" AS track_id,
       MIN(ttcr.rank) AS min_rank
     FROM tiktok_typed_track_chart_rows ttcr
-    JOIN tiktok_typed_track_chart_snapshots ttcs ON ttcs.id = ttcr.snapshot_id
-    WHERE ttcs.snapshot_date BETWEEN $1::date AND $2::date
-      AND ttcr.track_id IS NOT NULL
-    GROUP BY ttcr.track_id
+    JOIN tiktok_typed_track_chart_snapshots ttcs ON ttcs.id = ttcr."snapshotId"
+    WHERE ttcs."snapshotDate" BETWEEN $1::date AND $2::date
+      AND ttcr."trackId" IS NOT NULL
+    GROUP BY ttcr."trackId"
     `,
     day7.toISOString().slice(0, 10),
     today.toISOString().slice(0, 10),
@@ -335,12 +335,12 @@ async function computeOrganicSignals(
   >(
     `
     SELECT
-      cr.track_id,
-      MAX(cr.weeks_on_chart) AS weeks_on_chart
+      cr."trackId" AS track_id,
+      MAX(cr."weeksOnChart") AS weeks_on_chart
     FROM chart_rows cr
-    JOIN chart_snapshots cs ON cs.id = cr.snapshot_id
-    WHERE cs.snapshot_date BETWEEN $1::date AND $2::date
-    GROUP BY cr.track_id
+    JOIN chart_snapshots cs ON cs.id = cr."snapshotId"
+    WHERE cs."snapshotDate" BETWEEN $1::date AND $2::date
+    GROUP BY cr."trackId"
     `,
     day7.toISOString().slice(0, 10),
     today.toISOString().slice(0, 10),
@@ -455,12 +455,12 @@ async function fetchPlatformSignals(
   >(
     `
     SELECT
-      track_id,
+      "trackId" AS track_id,
       code2,
       SUM(views7d) AS views7d
     FROM ugc_track_metrics
     WHERE date BETWEEN $1::date AND $2::date
-    GROUP BY track_id, code2
+    GROUP BY "trackId", code2
     `,
     day7.toISOString().slice(0, 10),
     today.toISOString().slice(0, 10),
@@ -472,14 +472,14 @@ async function fetchPlatformSignals(
   >(
     `
     SELECT
-      tpsd.track_id,
+      tpsd."trackId" AS track_id,
       COALESCE(tpsd.platform, 'GLOBAL') AS code2,
-      SUM(tpsd.video_views) AS video_views7d
+      SUM(tpsd."videoViews") AS video_views7d
     FROM track_platform_stats_daily tpsd
     WHERE tpsd.date BETWEEN $1::date AND $2::date
       AND tpsd.platform = 'instagram'
-      AND tpsd.video_views IS NOT NULL
-    GROUP BY tpsd.track_id, tpsd.platform
+      AND tpsd."videoViews" IS NOT NULL
+    GROUP BY tpsd."trackId", tpsd.platform
     `,
     day7.toISOString().slice(0, 10),
     today.toISOString().slice(0, 10),
@@ -497,15 +497,15 @@ async function fetchPlatformSignals(
   >(
     `
     SELECT
-      cr.track_id,
-      COALESCE(cs.country_code, 'GLOBAL') AS code2,
+      cr."trackId" AS track_id,
+      COALESCE(cs."countryCode", 'GLOBAL') AS code2,
       AVG(cr.rank)          AS avg_rank,
       MIN(cr.rank)          AS min_rank,
-      MAX(cr.weeks_on_chart) AS weeks_on_chart
+      MAX(cr."weeksOnChart") AS weeks_on_chart
     FROM chart_rows cr
-    JOIN chart_snapshots cs ON cs.id = cr.snapshot_id
-    WHERE cs.snapshot_date BETWEEN $1::date AND $2::date
-    GROUP BY cr.track_id, cs.country_code
+    JOIN chart_snapshots cs ON cs.id = cr."snapshotId"
+    WHERE cs."snapshotDate" BETWEEN $1::date AND $2::date
+    GROUP BY cr."trackId", cs."countryCode"
     `,
     day7.toISOString().slice(0, 10),
     today.toISOString().slice(0, 10),
@@ -517,12 +517,12 @@ async function fetchPlatformSignals(
   >(
     `
     SELECT
-      track_id,
+      "trackId" AS track_id,
       COUNT(*) AS adds7d
     FROM playlist_membership_events
-    WHERE event_date BETWEEN $1::date AND $2::date
-      AND event_type = 'added'
-    GROUP BY track_id
+    WHERE "eventDate" BETWEEN $1::date AND $2::date
+      AND "eventType" = 'added'
+    GROUP BY "trackId"
     `,
     day7.toISOString().slice(0, 10),
     today.toISOString().slice(0, 10),
@@ -534,14 +534,14 @@ async function fetchPlatformSignals(
   >(
     `
     SELECT
-      tpsd.track_id,
+      tpsd."trackId" AS track_id,
       COALESCE(tpsd.platform, 'GLOBAL') AS code2,
-      SUM(tpsd.video_views) AS video_views7d
+      SUM(tpsd."videoViews") AS video_views7d
     FROM track_platform_stats_daily tpsd
     WHERE tpsd.date BETWEEN $1::date AND $2::date
       AND tpsd.platform = 'youtube'
-      AND tpsd.video_views IS NOT NULL
-    GROUP BY tpsd.track_id, tpsd.platform
+      AND tpsd."videoViews" IS NOT NULL
+    GROUP BY tpsd."trackId", tpsd.platform
     `,
     day7.toISOString().slice(0, 10),
     today.toISOString().slice(0, 10),
