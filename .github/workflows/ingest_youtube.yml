@@ -25,7 +25,7 @@ jobs:
 
       - name: Run YouTube ingestion
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
         run: npm run ingest:youtube
