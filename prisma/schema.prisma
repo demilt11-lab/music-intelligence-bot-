@@ -1348,3 +1348,34 @@ model ModelAccuracyReport {
   @@unique([modelName, evaluationDate, windowDays])
   @@map("model_accuracy_reports")
 }
+
+model TrackAudioCluster {
+  id               Int      @id @default(autoincrement())
+  trackId          Int      @unique
+  clusterId        Int
+  isHotCluster     Boolean  @default(false)
+  clusterViralMean Float?
+  updatedAt        DateTime @default(now())
+
+  @@index([clusterId])
+  @@index([isHotCluster])
+  @@map("track_audio_clusters")
+}
+
+model AnomalyLog {
+  id           Int      @id @default(autoincrement())
+  trackId      Int?
+  artistId     Int?
+  metric       String
+  zScore       Float
+  currentValue Float
+  baselineMean Float
+  baselineStd  Float
+  severity     String
+  detectedAt   DateTime @default(now())
+  acknowledged Boolean  @default(false)
+
+  @@index([trackId, detectedAt])
+  @@index([severity, detectedAt])
+  @@map("anomaly_log")
+}

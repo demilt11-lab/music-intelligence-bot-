@@ -58,7 +58,10 @@
     "ml:service:start": "uvicorn ml.api.artist_trajectory_service:app --host 0.0.0.0 --port 8000 --reload",
     "ml:all:train": "npm run ml:viral:full && npm run ml:popularity:full && npm run ml:trend:full && npm run ml:artist-trajectory:full && npm run ml:neural:train",
     "ingest:googletrends": "npx tsx jobs/ingest/googletrends.ts",
-    "ingest:shazam": "npx tsx jobs/ingest/shazam.ts"
+    "ingest:shazam": "npx tsx jobs/ingest/shazam.ts",
+    "etl:anomaly": "npx tsx jobs/etl/anomaly_detection.ts",
+    "etl:log-predictions": "npx tsx jobs/etl/log_predictions.ts",
+    "etl:evaluate-predictions": "npx tsx jobs/etl/evaluate_predictions.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
