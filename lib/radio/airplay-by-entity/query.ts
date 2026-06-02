@@ -78,7 +78,7 @@ async function queryByCountry(params: AirplayByEntityParams): Promise<any[]> {
       p.raw_trend
     FROM plays_per_country p
     CROSS JOIN totals t
-    LEFT JOIN countries c ON c.code2 = p.code2
+    LEFT JOIN countries c ON c.code = p.code2
     ORDER BY p.total_plays DESC
     LIMIT ${limit}
   `;

@@ -194,7 +194,7 @@ export async function queryAirplayCountries(): Promise<
     `SELECT DISTINCT s.country_code AS code2,
             COALESCE(c.name, s.country_code) AS name
        FROM airplay_track_chart_snapshots s
-  LEFT JOIN countries c ON c.code2 = s.country_code
+  LEFT JOIN countries c ON c.code = s.country_code
       ORDER BY name ASC`,
   );
 }

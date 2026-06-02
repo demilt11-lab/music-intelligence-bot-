@@ -20,9 +20,9 @@ export async function queryTikTokVideoChart(
   if (params.latest) {
     return db.$queryRaw<any[]>`
       WITH latest_snap AS (
-        SELECT id, date::text AS source_date
+        SELECT id, "snapshotDate"::text AS source_date
         FROM   tiktok_video_chart_snapshots
-        ORDER  BY date DESC
+        ORDER  BY "snapshotDate" DESC
         LIMIT  1
       )
       SELECT
@@ -95,7 +95,7 @@ export async function queryTikTokVideoChart(
       r.likes::text           AS likes,
       r.comments::text        AS comments,
       r.linked_track_id,
-      s.date::text            AS source_date,
+      s."snapshotDate"::text  AS source_date,
       -- External TikTok video IDs as JSON array
       (
         SELECT COALESCE(json_agg(e.external_id ORDER BY e.id), '[]'::json)
@@ -130,7 +130,7 @@ export async function queryTikTokVideoChart(
       )::text                 AS view_stats_json
     FROM   tiktok_video_chart_rows      r
     JOIN   tiktok_video_chart_snapshots s ON s.id = r.snapshot_id
-    WHERE  s.date = ${params.date!}::date
+    WHERE  s."snapshotDate" = ${params.date!}::date
     ORDER  BY r.rank ASC
     LIMIT  ${params.limit}
     OFFSET ${params.offset}
@@ -145,9 +145,9 @@ export async function queryTikTokVideoChart(
  */
 export async function queryAvailableTikTokVideoDates(): Promise<string[]> {
   const rows = await db.$queryRaw<Array<{ date: string }>>`
-    SELECT date::text AS date
+    SELECT "snapshotDate"::text AS date
     FROM   tiktok_video_chart_snapshots
-    ORDER  BY date DESC
+    ORDER  BY "snapshotDate" DESC
   `;
   return rows.map((r) => r.date);
 }
