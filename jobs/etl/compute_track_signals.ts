@@ -654,6 +654,38 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
   console.log("[compute_track_signals] Fetching platform signals...");
   const platformSignals = await fetchPlatformSignals(today);
 
+  // If TikTok/UGC data is absent, seed the universe from recent chart rows
+  // so the ETL produces scores even when TikTok ingestion hasn't run.
+  if (platformSignals.size === 0) {
+    console.log("[compute_track_signals] platformSignals empty — seeding from chart_rows fallback...");
+    const cutoff = new Date(today);
+    cutoff.setDate(cutoff.getDate() - 30);
+    const chartSeed = await db.$queryRawUnsafe<{ track_id: number; code2: string }[]>(
+      `SELECT DISTINCT cr."trackId" AS track_id,
+              COALESCE(cs."countryCode", 'GLOBAL') AS code2
+       FROM chart_rows cr
+       JOIN chart_snapshots cs ON cs.id = cr."snapshotId"
+       WHERE cs."snapshotDate" >= $1::date
+       LIMIT 500`,
+      cutoff.toISOString().slice(0, 10),
+    );
+    for (const row of chartSeed) {
+      const key = `${row.track_id}:${row.code2}`;
+      if (!platformSignals.has(key)) {
+        platformSignals.set(key, {
+          trackId: row.track_id,
+          code2: row.code2,
+          tiktokViews7d: 0,
+          instagramViews7d: 0,
+          chartVelocity: 50, // mid-range default so it scores positively
+          playlistAdds7d: 0,
+          youtubeViews7d: 0,
+        });
+      }
+    }
+    console.log(`[compute_track_signals] Seeded ${platformSignals.size} tracks from chart_rows.`);
+  }
+
   // Compute per-signal global maxima for normalization
   let maxTiktok = 1;
   let maxInstagram = 1;

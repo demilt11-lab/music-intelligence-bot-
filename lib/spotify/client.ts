@@ -280,29 +280,35 @@ export async function getNewReleases(country = 'US', limit = 50): Promise<Spotif
   return result.albums.items;
 }
 
-/** Popular tracks via search — works with client credentials */
+/** Popular tracks via Top 50 chart playlist — falls back to new releases */
 export async function getPopularTracks(market: string, limit = 50): Promise<SpotifyTrack[]> {
-  const queries = [
-    `tag:new market:${market}`,
-    `year:${new Date().getFullYear()} tag:hipster`,
-    `genre:pop year:${new Date().getFullYear()}`,
-  ];
-  const tracks: SpotifyTrack[] = [];
-  for (const q of queries) {
-    try {
-      const result = await spotifyGet<SpotifySearchResult>('/search', {
-        q,
-        type: 'track',
-        market,
-        limit: Math.ceil(limit / queries.length),
-      });
-      tracks.push(...result.tracks.items);
-    } catch {
-      // ignore per-query failures
+  const playlistId = TOP_CHART_PLAYLISTS[market] ?? TOP_CHART_PLAYLISTS['global'];
+  try {
+    const items = await getPlaylistTracks(playlistId);
+    return items
+      .filter((item): item is SpotifyPlaylistItem & { track: SpotifyTrack } =>
+        item.track !== null && item.track.id !== undefined
+      )
+      .map((item) => item.track)
+      .slice(0, limit);
+  } catch {
+    // Fallback: use new releases if playlist fetch fails
+    const albums = await getNewReleases(market, 10);
+    const tracks: SpotifyTrack[] = [];
+    for (const album of albums.slice(0, 5)) {
+      try {
+        const results = await searchTracks(
+          `artist:"${album.artists[0]?.name}" album:"${album.name}"`,
+          5,
+        );
+        tracks.push(...results);
+        await delay(150);
+      } catch {
+        // ignore
+      }
     }
-    await delay(200);
+    return tracks.slice(0, limit);
   }
-  return tracks.filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i).slice(0, limit);
 }
 
 // ─── Utility ──────────────────────────────────────────────────────────────────

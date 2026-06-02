@@ -60,7 +60,7 @@ function computeGeneralScore(t: TalentScoutTrack): number {
 }
 
 function growthScore(delta: number | undefined | null): number {
-  if (!delta || Number.isNaN(delta)) return 0;
+  if (delta == null || Number.isNaN(delta)) return 0;
   const capped = Math.max(-100, Math.min(300, delta));
   return capped / 100;
 }

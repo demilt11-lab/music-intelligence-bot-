@@ -33,6 +33,8 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   const code2 = opts.code2 ?? 'GLOBAL';
   const dateFilter = opts.date ? { lte: new Date(opts.date) } : undefined;
 
+  console.log(`[scout-sources] fetchTopTiktokBreakoutTracks code2=${code2} limit=${limit} date=${opts.date ?? 'latest'}`);
+
   // ── Tier 1: UGC metrics (TikTok API data) ──
   const resolvedCode2 = code2 === 'GLOBAL' ? 'GLOBAL' : (
     await db.ugcTrackMetrics.findFirst({
@@ -47,6 +49,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     select: { date: true },
   });
 
+  console.log(`[scout-sources] Tier1 latestUgc=${latestUgc?.date ?? 'null'}`);
   if (latestUgc) {
     const ugcRows = await db.ugcTrackMetrics.findMany({
       where: { date: latestUgc.date, code2: resolvedCode2, views7d: { gt: 0 } },
@@ -79,6 +82,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   }
 
   // ── Tier 2: talent_scout_scores from ETL ──
+  console.log('[scout-sources] Tier1 empty, trying Tier2 (talentScoutScore)...');
   const scoreCode2 = code2 === 'GLOBAL' ? 'GLOBAL' : code2;
   const latestScore = await db.talentScoutScore.findFirst({
     where: {
@@ -89,6 +93,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     select: { date: true, code2: true },
   });
 
+  console.log(`[scout-sources] Tier2 latestScore=${latestScore?.date ?? 'null'} code2=${latestScore?.code2 ?? 'null'}`);
   if (latestScore) {
     const scoreRows = await db.talentScoutScore.findMany({
       where: { date: latestScore.date, code2: latestScore.code2 },
@@ -121,6 +126,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   }
 
   // ── Tier 3: raw chart_rows from Spotify ingest ──
+  console.log('[scout-sources] Tier2 empty, trying Tier3 (chart_rows)...');
   const chartTracks = await db.$queryRaw<
     { trackId: number; rank: number; countryCode: string | null }[]
   >`
@@ -135,6 +141,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     LIMIT ${limit}
   `;
 
+  console.log(`[scout-sources] Tier3 chartTracks.length=${chartTracks.length}`);
   if (!chartTracks.length) return [];
 
   const trackById = await loadTrackMeta(chartTracks.map((r) => r.trackId));
