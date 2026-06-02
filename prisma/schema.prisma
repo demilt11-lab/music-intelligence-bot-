@@ -1383,38 +1383,43 @@ model AnomalyLog {
   @@map("anomaly_log")
 }
 
-// ─────────────────────────────────────────────
-// Predictive A&R / Viral Score — new models
-// ─────────────────────────────────────────────
+// ─── Predictive A&R — Feature Engineering ─────────────────────────────────────
 
 model ArtistFeaturesDaily {
   id                          Int      @id @default(autoincrement())
   artistId                    Int
   date                        DateTime @db.Date
-  // 7/14/30/90d Spotify listener growth %
+
+  // Spotify listener growth %
   listenersGrowth7d           Float?
   listenersGrowth14d          Float?
   listenersGrowth30d          Float?
   listenersGrowth90d          Float?
+
   // Follower growth %
   followersGrowth7d           Float?
   followersGrowth30d          Float?
-  // Velocity = change per day over last 7d
+
+  // Velocity = change per day over last 7d; acceleration = delta of velocity
   listenersVelocity7d         Float?
-  // Acceleration = velocity change vs prior 7d
   listenersAcceleration7d     Float?
-  // TikTok
+
+  // TikTok UGC momentum
   tiktokVideosPerDay7d        Float?
   tiktokViewsGrowth7d         Float?
-  // Cross-platform
-  crossPlatformSpikes7d       Int?     // # platforms with >20% growth
+
+  // Cross-platform breadth
+  crossPlatformSpikes7d       Int?     // # platforms with >20% growth this week
+
   // Virality ratios
   streamsPerPlaylistAdd7d     Float?
   savesPerStream30d           Float?
   igEngagementPerFollower30d  Float?
   commentsPerView30d          Float?
-  // Robustness
-  growthConsistency30d        Float?   // 0–1, how steady growth is
+
+  // Robustness / consistency
+  growthConsistency30d        Float?   // 0–1: how steady growth has been
+
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 
@@ -1425,17 +1430,23 @@ model ArtistFeaturesDaily {
   @@map("artist_features_daily")
 }
 
+// ─── Predictive A&R — Composite Scores ────────────────────────────────────────
+
 model ArtistScoresDaily {
   id                   Int      @id @default(autoincrement())
   artistId             Int
   date                 DateTime @db.Date
-  heatScore            Float?   // 1–10
-  stabilityScore       Float?   // 1–10
-  platformBalanceScore Float?   // 1–10
-  breakoutProb30d      Float?   // 0–1
-  heatScoreRaw         Float?
+
+  heatScore            Float?   // 1–10 composite momentum score
+  stabilityScore       Float?   // 1–10 consistency / low-volatility score
+  platformBalanceScore Float?   // 1–10 cross-platform evenness
+
+  breakoutProb30d      Float?   // 0–1 ML model output
+
+  heatScoreRaw         Float?   // pre-sigmoid raw value
   stabilityScoreRaw    Float?
-  modelVersion         String?
+  modelVersion         String?  // e.g. "xgb-v1"
+
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
@@ -1447,12 +1458,15 @@ model ArtistScoresDaily {
   @@map("artist_scores_daily")
 }
 
+// ─── Predictive A&R — ML Training Data ────────────────────────────────────────
+
 model TrainingExample {
   id              Int      @id @default(autoincrement())
   artistId        Int
   snapshotDate    DateTime @db.Date
-  breakoutLabel   Int      // 0 or 1
-  // feature snapshot (mirrors ArtistFeaturesDaily)
+  breakoutLabel   Int      // 0 = control, 1 = breakout
+
+  // Feature snapshot (mirrors ArtistFeaturesDaily at snapshot_date)
   listenersGrowth7d          Float?
   listenersGrowth30d         Float?
   listenersGrowth90d         Float?
@@ -1465,8 +1479,9 @@ model TrainingExample {
   savesPerStream30d          Float?
   igEngagementPerFollower30d Float?
   growthConsistency30d       Float?
-  baselineMonthlyListeners   Float?  // listeners at snapshot_date
-  createdAt                  DateTime @default(now())
+  baselineMonthlyListeners   Float?  // listeners at snapshot_date (for breakout threshold)
+
+  createdAt DateTime @default(now())
 
   artist Artist @relation(fields: [artistId], references: [id], onDelete: Cascade)
 
