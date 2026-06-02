@@ -26,4 +26,4 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
           SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
-        run: npx ts-node --project tsconfig.json jobs/ingest/spotify.ts
+        run: npx tsx jobs/ingest/spotify.ts
