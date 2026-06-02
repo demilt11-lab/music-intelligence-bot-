@@ -49,20 +49,36 @@ function filterPreBreak(t: TalentScoutTrack, mode: TalentScoutMode): boolean {
 }
 
 function computeUgcEarlyScore(t: TalentScoutTrack): number {
-  const ugcGrowth = growthScore(t.tiktokVelocity) * 0.4 + (t.tiktokScore ?? 0) * 0.3;
+  const ugcGrowth = growthScore(t.tiktokVelocity) * 0.35 + (t.tiktokScore ?? 0) * 0.25;
+  const youtubeSignal = youtubeScore(t.youtubeViews) * 0.1;
+  const instagramSignal = instagramScore(t.instagramPlays) * 0.05;
   const baselinePenalty = baselineSizePenalty(t.spotifyStreamsLatest, t.luminateStreamsLatest);
   const rightsPenalty = (t.rightsComplexityScore ?? 0) * 0.1;
-  return ugcGrowth - baselinePenalty - rightsPenalty;
+  return ugcGrowth + youtubeSignal + instagramSignal - baselinePenalty - rightsPenalty;
 }
 
 function computeGeneralScore(t: TalentScoutTrack): number {
-  return growthScore(t.tiktokVelocity) * 0.3 + (t.tiktokScore ?? 0) * 0.2;
+  const youtubeSignal = youtubeScore(t.youtubeViews) * 0.15;
+  const instagramSignal = instagramScore(t.instagramPlays) * 0.05;
+  return growthScore(t.tiktokVelocity) * 0.3 + (t.tiktokScore ?? 0) * 0.2 + youtubeSignal + instagramSignal;
 }
 
 function growthScore(delta: number | undefined | null): number {
   if (delta == null || Number.isNaN(delta)) return 0;
   const capped = Math.max(-100, Math.min(300, delta));
   return capped / 100;
+}
+
+function youtubeScore(youtubeViews: string | null | undefined): number {
+  const v = Number(youtubeViews ?? 0);
+  if (v <= 0) return 0;
+  return Math.min(1, Math.log10(v + 1) / 8);
+}
+
+function instagramScore(instagramPlays: string | null | undefined): number {
+  const v = Number(instagramPlays ?? 0);
+  if (v <= 0) return 0;
+  return Math.min(1, Math.log10(v + 1) / 8);
 }
 
 function baselineSizePenalty(

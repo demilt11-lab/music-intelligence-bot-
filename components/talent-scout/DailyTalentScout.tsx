@@ -15,6 +15,8 @@ type TalentScoutTrack = {
   spotifyPopularity: number | null;
   spotifyStreamsLatest: string | null;
   luminateStreamsLatest: string | null;
+  youtubeViews: string | null;
+  instagramPlays: string | null;
   actions: {
     type: string;
     description: string;
@@ -126,10 +128,18 @@ export function DailyTalentScout() {
         const luminate = row.luminateStreamsLatest
           ? Number(row.luminateStreamsLatest).toLocaleString()
           : '—';
+        const youtube = row.youtubeViews
+          ? Number(row.youtubeViews).toLocaleString()
+          : '—';
+        const instagram = row.instagramPlays
+          ? Number(row.instagramPlays).toLocaleString()
+          : '—';
         return (
           <div className="text-xs text-slate-300">
             <div>Spotify: {spotify}</div>
             <div>Luminate: {luminate}</div>
+            <div>YouTube: {youtube}</div>
+            <div>Instagram: {instagram}</div>
           </div>
         );
       },

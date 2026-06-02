@@ -20,6 +20,9 @@ export type TalentScoutTrack = {
   luminateAudienceLatest: string | null;
   luminateSpinsLatest: string | null;
 
+  youtubeViews: string | null;
+  instagramPlays: string | null;
+
   viralScore: number | null;
   rightsComplexityScore: number | null;
 };
@@ -74,6 +77,8 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
           luminateStreamsLatest: null,
           luminateAudienceLatest: null,
           luminateSpinsLatest: null,
+          youtubeViews: null,
+          instagramPlays: null,
           viralScore: null,
           rightsComplexityScore: null,
         };
@@ -118,6 +123,8 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
           luminateStreamsLatest: null,
           luminateAudienceLatest: null,
           luminateSpinsLatest: null,
+          youtubeViews: null,
+          instagramPlays: null,
           viralScore: s.viralScore,
           rightsComplexityScore: s.rightsComplexityScore,
         };
@@ -160,6 +167,8 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
         luminateStreamsLatest: null,
         luminateAudienceLatest: null,
         luminateSpinsLatest: null,
+        youtubeViews: null,
+        instagramPlays: null,
         viralScore: null,
         rightsComplexityScore: null,
       };
@@ -218,6 +227,8 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     luminateStreamsLatest: null,
     luminateAudienceLatest: null,
     luminateSpinsLatest: null,
+    youtubeViews: null,
+    instagramPlays: null,
     viralScore: null,
     rightsComplexityScore: null,
   }));
@@ -249,7 +260,33 @@ function computeTiktokScore(row: {
 export async function hydrateInternalStreaming(
   tracks: TalentScoutTrack[],
 ): Promise<TalentScoutTrack[]> {
-  return tracks;
+  const trackIds = tracks.map((t) => t.trackId).filter((id) => id > 0);
+  if (!trackIds.length) return tracks;
+
+  const statsRows = await db.trackStatisticsLatest.findMany({
+    where: { trackId: { in: trackIds } },
+    select: { trackId: true, youtubeViews: true },
+  });
+  const youtubeByTrack = new Map<number, string>();
+  for (const r of statsRows) {
+    if (r.youtubeViews != null) youtubeByTrack.set(r.trackId, String(r.youtubeViews));
+  }
+
+  const instagramRows = await db.trackPlatformStatsDaily.groupBy({
+    by: ['trackId'],
+    where: { platform: 'instagram', trackId: { in: trackIds } },
+    _sum: { videoViews: true },
+  });
+  const instagramByTrack = new Map<number, string>();
+  for (const r of instagramRows) {
+    if (r._sum.videoViews != null) instagramByTrack.set(r.trackId, String(r._sum.videoViews));
+  }
+
+  return tracks.map((t) => ({
+    ...t,
+    youtubeViews: youtubeByTrack.get(t.trackId) ?? t.youtubeViews,
+    instagramPlays: instagramByTrack.get(t.trackId) ?? t.instagramPlays,
+  }));
 }
 
 export async function hydrateLuminateMetrics(

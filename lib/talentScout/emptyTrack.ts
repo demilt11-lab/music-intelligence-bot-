@@ -15,6 +15,8 @@ export function emptyTrack(trackId: number): TalentScoutTrack {
     luminateStreamsLatest: null,
     luminateAudienceLatest: null,
     luminateSpinsLatest: null,
+    youtubeViews: null,
+    instagramPlays: null,
     viralScore: null,
     rightsComplexityScore: null,
   };
