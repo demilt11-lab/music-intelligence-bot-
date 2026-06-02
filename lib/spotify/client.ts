@@ -262,6 +262,49 @@ export async function getTopCharts(market = 'global'): Promise<{
   return { playlistId, market, items };
 }
 
+export interface SpotifyAlbum {
+  id: string;
+  name: string;
+  artists: Array<{ id: string; name: string }>;
+  release_date: string;
+  total_tracks: number;
+  images: Array<{ url: string; width: number; height: number }>;
+}
+
+/** New releases — works with client credentials, no special scopes needed */
+export async function getNewReleases(country = 'US', limit = 50): Promise<SpotifyAlbum[]> {
+  const result = await spotifyGet<{ albums: { items: SpotifyAlbum[] } }>('/browse/new-releases', {
+    country,
+    limit,
+  });
+  return result.albums.items;
+}
+
+/** Popular tracks via search — works with client credentials */
+export async function getPopularTracks(market: string, limit = 50): Promise<SpotifyTrack[]> {
+  const queries = [
+    `tag:new market:${market}`,
+    `year:${new Date().getFullYear()} tag:hipster`,
+    `genre:pop year:${new Date().getFullYear()}`,
+  ];
+  const tracks: SpotifyTrack[] = [];
+  for (const q of queries) {
+    try {
+      const result = await spotifyGet<SpotifySearchResult>('/search', {
+        q,
+        type: 'track',
+        market,
+        limit: Math.ceil(limit / queries.length),
+      });
+      tracks.push(...result.tracks.items);
+    } catch {
+      // ignore per-query failures
+    }
+    await delay(200);
+  }
+  return tracks.filter((t, i, arr) => arr.findIndex((x) => x.id === t.id) === i).slice(0, limit);
+}
+
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
 export function delay(ms: number): Promise<void> {
