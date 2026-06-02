@@ -1,0 +1,50 @@
+name: ML Inference Service
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-inference:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download latest ML model artifacts
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: ml_train.yml
+          name_is_regexp: true
+          name: ml-models-.*
+          path: output/
+          search_artifacts: true
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Print deployment instructions
+        run: |
+          echo "=========================================="
+          echo "ML Inference Service Deployment"
+          echo "=========================================="
+          echo ""
+          echo "To start the FastAPI inference service, run the following command on your server:"
+          echo ""
+          echo "  uvicorn ml.api.artist_trajectory_service:app --host 0.0.0.0 --port 8000 --reload"
+          echo ""
+          echo "Or for production:"
+          echo ""
+          echo "  uvicorn ml.api.artist_trajectory_service:app --host 0.0.0.0 --port 8000 --workers 4"
+          echo ""
+          echo "Make sure the following env vars are set on your server:"
+          echo "  DATABASE_URL"
+          echo "  DIRECT_URL"
+          echo ""
+          echo "Model artifacts from this run are available in the 'output/' directory."
+          echo "=========================================="
