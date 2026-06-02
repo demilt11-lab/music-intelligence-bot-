@@ -42,39 +42,35 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   const limit = opts.limit ?? 50;
   const code2 = opts.code2 ?? 'GLOBAL';
 
-  // Find the most recent TikTok typed chart snapshot on or before the requested date
-  const snapshotWhere = opts.date
-    ? { snapshotDate: { lte: new Date(opts.date) } }
-    : {};
+  // Find the most recent UGC date on or before requested date
+  const dateFilter = opts.date ? { lte: new Date(opts.date) } : undefined;
 
-  const snapshot = await db.tiktokTypedTrackChartSnapshot.findFirst({
-    where: snapshotWhere,
-    orderBy: { snapshotDate: 'desc' },
+  // Get latest date available
+  const latest = await db.ugcTrackMetrics.findFirst({
+    where: {
+      ...(dateFilter ? { date: dateFilter } : {}),
+      ...(code2 !== 'GLOBAL' ? { code2 } : {}),
+    },
+    orderBy: { date: 'desc' },
+    select: { date: true },
   });
 
-  if (!snapshot) return [];
+  if (!latest) return [];
 
-  const rows = await db.tiktokTypedTrackChartRow.findMany({
-    where: { snapshotId: snapshot.id, trackId: { not: null } },
-    orderBy: { rank: 'asc' },
+  // Fetch top tracks by views7d for that date
+  const ugcRows = await db.ugcTrackMetrics.findMany({
+    where: {
+      date: latest.date,
+      ...(code2 !== 'GLOBAL' ? { code2 } : {}),
+      views7d: { gt: 0 },
+    },
+    orderBy: { views7d: 'desc' },
     take: limit,
   });
 
-  const trackIds = rows.map((r) => r.trackId!).filter(Boolean) as number[];
-  if (!trackIds.length) return [];
+  if (!ugcRows.length) return [];
 
-  // Load UGC metrics for velocity data
-  const ugcRows = await db.ugcTrackMetrics.findMany({
-    where: {
-      trackId: { in: trackIds },
-      code2: code2 === 'GLOBAL' ? undefined : code2,
-    },
-    orderBy: { date: 'desc' },
-  });
-  const ugcByTrack = new Map<number, typeof ugcRows[number]>();
-  for (const r of ugcRows) {
-    if (!ugcByTrack.has(r.trackId)) ugcByTrack.set(r.trackId, r);
-  }
+  const trackIds = ugcRows.map((r) => r.trackId);
 
   // Join to canonical tracks and basic metadata
   const tracks = await db.track.findMany({
@@ -96,19 +92,17 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     ]),
   );
 
-  return rows.map((row) => {
-    const tid = row.trackId!;
-    const info = trackById.get(tid);
-    const ugc = ugcByTrack.get(tid);
+  return ugcRows.map((ugc, i) => {
+    const info = trackById.get(ugc.trackId);
     return {
-      trackId: tid,
+      trackId: ugc.trackId,
       name: info?.name ?? 'Unknown',
       artists: info?.artists ?? [],
       code2: code2 === 'GLOBAL' ? null : code2,
-      tiktokScore: computeTiktokScore({ rank: row.rank, views: row.views, velocity: ugc?.views7dGrowth ?? null }),
-      tiktokViews: row.views ?? BigInt(0),
+      tiktokScore: computeTiktokScore({ rank: i + 1, views: ugc.views7d, velocity: ugc.views7dGrowth }),
+      tiktokViews: ugc.views7d,
       tiktokLikes: BigInt(0),
-      tiktokVelocity: ugc?.views7dGrowth ?? 0,
+      tiktokVelocity: ugc.views7dGrowth,
       spotifyStreamsLatest: null,
       spotifyPopularity: null,
       luminateStreamsLatest: null,
