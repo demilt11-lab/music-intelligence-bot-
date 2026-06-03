@@ -50,83 +50,58 @@ interface BillboardEntry {
   weeksOnChart?: number;
 }
 
-// Metadata field labels that appear between rank heading and actual title/artist
-const METADATA_LABELS = new Set([
-  'peak chart date', 'award', 'weeks on chart', 'last week', 'peak position',
-  'peak', 'weeks', 'new', 're-entry', 'rising', 'steady', 'falling',
-]);
-
-function isMetadataLine(line: string): boolean {
-  const clean = line.replace(/\*+/g, '').replace(/#+/g, '').replace(/\[.*?\]\(.*?\)/g, '').trim().toLowerCase();
-  if (!clean) return true;
-  if (clean.match(/^\d{1,3}$/)) return true; // bare number
-  if (clean.match(/^\[?\d{2}\/\d{2}\/\d{2,4}\]?/)) return true; // date
-  if (clean.match(/^https?:\/\//)) return true; // URL
-  if (clean.match(/^\[.*\]\(https?:/)) return true; // markdown link
-  for (const label of METADATA_LABELS) {
-    if (clean.includes(label)) return true;
-  }
-  return false;
-}
-
 /**
  * Parse Billboard chart markdown.
  *
- * Billboard pages from Firecrawl markdown have the structure:
- *   ### 1
- *   #### Peak Chart Date
- *   [02/14/26](link)
- *   **Song Title**
- *   Artist Name
- *   ...
- *   ### 2
- *   ...
+ * Billboard chart entries always have the song title in **bold**.
+ * Structure per entry:
+ *   ### N          ← rank heading
+ *   ...metadata... ← Award badges, LW, PK, WOC numbers, dates
+ *   **Song Title** ← always bold
+ *   Artist Name    ← plain text line immediately after
  */
 function parseBillboardMarkdown(markdown: string): BillboardEntry[] {
   const entries: BillboardEntry[] = [];
-  const lines = markdown.split('\n').map((l) => l.trim()).filter(Boolean);
 
-  let currentRank: number | null = null;
-  let candidateLines: string[] = [];
+  // Split into rank sections at each ### N heading
+  const sections = markdown.split(/(?=^#{1,4}\s+\d{1,3}\s*$)/m);
 
-  const flush = () => {
-    if (currentRank === null) return;
-    // candidateLines contains everything between this rank heading and the next
-    // Filter out metadata, then first non-metadata line = title, second = artist
-    const content = candidateLines.filter((l) => !isMetadataLine(l));
-    const title = content[0]?.replace(/\*+/g, '').replace(/#+/g, '').trim();
-    const artist = content[1]?.replace(/\*+/g, '').replace(/#+/g, '').trim();
-    if (title && artist && title.length > 0 && artist.length > 0) {
-      entries.push({ rank: currentRank, title, artist });
-    }
-    candidateLines = [];
-  };
+  for (const section of sections) {
+    const rankMatch = section.match(/^#{1,4}\s+(\d{1,3})\s*$/m);
+    if (!rankMatch) continue;
+    const rank = parseInt(rankMatch[1], 10);
+    if (rank < 1 || rank > 100) continue;
 
-  for (const line of lines) {
-    // Rank heading: ### 1 or ## 1 or # 1 (standalone rank lines)
-    const rankHeading = line.match(/^#{1,4}\s+(\d{1,3})\s*$/);
-    if (rankHeading) {
-      flush();
-      const rank = parseInt(rankHeading[1], 10);
-      currentRank = rank >= 1 && rank <= 100 ? rank : null;
-      continue;
-    }
+    // Title = first **bold** text in this section
+    const boldMatch = section.match(/\*\*([^*\n]+)\*\*/);
+    if (!boldMatch) continue;
+    const title = boldMatch[1].trim();
+    if (!title || title.length < 2) continue;
 
-    if (currentRank !== null) {
-      candidateLines.push(line);
-    }
+    // Artist = first non-empty, non-metadata line after the bold title
+    const afterBold = section.slice(section.indexOf(boldMatch[0]) + boldMatch[0].length);
+    const artist = afterBold
+      .split('\n')
+      .map((l) => l.replace(/\*+/g, '').replace(/#+/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim())
+      .find((l) => l.length >= 2 && !l.match(/^[\d\s\-–|]+$/) && !l.match(/^(LW|PK|WOC|NEW|RE-ENTRY|Award)/i));
+
+    if (!artist) continue;
+
+    entries.push({ rank, title, artist });
   }
-  flush();
 
-  // Fallback: if heading-based parse found nothing, try inline pattern
-  // e.g. "**1. Song Title** by Artist"
+  // Fallback: no bold found — try plain "1. Title\nArtist" pattern
   if (entries.length === 0) {
-    const inlinePattern = /^\*{0,2}(\d{1,3})[.)]\s*\*{0,2}([^*\n]+?)\*{0,2}(?:\s+[Bb]y\s+|\s*[-–]\s*)(.+)$/gm;
-    let m: RegExpExecArray | null;
-    while ((m = inlinePattern.exec(markdown)) !== null && entries.length < 100) {
+    const lines = markdown.split('\n').map((l) => l.trim()).filter(Boolean);
+    for (let i = 0; i < lines.length && entries.length < 100; i++) {
+      const m = lines[i].match(/^(\d{1,3})[.)]\s+(.+)/);
+      if (!m) continue;
       const rank = parseInt(m[1], 10);
-      if (rank >= 1 && rank <= 100) {
-        entries.push({ rank, title: m[2].trim(), artist: m[3].trim() });
+      const title = m[2].replace(/\*+/g, '').trim();
+      const artist = lines[i + 1]?.replace(/\*+/g, '').trim();
+      if (rank >= 1 && rank <= 100 && title && artist && artist.length >= 2) {
+        entries.push({ rank, title, artist });
+        i++;
       }
     }
   }
