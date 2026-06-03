@@ -260,8 +260,25 @@ async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) throw new Error('Missing required env var: DATABASE_URL');
 
   console.log('[billboard] Starting Billboard chart ingestion…');
+
+  // Clean up any stub tracks written by a previous broken parse run
+  const deleted = await db.track.deleteMany({
+    where: {
+      OR: [
+        { title: { startsWith: '####' } },
+        { title: { startsWith: '###' } },
+        { title: { contains: 'Peak Chart Date' } },
+        { title: { contains: 'billboard.com' } },
+      ],
+      // Only delete stubs (no external IDs from other platforms)
+      externalIds: { none: { platform: { not: 'billboard' } } },
+    },
+  });
+  if (deleted.count > 0) {
+    console.log(`[billboard] Cleaned up ${deleted.count} bad stub tracks from prior broken parse`);
+  }
+
   const snapshotDate = toDateOnly(new Date());
-  let totalWritten = 0;
 
   for (const chart of CHARTS) {
     try {
