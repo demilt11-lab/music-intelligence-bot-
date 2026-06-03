@@ -1,12 +1,12 @@
-name: Ingest Google Trends
+name: Ingest Billboard Charts
 
 on:
   schedule:
-    - cron: "0 7 * * *" # daily at 7am UTC — before ETL compute signals at 8am
+    - cron: "0 6 * * *" # daily at 6am UTC — before ETL at 8am
   workflow_dispatch:
 
 jobs:
-  ingest-googletrends:
+  ingest-billboard:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,9 +23,9 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Run Google Trends ingestion
+      - name: Run Billboard ingestion
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-          SEARCHAPI_KEY: ${{ secrets.SEARCHAPI_KEY }}
-        run: npx tsx jobs/ingest/googletrends.ts
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+        run: npx tsx jobs/ingest/billboard.ts

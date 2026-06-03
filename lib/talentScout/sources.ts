@@ -132,7 +132,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     }
   }
 
-  // ── Tier 3: raw chart_rows from Spotify ingest ──
+  // ── Tier 3: raw chart_rows from any ingested platform ──
   console.log('[scout-sources] Tier2 empty, trying Tier3 (chart_rows)...');
   const chartTracks = await db.$queryRaw<
     { trackId: number; rank: number; countryCode: string | null }[]
@@ -143,7 +143,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
       cs."countryCode"
     FROM chart_rows cr
     JOIN chart_snapshots cs ON cs.id = cr."snapshotId"
-    WHERE cs.platform = 'spotify'
+    WHERE cs.platform IN ('spotify', 'billboard', 'shazam')
     ORDER BY cr."trackId", cs."snapshotDate" DESC, cr.rank ASC
     LIMIT ${limit}
   `;

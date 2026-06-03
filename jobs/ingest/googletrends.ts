@@ -13,6 +13,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { getInterestOverTime, getRisingQueries } from "@/lib/googletrends/client";
+import { googleTrends as searchApiTrends } from "@/lib/searchapi/client";
 
 const db = new PrismaClient();
 
@@ -82,11 +83,18 @@ async function ingestTrack(track: TrackRow, snapshotDate: Date): Promise<boolean
   try {
     result = await getInterestOverTime(query, "", 7);
   } catch (err) {
-    console.warn(
-      `[googletrends] Failed to fetch trends for trackId=${track.id} query="${query}":`,
-      (err as Error).message
-    );
-    return false;
+    console.warn(`[googletrends] Unofficial API failed for "${query}", trying SearchAPI fallback…`);
+    try {
+      if (!process.env.SEARCHAPI_KEY) throw new Error('no SEARCHAPI_KEY');
+      const raw = await searchApiTrends(query, '', 'now 7-d');
+      const timeline = raw.interest_over_time?.timeline_data ?? [];
+      const values = timeline.flatMap((d) => d.values.map((v) => v.extracted_value)).filter((v) => v > 0);
+      const avg = values.length > 0 ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
+      result = { averageInterest: avg, trend: avg > TRENDING_INTEREST_THRESHOLD ? 'rising' : 'stable' };
+    } catch (fallbackErr) {
+      console.warn(`[googletrends] SearchAPI fallback also failed for trackId=${track.id}:`, (fallbackErr as Error).message);
+      return false;
+    }
   }
 
   // Store as a platform stats row — averageInterest as streams proxy (0-100 scale)
