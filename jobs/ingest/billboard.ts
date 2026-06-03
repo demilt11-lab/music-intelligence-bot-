@@ -171,6 +171,9 @@ async function ingestChart(chart: typeof CHARTS[number], snapshotDate: Date): Pr
     return;
   }
 
+  // Log first 1500 chars so we can inspect the actual structure
+  console.log(`[billboard] Raw markdown sample (${chart.name}):\n---\n${result.data.markdown.slice(0, 1500)}\n---`);
+
   const entries = parseBillboardMarkdown(result.data.markdown);
   console.log(`[billboard] Parsed ${entries.length} entries from ${chart.name}`);
 
