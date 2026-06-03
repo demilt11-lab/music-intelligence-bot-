@@ -50,60 +50,101 @@ interface BillboardEntry {
   weeksOnChart?: number;
 }
 
+// Lines that are metadata/nav noise, never a song title or artist name
+const METADATA_RE = /^(LW|PK|WOC|NEW|RE-?ENTRY|Award|Peak|Chart|Date|Debut|Hot|Billboard|spotify|apple|amazon|youtube|tidal|pandora|trending|airplay|radio|sales|streaming|Skip to|Toggle|Share|Award Badge|[|#\-–—]+|\d+)$/i;
+
+function cleanLine(l: string): string {
+  return l
+    .replace(/\*+/g, '')          // strip bold/italic markers
+    .replace(/#+/g, '')           // strip heading hashes
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // markdown links → text
+    .replace(/`+/g, '')
+    .trim();
+}
+
+function isUsableLine(l: string): boolean {
+  if (l.length < 2) return false;
+  if (METADATA_RE.test(l)) return false;
+  if (/^[\d\s\-–|.,]+$/.test(l)) return false;  // pure numbers/punctuation
+  if (/^https?:\/\//.test(l)) return false;
+  return true;
+}
+
 /**
- * Parse Billboard chart markdown.
+ * Parse Billboard chart markdown from Firecrawl.
  *
- * Billboard chart entries always have the song title in **bold**.
- * Structure per entry:
- *   ### N          ← rank heading
- *   ...metadata... ← Award badges, LW, PK, WOC numbers, dates
- *   **Song Title** ← always bold
- *   Artist Name    ← plain text line immediately after
+ * Firecrawl renders Billboard as a sequence of rank headings (### N or ## N)
+ * followed by metadata lines, then the song title and artist as plain text.
+ * The title is NOT reliably bold — it appears as the first non-metadata text
+ * line after the rank heading.
+ *
+ * Fallback: pipe-delimited table rows  |rank|title|artist|
  */
 function parseBillboardMarkdown(markdown: string): BillboardEntry[] {
   const entries: BillboardEntry[] = [];
+  const seen = new Set<number>();
 
-  // Split into rank sections at each ### N heading
+  // ── Strategy 1: rank-heading sections ────────────────────────────────────
+  // Split on lines that are only a heading + a 1-3 digit number, e.g. "### 42"
   const sections = markdown.split(/(?=^#{1,4}\s+\d{1,3}\s*$)/m);
 
   for (const section of sections) {
     const rankMatch = section.match(/^#{1,4}\s+(\d{1,3})\s*$/m);
     if (!rankMatch) continue;
     const rank = parseInt(rankMatch[1], 10);
-    if (rank < 1 || rank > 100) continue;
+    if (rank < 1 || rank > 100 || seen.has(rank)) continue;
 
-    // Title = first **bold** text in this section
-    const boldMatch = section.match(/\*\*([^*\n]+)\*\*/);
-    if (!boldMatch) continue;
-    const title = boldMatch[1].trim();
-    if (!title || title.length < 2) continue;
-
-    // Artist = first non-empty, non-metadata line after the bold title
-    const afterBold = section.slice(section.indexOf(boldMatch[0]) + boldMatch[0].length);
-    const artist = afterBold
+    // Collect non-empty cleaned lines that follow the rank heading
+    const afterHeading = section.slice(rankMatch.index! + rankMatch[0].length);
+    const candidates = afterHeading
       .split('\n')
-      .map((l) => l.replace(/\*+/g, '').replace(/#+/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim())
-      .find((l) => l.length >= 2 && !l.match(/^[\d\s\-–|]+$/) && !l.match(/^(LW|PK|WOC|NEW|RE-ENTRY|Award)/i));
+      .map(cleanLine)
+      .filter(isUsableLine);
 
-    if (!artist) continue;
+    if (candidates.length < 2) continue;
+
+    const title = candidates[0];
+    const artist = candidates[1];
+
+    // Sanity: reject if they look like navigation / chart-UI text
+    if (title.length > 100 || artist.length > 100) continue;
 
     entries.push({ rank, title, artist });
+    seen.add(rank);
   }
 
-  // Fallback: no bold found — try plain "1. Title\nArtist" pattern
-  if (entries.length === 0) {
-    const lines = markdown.split('\n').map((l) => l.trim()).filter(Boolean);
-    for (let i = 0; i < lines.length && entries.length < 100; i++) {
-      const m = lines[i].match(/^(\d{1,3})[.)]\s+(.+)/);
-      if (!m) continue;
-      const rank = parseInt(m[1], 10);
-      const title = m[2].replace(/\*+/g, '').trim();
-      const artist = lines[i + 1]?.replace(/\*+/g, '').trim();
-      if (rank >= 1 && rank <= 100 && title && artist && artist.length >= 2) {
-        entries.push({ rank, title, artist });
-        i++;
-      }
-    }
+  if (entries.length >= 10) return entries.sort((a, b) => a.rank - b.rank);
+
+  // ── Strategy 2: pipe-delimited table rows ─────────────────────────────────
+  // Some Firecrawl outputs render as: | 1 | Song Title | Artist |
+  const tableRows = markdown.match(/^\|.+\|.+\|/mg) ?? [];
+  for (const row of tableRows) {
+    const cells = row.split('|').map((c) => c.trim()).filter(Boolean);
+    if (cells.length < 3) continue;
+    const rank = parseInt(cells[0], 10);
+    if (isNaN(rank) || rank < 1 || rank > 100 || seen.has(rank)) continue;
+    const title = cleanLine(cells[1]);
+    const artist = cleanLine(cells[2]);
+    if (!isUsableLine(title) || !isUsableLine(artist)) continue;
+    entries.push({ rank, title, artist });
+    seen.add(rank);
+  }
+
+  if (entries.length >= 10) return entries.sort((a, b) => a.rank - b.rank);
+
+  // ── Strategy 3: "N. Title\nArtist" inline list ───────────────────────────
+  const lines = markdown.split('\n').map(cleanLine).filter((l) => l.length > 0);
+  for (let i = 0; i < lines.length && entries.length < 100; i++) {
+    const m = lines[i].match(/^(\d{1,3})[.)]\s+(.+)/);
+    if (!m) continue;
+    const rank = parseInt(m[1], 10);
+    if (rank < 1 || rank > 100 || seen.has(rank)) continue;
+    const title = m[2].trim();
+    const next = lines[i + 1] ?? '';
+    if (!isUsableLine(title) || !isUsableLine(next)) continue;
+    entries.push({ rank, title, artist: next });
+    seen.add(rank);
+    i++;
   }
 
   return entries.sort((a, b) => a.rank - b.rank);
