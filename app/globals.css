@@ -287,3 +287,30 @@
   0% { stroke-dashoffset: 251.2; }
   100% { stroke-dashoffset: var(--arc-offset, 0); }
 }
+
+/* ─── Companion UI additions ─── */
+@layer utilities {
+  .glow-emerald { box-shadow: 0 0 20px -2px rgb(16 185 129 / 0.35); }
+  .glow-rose    { box-shadow: 0 0 20px -2px rgb(244 63 94 / 0.35); }
+  .glow-amber   { box-shadow: 0 0 20px -2px rgb(245 158 11 / 0.35); }
+  .glow-violet  { box-shadow: 0 0 20px -2px rgb(139 92 246 / 0.35); }
+  .gradient-border {
+    background: linear-gradient(var(--color-bg-surface), var(--color-bg-surface)) padding-box,
+                linear-gradient(135deg, rgb(16 185 129 / 0.4), rgb(139 92 246 / 0.2)) border-box;
+    border: 1px solid transparent;
+  }
+  .gradient-border-hot {
+    background: linear-gradient(var(--color-bg-surface), var(--color-bg-surface)) padding-box,
+                linear-gradient(135deg, rgb(245 158 11 / 0.6), rgb(244 63 94 / 0.3)) border-box;
+    border: 1px solid transparent;
+  }
+  .text-gradient-emerald {
+    background: linear-gradient(135deg, #34d399, #10b981);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: rgb(51 65 85 / 0.6); border-radius: 2px; }
+}

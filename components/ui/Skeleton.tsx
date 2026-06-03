@@ -174,3 +174,30 @@ export { TableRowSkeleton as SkeletonTableRow };
 export { ChartSkeleton as SkeletonChart };
 
 export default Skeleton;
+
+/** Track card skeleton for the A&R Scout grid. */
+export function TrackCardSkeleton() {
+  return (
+    <div className="rounded-xl border border-slate-800/60 bg-slate-900/50 p-4 space-y-3" aria-hidden>
+      <div className="flex items-start gap-3">
+        <SkeletonBox className="w-8 h-8 rounded-full shrink-0" />
+        <div className="flex-1 space-y-2">
+          <SkeletonBox className="h-4 w-3/4" />
+          <SkeletonBox className="h-3 w-1/2" />
+        </div>
+        <SkeletonBox className="w-10 h-10 rounded-full shrink-0" />
+      </div>
+      <div className="space-y-1.5 pt-1">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-2">
+            <SkeletonBox className="w-4 h-4 rounded" />
+            <SkeletonBox className="h-3 w-12" />
+            <SkeletonBox className="flex-1 h-1.5 rounded-full" />
+            <SkeletonBox className="h-3 w-10" />
+          </div>
+        ))}
+      </div>
+      <SkeletonBox className="w-full h-8 rounded-lg" />
+    </div>
+  );
+}
