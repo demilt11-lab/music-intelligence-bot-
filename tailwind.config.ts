@@ -115,6 +115,11 @@ const config: Config = {
       },
     },
   },
+  safelist: [
+    'text-emerald-400', 'text-amber-400', 'text-rose-400', 'text-violet-400', 'text-sky-400',
+    'bg-emerald-500/10', 'bg-amber-500/10', 'bg-rose-500/10', 'bg-violet-500/10',
+    'border-emerald-500/20', 'border-amber-500/20', 'border-rose-500/20', 'border-violet-500/20',
+  ],
   plugins: [],
 };
 

@@ -1,9 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { PageSection } from '../../ui/components/layout/PageSection';
-import { Spinner } from '../../ui/components/feedback/Spinner';
-import { ErrorState } from '../../ui/components/feedback/ErrorState';
+import { SkeletonBox } from '@/components/ui/Skeleton';
 
 type ChartEntry = {
   chartType: string;
@@ -38,9 +36,9 @@ export function ChartsClient({ trackId }: Props) {
         if (!cancelled) {
           setData(json.obj ?? []);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) {
-          setError(err.message ?? 'Error loading charts');
+          setError(err instanceof Error ? err.message : 'Error loading charts');
         }
       } finally {
         if (!cancelled) {
@@ -50,50 +48,42 @@ export function ChartsClient({ trackId }: Props) {
     }
 
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [trackId]);
 
-  if (loading) {
-    return (
-      <PageSection title="Charts">
-        <Spinner label="Loading chart history..." />
-      </PageSection>
-    );
-  }
-
-  if (error) {
-    return (
-      <PageSection title="Charts">
-        <ErrorState description={error} />
-      </PageSection>
-    );
-  }
-
-  if (!data?.length) {
-    return (
-      <PageSection title="Charts">
-        <p className="text-xs text-slate-400">
-          No chart history available.
-        </p>
-      </PageSection>
-    );
-  }
-
   return (
-    <PageSection title="Charts">
-      <ul className="space-y-1 text-xs text-slate-200">
-        {data.map((entry, idx) => (
-          <li key={idx}>
-            <span className="text-slate-300">
-              {entry.chartType}
-            </span>{' '}
-            – rank {entry.rank} on {entry.date}
-            {entry.market ? ` (${entry.market})` : ''}
-          </li>
-        ))}
-      </ul>
-    </PageSection>
+    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">Charts</h2>
+
+      {loading && (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }, (_, i) => (
+            <SkeletonBox key={i} className="h-4 w-full" />
+          ))}
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-3 text-xs text-rose-400">{error}</div>
+      )}
+
+      {!loading && !error && !data?.length && (
+        <p className="text-xs text-slate-500">No chart history available.</p>
+      )}
+
+      {!loading && !error && data && data.length > 0 && (
+        <ul className="space-y-1.5 text-xs">
+          {data.map((entry, idx) => (
+            <li key={idx} className="flex items-center gap-2 text-slate-300">
+              <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" aria-hidden />
+              <span className="text-slate-400">{entry.chartType}</span>
+              <span className="text-slate-200 font-medium">#{entry.rank}</span>
+              <span className="text-slate-500">{entry.date}</span>
+              {entry.market && <span className="text-slate-600">({entry.market})</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

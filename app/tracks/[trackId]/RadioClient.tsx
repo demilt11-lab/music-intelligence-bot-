@@ -1,13 +1,11 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { PageSection } from '../../ui/components/layout/PageSection';
-import { Spinner } from '../../ui/components/feedback/Spinner';
-import { ErrorState } from '../../ui/components/feedback/ErrorState';
+import { SkeletonBox } from '@/components/ui/Skeleton';
+import { formatNumber } from '@/lib/utils';
 
 type AirplayTotals = {
   totalSpins?: number;
-  // add fields as needed
 };
 
 type BroadcastMarket = {
@@ -46,9 +44,9 @@ export function RadioClient({ trackId }: Props) {
         if (!cancelled) {
           setData(json.obj ?? null);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (!cancelled) {
-          setError(err.message ?? 'Error loading radio data');
+          setError(err instanceof Error ? err.message : 'Error loading radio data');
         }
       } finally {
         if (!cancelled) {
@@ -58,61 +56,58 @@ export function RadioClient({ trackId }: Props) {
     }
 
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [trackId]);
 
-  if (loading) {
-    return (
-      <PageSection title="Radio">
-        <Spinner label="Loading radio airplay..." />
-      </PageSection>
-    );
-  }
-
-  if (error) {
-    return (
-      <PageSection title="Radio">
-        <ErrorState description={error} />
-      </PageSection>
-    );
-  }
-
-  if (!data) {
-    return (
-      <PageSection title="Radio">
-        <p className="text-xs text-slate-400">
-          No radio data available.
-        </p>
-      </PageSection>
-    );
-  }
-
   return (
-    <PageSection title="Radio">
-      {data.airplayTotals && (
-        <p className="text-sm text-slate-200">
-          Total spins:{' '}
-          <span className="font-semibold">
-            {data.airplayTotals.totalSpins ?? '—'}
-          </span>
-        </p>
+    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-4">Radio Airplay</h2>
+
+      {loading && (
+        <div className="space-y-2">
+          <SkeletonBox className="h-4 w-32" />
+          {Array.from({ length: 3 }, (_, i) => (
+            <SkeletonBox key={i} className="h-3 w-full" />
+          ))}
+        </div>
       )}
 
-      {data.broadcastMarkets?.length ? (
-        <ul className="mt-2 space-y-1 text-xs text-slate-300">
-          {data.broadcastMarkets.map((m, idx) => (
-            <li key={idx}>
-              {m.marketName}: {m.spins} spins
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-1 text-xs text-slate-400">
-          No broadcast market breakdown available.
-        </p>
+      {error && !loading && (
+        <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-3 text-xs text-rose-400">{error}</div>
       )}
-    </PageSection>
+
+      {!loading && !error && !data && (
+        <p className="text-xs text-slate-500">No radio data available.</p>
+      )}
+
+      {!loading && !error && data && (
+        <div className="space-y-3">
+          {data.airplayTotals && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">Total spins:</span>
+              <span className="text-sm font-semibold text-slate-100 tabular-nums">
+                {data.airplayTotals.totalSpins != null ? formatNumber(data.airplayTotals.totalSpins) : '—'}
+              </span>
+            </div>
+          )}
+
+          {data.broadcastMarkets && data.broadcastMarkets.length > 0 ? (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-2">By Market</p>
+              <ul className="space-y-1.5">
+                {data.broadcastMarkets.map((m, idx) => (
+                  <li key={idx} className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">{m.marketName}</span>
+                    <span className="tabular-nums text-slate-200 font-medium">{formatNumber(m.spins)} spins</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">No broadcast market breakdown available.</p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

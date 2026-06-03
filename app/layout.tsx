@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { SidebarNav } from '@/components/layout/SidebarNav';
+import { ToastProvider } from '@/components/ui/Toast';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' });
 
@@ -25,12 +26,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 z-50 bg-emerald-600 text-white px-3 py-1 rounded text-sm">
           Skip to content
         </a>
-        <div className="flex min-h-screen">
-          <SidebarNav />
-          <main className="flex-1 min-w-0 overflow-x-hidden" id="main-content">
-            {children}
-          </main>
-        </div>
+        <ToastProvider>
+          <div className="flex min-h-screen">
+            <SidebarNav />
+            <main className="flex-1 min-w-0 overflow-x-hidden" id="main-content">
+              {children}
+            </main>
+          </div>
+        </ToastProvider>
       </body>
     </html>
   );

@@ -67,6 +67,7 @@
     "@prisma/client": "^5.10.0",
     "@upstash/redis": "^1.34.3",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.40.0",
     "next": "14.1.0",
     "react": "^18",
     "react-dom": "^18",
@@ -80,12 +81,12 @@
     "autoprefixer": "^10.5.0",
     "eslint": "^8",
     "eslint-config-next": "14.1.0",
+    "google-trends-api": "^4.9.2",
     "postcss": "^8.5.15",
     "prisma": "^5.10.0",
     "tailwindcss": "^3.4.19",
-    "tsx": "^4.19.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5",
-    "google-trends-api": "^4.9.2"
+    "tsx": "^4.19.0",
+    "typescript": "^5"
   }
 }
