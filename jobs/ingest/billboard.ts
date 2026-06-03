@@ -50,66 +50,83 @@ interface BillboardEntry {
   weeksOnChart?: number;
 }
 
+// Metadata field labels that appear between rank heading and actual title/artist
+const METADATA_LABELS = new Set([
+  'peak chart date', 'award', 'weeks on chart', 'last week', 'peak position',
+  'peak', 'weeks', 'new', 're-entry', 'rising', 'steady', 'falling',
+]);
+
+function isMetadataLine(line: string): boolean {
+  const clean = line.replace(/\*+/g, '').replace(/#+/g, '').replace(/\[.*?\]\(.*?\)/g, '').trim().toLowerCase();
+  if (!clean) return true;
+  if (clean.match(/^\d{1,3}$/)) return true; // bare number
+  if (clean.match(/^\[?\d{2}\/\d{2}\/\d{2,4}\]?/)) return true; // date
+  if (clean.match(/^https?:\/\//)) return true; // URL
+  if (clean.match(/^\[.*\]\(https?:/)) return true; // markdown link
+  for (const label of METADATA_LABELS) {
+    if (clean.includes(label)) return true;
+  }
+  return false;
+}
+
 /**
- * Parse Billboard chart markdown into structured entries.
- * Billboard pages render chart entries with a consistent pattern:
- * "#1\nSong Title\nArtist Name" or similar markdown structures.
+ * Parse Billboard chart markdown.
+ *
+ * Billboard pages from Firecrawl markdown have the structure:
+ *   ### 1
+ *   #### Peak Chart Date
+ *   [02/14/26](link)
+ *   **Song Title**
+ *   Artist Name
+ *   ...
+ *   ### 2
+ *   ...
  */
 function parseBillboardMarkdown(markdown: string): BillboardEntry[] {
   const entries: BillboardEntry[] = [];
-
-  // Pattern 1: lines like "1. Song Title\nArtist Name" or rank blocks
-  // Billboard markdown typically has chart entries as numbered lists or
-  // structured sections. We look for number + title + artist groupings.
-
-  // Split into lines and scan for rank patterns
   const lines = markdown.split('\n').map((l) => l.trim()).filter(Boolean);
 
-  let i = 0;
-  while (i < lines.length && entries.length < 100) {
-    const line = lines[i];
+  let currentRank: number | null = null;
+  let candidateLines: string[] = [];
 
-    // Match lines starting with a rank number (1-100)
-    const rankMatch = line.match(/^#?(\d{1,3})[\.\):\s]/);
-    if (rankMatch) {
-      const rank = parseInt(rankMatch[1], 10);
-      if (rank >= 1 && rank <= 100) {
-        // Next non-empty lines should be title and artist
-        const rest = line.slice(rankMatch[0].length).trim();
-        let title = rest;
-        let artist = '';
-
-        if (!title && i + 1 < lines.length) {
-          title = lines[i + 1];
-          i++;
-        }
-        if (i + 1 < lines.length) {
-          const nextLine = lines[i + 1];
-          // Artist lines tend not to start with # or be very short rank indicators
-          if (!nextLine.match(/^#?\d{1,3}[\.\):\s]/) && nextLine.length > 1) {
-            artist = nextLine;
-            i++;
-          }
-        }
-
-        if (title && artist && rank) {
-          entries.push({ rank, title: title.replace(/\*+/g, '').trim(), artist: artist.replace(/\*+/g, '').trim() });
-        }
-      }
+  const flush = () => {
+    if (currentRank === null) return;
+    // candidateLines contains everything between this rank heading and the next
+    // Filter out metadata, then first non-metadata line = title, second = artist
+    const content = candidateLines.filter((l) => !isMetadataLine(l));
+    const title = content[0]?.replace(/\*+/g, '').replace(/#+/g, '').trim();
+    const artist = content[1]?.replace(/\*+/g, '').replace(/#+/g, '').trim();
+    if (title && artist && title.length > 0 && artist.length > 0) {
+      entries.push({ rank: currentRank, title, artist });
     }
-    i++;
-  }
+    candidateLines = [];
+  };
 
-  // Pattern 2: if pattern 1 found nothing, try "**#1** Title - Artist" style
+  for (const line of lines) {
+    // Rank heading: ### 1 or ## 1 or # 1 (standalone rank lines)
+    const rankHeading = line.match(/^#{1,4}\s+(\d{1,3})\s*$/);
+    if (rankHeading) {
+      flush();
+      const rank = parseInt(rankHeading[1], 10);
+      currentRank = rank >= 1 && rank <= 100 ? rank : null;
+      continue;
+    }
+
+    if (currentRank !== null) {
+      candidateLines.push(line);
+    }
+  }
+  flush();
+
+  // Fallback: if heading-based parse found nothing, try inline pattern
+  // e.g. "**1. Song Title** by Artist"
   if (entries.length === 0) {
-    const blockPattern = /\*{0,2}#?(\d{1,3})\*{0,2}[^\n]*?\n+([^\n]+)\n+([^\n]+)/g;
+    const inlinePattern = /^\*{0,2}(\d{1,3})[.)]\s*\*{0,2}([^*\n]+?)\*{0,2}(?:\s+[Bb]y\s+|\s*[-–]\s*)(.+)$/gm;
     let m: RegExpExecArray | null;
-    while ((m = blockPattern.exec(markdown)) !== null && entries.length < 100) {
+    while ((m = inlinePattern.exec(markdown)) !== null && entries.length < 100) {
       const rank = parseInt(m[1], 10);
-      const title = m[2].replace(/\*+/g, '').trim();
-      const artist = m[3].replace(/\*+/g, '').trim();
-      if (rank >= 1 && rank <= 100 && title && artist) {
-        entries.push({ rank, title, artist });
+      if (rank >= 1 && rank <= 100) {
+        entries.push({ rank, title: m[2].trim(), artist: m[3].trim() });
       }
     }
   }
