@@ -35,9 +35,9 @@ function getHeat(score: number): 'hot' | 'rising' | 'cool' {
 }
 
 const HEAT_STYLES = {
-  hot:    { badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20',   glow: 'hover:glow-amber',   label: '🔥 Hot' },
-  rising: { badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', glow: 'hover:glow-emerald', label: '↑ Rising' },
-  cool:   { badge: 'bg-slate-700/40 text-slate-400 border-slate-700/20',   glow: '',                    label: 'Watching' },
+  hot:    { badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20',       hoverShadow: '0 0 20px -2px rgb(245 158 11 / 0.4)', label: '🔥 Hot' },
+  rising: { badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', hoverShadow: '0 0 20px -2px rgb(16 185 129 / 0.4)', label: '↑ Rising' },
+  cool:   { badge: 'bg-slate-700/40 text-slate-400 border-slate-700/20',       hoverShadow: '',                                    label: 'Watching' },
 };
 
 function getActionType(type: string): 'insight' | 'action' | 'warning' | 'info' {
@@ -51,15 +51,17 @@ export function ScoutTrackCard({ track, index, className = '' }: ScoutTrackCardP
   const heat = getHeat(track.totalScore);
   const heatStyle = HEAT_STYLES[heat];
   const primaryAction = track.actions?.[0];
+  const [hovered, setHovered] = React.useState(false);
 
   const tiktokMax = 50_000_000;
   const streamMax = 10_000_000;
 
   return (
     <article
-      className={`group relative rounded-xl border bg-slate-900/60 transition-all duration-200 hover:bg-slate-900/80 hover:-translate-y-0.5 hover:shadow-lg
-        ${heat === 'hot' ? 'gradient-border-hot' : 'gradient-border'}
-        ${className}`}
+      className={`group relative rounded-xl transition-all duration-200 hover:-translate-y-0.5 ${heat === 'hot' ? 'gradient-border-hot' : 'gradient-border'} ${className}`}
+      style={hovered && heatStyle.hoverShadow ? { boxShadow: heatStyle.hoverShadow } : undefined}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       aria-label={`Rank ${index + 1}: ${track.name} by ${track.artists.join(', ')}`}
     >
       <div className="p-4 space-y-3">

@@ -247,8 +247,8 @@ async function main(): Promise<void> {
         { title: { startsWith: '###' } },
         { title: { contains: 'Peak Chart Date' } },
         { title: { contains: 'billboard.com' } },
+        { title: { in: ['LW', 'PK', 'WOC', 'NEW', 'RE-ENTRY', 'Award'] } },
       ],
-      // Only delete stubs (no external IDs from other platforms)
       externalIds: { none: { platform: { not: 'billboard' } } },
     },
   });
