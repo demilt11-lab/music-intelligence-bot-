@@ -836,23 +836,6 @@ model TrackVersionCluster {
 }
 
 // ─────────────────────────────────────────────
-// API key management
-// ─────────────────────────────────────────────
-
-model ApiKey {
-  id        Int      @id @default(autoincrement())
-  keyHash   String   @unique
-  name      String
-  ownerId   String
-  scopes    String[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  revokedAt DateTime?
-
-  @@map("api_keys")
-}
-
-// ─────────────────────────────────────────────
 // Auth layer
 // ─────────────────────────────────────────────
 
