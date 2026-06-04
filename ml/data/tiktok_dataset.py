@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 import torch
 from pydantic import BaseModel, model_validator
 from torch import Tensor
@@ -20,6 +21,9 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 # ---------------------------------------------------------------------------
 
 VIRAL_TIKTOK_THRESHOLD = 10_000   # uses in 30 days = confirmed viral
+
+RELEASE_MASK_DAYS = 14  # suppress stream velocity for first 14 days post-release
+                         # avoids negative-slope artifact from partial release windows
 VIRAL_WINDOW_DAYS = 30
 
 # Early breakout tier: consistent growth signal (industry A&R emerging threshold)
@@ -35,7 +39,7 @@ class SongRecord(BaseModel):
     song_id: int
     title: str
     artist: str
-    release_date: str
+    release_date: Optional[str] = None
     genre: Optional[str] = None
     tiktok_uses_30d: int
     is_viral: bool = False           # derived below
@@ -143,7 +147,21 @@ class TikTokViralDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, Tensor]:
         rec = self.records[idx]
 
-        ts = self._build_timeseries(rec)   # (seq_len, 10)
+        timeseries = self._build_timeseries(rec)   # (seq_len, 10)
+
+        # Apply release-date mask: zero out stream velocity channel (channel 0)
+        # for the first RELEASE_MASK_DAYS timesteps to avoid partial-window artifacts
+        if rec.release_date is not None:
+            try:
+                release_dt = pd.Timestamp(rec.release_date)
+                days_since_release = (pd.Timestamp.now() - release_dt).days
+                mask_steps = max(0, RELEASE_MASK_DAYS - max(0, days_since_release - self.seq_len))
+                if mask_steps > 0 and timeseries.shape[0] > 0:
+                    timeseries[:mask_steps, 0] = 0.0  # zero stream_velocity channel
+            except Exception:
+                pass  # non-fatal: missing release date = no mask applied
+
+        ts = timeseries
 
         audio = np.array(rec.audio_features[:64], dtype=np.float32)
         if len(audio) < 64:
@@ -242,11 +260,16 @@ class ViralDataSynthesizer:
 
             metadata = list(np.random.randn(32).astype(np.float32) * 0.5)
 
+            # Synthetic release dates: uniform over last 365 days
+            import random as rnd
+            release_days_ago = rnd.randint(0, 365)
+            release_date = (pd.Timestamp.now() - pd.Timedelta(days=release_days_ago)).strftime("%Y-%m-%d")
+
             records.append(SongRecord(
                 song_id=i,
                 title=f"Song {i}",
                 artist=f"Artist {i % 10000}",
-                release_date="2024-01-01",
+                release_date=release_date,
                 genre=random.choice(genres),
                 tiktok_uses_30d=uses_30d,
                 days_to_viral=days_v,

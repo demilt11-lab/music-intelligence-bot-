@@ -159,6 +159,47 @@ class FeatureEngineer:
         if "skip_rate_inv" not in df.columns:
             df["skip_rate_inv"] = 0.5
 
+        # Algorithmic vs editorial traffic split
+        # High algo_pct = Spotify pushing the song; editorial = curators chose it
+        # editorial traffic is a stronger leading signal than algorithmic
+        if "algo_streams" in df.columns and "total_streams" in df.columns:
+            df["algo_traffic_pct"] = (
+                df["algo_streams"] / (df["total_streams"] + 1e-8)
+            ).clip(0, 1)
+            # Invert: high editorial (low algo) = stronger organic signal
+            df["editorial_signal"] = 1 - df["algo_traffic_pct"]
+        else:
+            # Default: unknown split, use neutral value
+            df["algo_traffic_pct"] = 0.5
+            df["editorial_signal"] = 0.5
+
+        # Listener-to-follower conversion rate
+        # >5% = building durable fanbase (not just riding algorithmic wave)
+        # Best signing signal after save_rate
+        if "new_followers_7d" in df.columns and "new_listeners_7d" in df.columns:
+            df["listener_follower_conversion"] = (
+                df["new_followers_7d"] / (df["new_listeners_7d"] + 1)
+            ).clip(0, 1)
+            df["strong_conversion"] = (df["listener_follower_conversion"] > 0.05).astype(int)
+        else:
+            df["listener_follower_conversion"] = np.nan
+            df["strong_conversion"] = 0
+
+        # Cross-signal: TikTok virality WITH streaming follow-through
+        # High tiktok + low saves = meme (don't sign); high both = genuine breakout
+        df["viral_with_retention"] = (
+            df["tiktok_growth"].fillna(0)
+            * df["save_rate"].fillna(0)
+            * df["stream_velocity"].fillna(0)
+        )
+
+        # Chart momentum quality: rising chart + low skip = real momentum
+        # Rising chart + high skip = gaming / payola
+        df["momentum_quality"] = (
+            df["chart_momentum"].fillna(0)
+            * df["skip_rate_inv"].fillna(0.5)
+        )
+
         # Temporal cyclic encoding from computed_at
         if "computed_at" in df.columns:
             ts = pd.to_datetime(df["computed_at"], errors="coerce", utc=True)

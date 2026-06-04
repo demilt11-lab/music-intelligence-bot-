@@ -6,6 +6,11 @@ supabase:
     signals: prediction_signals
     trajectories: trajectory_predictions
 
+# Feature selection policy:
+# - Include ONLY raw platform signals as training features
+# - NEVER include trajectory engine outputs (momentum, breakout_prob, virality_score)
+#   as those are derived from the same signals — including them causes circular leakage
+# - Target (is_viral) is derived from tiktok_uses_30d >= 10_000, NOT from virality_score
 features:
   numeric:
     - stream_velocity
@@ -13,15 +18,16 @@ features:
     - chart_momentum
     - playlist_signal
     - radio_spike
-    - momentum
-    - breakout_prob
-    - virality_score
-    - peak_score_estimate
-    - confidence
     - save_rate
     - follower_velocity
     - skip_rate_inv
     - pre_save_normalized
+    - algo_traffic_pct
+    - editorial_signal
+    - listener_follower_conversion
+    - strong_conversion
+    - viral_with_retention
+    - momentum_quality
   categorical:
     - entity_type
   temporal:
@@ -44,7 +50,6 @@ preprocessing:
 validation:
   min_rows: 100
   required_columns:
-    - momentum
-    - breakout_prob
-    - virality_score
-    - confidence
+    - stream_velocity
+    - tiktok_growth
+    - chart_momentum

@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, TimeSeriesSplit
 
 
 @dataclass
@@ -15,6 +15,9 @@ class CVConfig:
     random_state: int = 42
     metric: str = "auroc"
     models: List[str] = field(default_factory=lambda: ["lstm", "tabular", "xgboost"])
+    use_time_series_split: bool = True   # prevents temporal leakage
+    gap_days: int = 30                   # gap between train and val to prevent look-ahead
+    date_column: str = "computed_at"     # column used for temporal ordering
 
 
 @dataclass
@@ -63,22 +66,38 @@ class CrossValidator:
         """
         Train each model on each fold, collect OOF predictions.
         Logs metrics to MLflow if available.
+
+        # IMPORTANT: use_time_series_split=True (default) prevents temporal leakage.
+        # Random CV (use_time_series_split=False) allows future signals into training
+        # folds and will produce optimistically biased AUROC estimates.
         """
         if cfg is not None:
             self.cfg = cfg
 
         labels = np.array([int(rec.is_viral) for rec in dataset.records])
         n = len(labels)
-        skf = StratifiedKFold(
-            n_splits=self.cfg.n_folds,
-            shuffle=self.cfg.shuffle,
-            random_state=self.cfg.random_state,
-        )
+        indices = np.arange(n)
+
+        if self.cfg.use_time_series_split:
+            # Sort dataset by date before splitting to ensure temporal order
+            # TimeSeriesSplit with gap prevents future data leaking into training folds
+            tscv = TimeSeriesSplit(
+                n_splits=self.cfg.n_folds,
+                gap=self.cfg.gap_days,         # skip N samples between train end and val start
+            )
+            split_iter = tscv.split(indices)
+        else:
+            skf = StratifiedKFold(
+                n_splits=self.cfg.n_folds,
+                shuffle=self.cfg.shuffle,
+                random_state=self.cfg.random_state,
+            )
+            split_iter = skf.split(indices, labels)
 
         fold_results: List[FoldResult] = []
         oof_preds: Dict[str, np.ndarray] = {m: np.zeros(n) for m in self.cfg.models}
 
-        for fold_idx, (train_idx, val_idx) in enumerate(skf.split(np.zeros(n), labels)):
+        for fold_idx, (train_idx, val_idx) in enumerate(split_iter):
             for model_name in self.cfg.models:
                 model_cfg = model_configs.get(model_name, {})
                 train_preds, val_preds, train_metrics, val_metrics = self._train_fold(

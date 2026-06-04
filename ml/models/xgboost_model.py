@@ -79,7 +79,12 @@ class ViralXGBoost:
         y_peak: np.ndarray,
         eval_set: Optional[Tuple[np.ndarray, np.ndarray]] = None,
     ) -> "ViralXGBoost":
-        """Train all three models with optional early stopping."""
+        """Train all three models with optional early stopping.
+
+        # NOTE: After training, fit a CalibratedViralXGBoost on the validation set
+        # (without oversampling) to correct probability calibration at inference time.
+        # See CalibratedViralXGBoost.fit_calibration().
+        """
         es = self.cfg.early_stopping_rounds
 
         if eval_set is not None:
@@ -161,6 +166,72 @@ class ViralXGBoost:
     @classmethod
     def load(cls, path: str) -> "ViralXGBoost":
         """Deserialize from cloudpickle file."""
+        import cloudpickle
+        with open(path, "rb") as f:
+            return cloudpickle.load(f)
+
+
+from sklearn.calibration import CalibratedClassifierCV  # noqa: F401 (imported for availability)
+from sklearn.linear_model import LogisticRegression
+
+
+class CalibratedViralXGBoost:
+    """
+    ViralXGBoost with Platt scaling calibration.
+
+    Calibration corrects the decision boundary shift caused by class imbalance
+    oversampling (scale_pos_weight=11.5) when the inference population has a
+    different positive rate than the training set.
+
+    Usage: fit on calibration set AFTER training on main dataset.
+    """
+
+    def __init__(self, base_model: ViralXGBoost):
+        self.base = base_model
+        self.calibrator = LogisticRegression(C=1.0, max_iter=1000)
+        self._is_calibrated = False
+
+    def fit_calibration(
+        self,
+        X_cal: np.ndarray,
+        y_cal: np.ndarray,
+    ) -> "CalibratedViralXGBoost":
+        """
+        Fit Platt scaling on a held-out calibration set.
+
+        X_cal, y_cal should be from a set NOT used in training (use the val split).
+        The calibration set should reflect the TRUE class distribution (no oversampling).
+        """
+        raw_probs = self.base.clf_viral.predict_proba(X_cal)[:, 1].reshape(-1, 1)
+        self.calibrator.fit(raw_probs, y_cal)
+        self._is_calibrated = True
+        return self
+
+    def predict_proba_calibrated(self, X: np.ndarray) -> np.ndarray:
+        """Return calibrated viral probabilities."""
+        if not self._is_calibrated:
+            raise RuntimeError("Call fit_calibration() before predicting")
+        raw_probs = self.base.clf_viral.predict_proba(X)[:, 1].reshape(-1, 1)
+        return self.calibrator.predict_proba(raw_probs)[:, 1]
+
+    def predict(self, X: np.ndarray, threshold: float = 0.5) -> np.ndarray:
+        return (self.predict_proba_calibrated(X) >= threshold).astype(int)
+
+    def predict_full(self, X: np.ndarray) -> "XGBPrediction":
+        """Return XGBPrediction with calibrated viral_prob."""
+        base_pred = self.base.predict(X)
+        calibrated = self.predict_proba_calibrated(X)
+        base_pred.viral_prob = calibrated
+        base_pred.is_viral = (calibrated >= 0.5)
+        return base_pred
+
+    def save(self, path: str) -> None:
+        import cloudpickle
+        with open(path, "wb") as f:
+            cloudpickle.dump(self, f)
+
+    @classmethod
+    def load(cls, path: str) -> "CalibratedViralXGBoost":
         import cloudpickle
         with open(path, "rb") as f:
             return cloudpickle.load(f)

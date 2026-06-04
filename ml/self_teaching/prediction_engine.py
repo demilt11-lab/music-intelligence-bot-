@@ -32,6 +32,7 @@ class PredictionOutput:
     predicted_at: str                # ISO timestamp
     warning: Optional[str]
     from_cache: bool
+    source_completeness: float = 1.0  # fraction of expected signals present
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +112,13 @@ EXPECTED_FEATURES = [
     "organic_score", "score_product", "confidence_weighted_score",
     "breakout_momentum_ratio", "skip_rate_inv",
 ]
+
+EXPECTED_SIGNALS = [
+    "stream_velocity", "tiktok_growth", "save_rate", "follower_velocity",
+    "chart_momentum", "playlist_add", "radio_spike", "skip_rate_inv",
+    "pre_save_normalized", "listener_follower_conversion",
+]
+MIN_COMPLETENESS_FOR_HIGH_CONFIDENCE = 0.6  # < 60% signals = low confidence
 
 SIGNAL_WEIGHTS: dict[str, float] = {
     "stream_velocity":   0.22,
@@ -194,7 +202,17 @@ class BreakoutPredictor:
 
         # Confidence from feature completeness
         non_null = sum(1 for k in EXPECTED_FEATURES if features.get(k) is not None)
-        confidence = non_null / max(len(EXPECTED_FEATURES), 1)
+        confidence_score = non_null / max(len(EXPECTED_FEATURES), 1)
+
+        # Compute source completeness — fraction of expected signals present
+        n_available = sum(1 for s in EXPECTED_SIGNALS if features.get(s) is not None)
+        source_completeness = n_available / len(EXPECTED_SIGNALS)
+
+        # Override confidence downward if data is too sparse
+        warning = None
+        if source_completeness < MIN_COMPLETENESS_FOR_HIGH_CONFIDENCE:
+            confidence_score = min(confidence_score, 0.40)
+            warning = (warning or "") + f" Low signal completeness ({source_completeness:.0%}); prediction unreliable."
 
         # Top 3 signals by importance × value
         top_signals = self._top_signals(features)
@@ -202,12 +220,13 @@ class BreakoutPredictor:
         output = PredictionOutput(
             artist_id=artist_id,
             breakout_probability=round(raw_prob * 100, 2),
-            confidence_score=round(confidence, 4),
+            confidence_score=round(confidence_score, 4),
             model_version=self._model_meta.version if self._model_meta else "unknown",
             top_signals=top_signals,
             predicted_at=datetime.now(timezone.utc).isoformat(),
-            warning=None,
+            warning=warning,
             from_cache=False,
+            source_completeness=round(source_completeness, 4),
         )
 
         # Cache
@@ -241,16 +260,23 @@ class BreakoutPredictor:
         import dataclasses
         for i, (aid, feats) in enumerate(zip(artist_ids, feature_dicts)):
             non_null = sum(1 for k in EXPECTED_FEATURES if feats.get(k) is not None)
-            confidence = non_null / max(len(EXPECTED_FEATURES), 1)
+            confidence_score = non_null / max(len(EXPECTED_FEATURES), 1)
+            n_available = sum(1 for s in EXPECTED_SIGNALS if feats.get(s) is not None)
+            source_completeness = n_available / len(EXPECTED_SIGNALS)
+            batch_warning = None
+            if source_completeness < MIN_COMPLETENESS_FOR_HIGH_CONFIDENCE:
+                confidence_score = min(confidence_score, 0.40)
+                batch_warning = f" Low signal completeness ({source_completeness:.0%}); prediction unreliable."
             output = PredictionOutput(
                 artist_id=aid,
                 breakout_probability=round(float(probs[i]) * 100, 2),
-                confidence_score=round(confidence, 4),
+                confidence_score=round(confidence_score, 4),
                 model_version=model_version,
                 top_signals=self._top_signals(feats),
                 predicted_at=now,
-                warning=None,
+                warning=batch_warning,
                 from_cache=False,
+                source_completeness=round(source_completeness, 4),
             )
             self._cache.set(str(aid), dataclasses.asdict(output))
             results.append(output)
