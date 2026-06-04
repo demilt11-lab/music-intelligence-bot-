@@ -1,2 +1,7 @@
 .claude/
 tsconfig.tsbuildinfo
+*.pyc
+
+__pycache__/
+*.pyc
+*.pyo
