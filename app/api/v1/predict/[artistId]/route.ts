@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { withAuth } from "@/lib/auth/middleware";
 import type { PredictionResponse } from "@/lib/ingestion/types";
 import { logger } from "@/lib/monitoring/logger";
+import { rankSignals } from "@/lib/trajectory/signal-ranker";
 
 export const GET = withAuth("trajectory:read", async (req, ctx) => {
   const artistId = parseInt(ctx.params.artistId);
@@ -43,18 +44,29 @@ export const GET = withAuth("trajectory:read", async (req, ctx) => {
   const { predictTrajectory } = await import("@/lib/trajectory/model");
   const prediction = await predictTrajectory("artist", artistId);
 
-  // 7. Get top signals with weights
-  const topSignals = getTopSignals(signals);
+  // 7. Use LambdaMART-style signal ranker for top signals
+  const featureVector: Record<string, number> = {};
+  for (const sig of signals) {
+    if (!featureVector[sig.signalType]) {
+      featureVector[sig.signalType] = sig.value;
+    }
+  }
+  const ranking = rankSignals(artistId, signals, featureVector);
 
+  // Build response with ranked signals and quality warnings
   return NextResponse.json({
     artistId,
     breakoutProbability: Math.round(prediction.breakoutProb * 100),
     confidenceScore: prediction.confidence,
     modelVersion: prediction.modelVersion,
-    topSignals,
+    topSignals: ranking.topSignals as unknown as PredictionResponse["topSignals"],
+    explanationText: ranking.explanationText,
+    dataQualityWarnings: ranking.dataQualityWarnings,
     predictedAt: new Date().toISOString(),
-    warning: null,
-  } satisfies PredictionResponse);
+    warning: ranking.dataQualityWarnings.length > 0
+      ? ranking.dataQualityWarnings[0]
+      : undefined,
+  } satisfies PredictionResponse & { predictedAt: string; explanationText: string; dataQualityWarnings: string[] });
 });
 
 function formatPredictionResponse(pred: any, stale: boolean, warning?: string): PredictionResponse {
@@ -69,31 +81,3 @@ function formatPredictionResponse(pred: any, stale: boolean, warning?: string): 
   };
 }
 
-function getTopSignals(signals: any[]): any[] {
-  const SIGNAL_WEIGHTS: Record<string, number> = {
-    save_rate: 0.18, tiktok_growth: 0.28, stream_velocity: 0.22,
-    follower_velocity: 0.09, chart_momentum: 0.15, playlist_add: 0.05, radio_spike: 0.03,
-  };
-  const INTERPRETATIONS: Record<string, (v: number) => string> = {
-    save_rate:         v => `${v > 0.5 ? "High" : v > 0.25 ? "Normal" : "Low"} save rate (${(v*100).toFixed(0)}%)`,
-    tiktok_growth:     v => `${v > 0.7 ? "Viral" : v > 0.4 ? "Growing" : "Low"} TikTok traction`,
-    stream_velocity:   v => `${v > 0.6 ? "Strong" : v > 0.3 ? "Moderate" : "Weak"} streaming growth`,
-    follower_velocity: v => `${v > 0.3 ? "Rapid" : v > 0.1 ? "Steady" : "Slow"} follower growth`,
-    chart_momentum:    v => v > 0.6 ? "Charting strongly" : v > 0.3 ? "Charting" : "Not charting",
-    playlist_add:      v => `${v > 0.6 ? "Heavy" : "Moderate"} playlist activity`,
-    radio_spike:       v => `${v > 0.5 ? "Significant" : "Moderate"} radio airplay`,
-  };
-  const latest = new Map<string, number>();
-  for (const s of signals) {
-    if (!latest.has(s.signalType)) latest.set(s.signalType, s.value);
-  }
-  return Array.from(latest.entries())
-    .filter(([k]) => k in SIGNAL_WEIGHTS)
-    .map(([signal, value]) => ({
-      signal, value,
-      weight: SIGNAL_WEIGHTS[signal] ?? 0,
-      interpretation: INTERPRETATIONS[signal]?.(value) ?? signal,
-    }))
-    .sort((a, b) => b.weight * b.value - a.weight * a.value)
-    .slice(0, 3);
-}
