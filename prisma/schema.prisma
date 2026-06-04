@@ -56,6 +56,8 @@ model Artist {
   trackArtists     TrackArtist[]
   externalIds      ExternalId[]
   tiktokUserChartRows TiktokUserChartRow[]
+  dailySnapshots    ArtistDailySnapshot[]
+  predictionOutcomes PredictionOutcome[]
 
   @@map("artists")
 }
@@ -905,4 +907,125 @@ model PredictionSignal {
   @@index([entityType, entityId, recordedAt])
   @@index([signalType, recordedAt])
   @@map("prediction_signals")
+}
+
+// ─────────────────────────────────────────────
+// Self-teaching ML loop
+// ─────────────────────────────────────────────
+
+model ArtistDailySnapshot {
+  id               Int      @id @default(autoincrement())
+  artistId         Int
+  date             DateTime @db.Date
+  streamVelocity   Float?   // normalized 7-day stream growth rate
+  playlistRate     Float?   // net playlist add rate
+  ugcCount         Int?     // TikTok/Reels UGC video count
+  followerGrowth   Float?   // monthly follower growth %
+  saveRate         Float?   // saves/streams ratio
+  skipRate         Float?   // stream skip rate
+  tiktokUses7d     Int?     // TikTok uses in 7 days
+  preSaveCount     Int?     // pre-release pre-saves
+  radioSpins       Int?     // weekly radio airplay count
+  chartRank        Int?     // best current chart position (null if not charting)
+  source           String   // "ingestion_cron" | "manual" | "backfill"
+  createdAt        DateTime @default(now())
+
+  artist Artist @relation(fields: [artistId], references: [id], onDelete: Cascade)
+
+  @@unique([artistId, date])
+  @@index([date])
+  @@index([artistId, date])
+  @@map("artist_daily_snapshots")
+}
+
+model ModelVersion {
+  id              Int      @id @default(autoincrement())
+  version         String   @unique  // e.g. "v1.0.0", "v1.1.0"
+  modelType       String   // "transformer" | "xgboost" | "ensemble"
+  artifactPath    String   // path to .pkl or .onnx file
+  metrics         Json     // { auroc, f1, precision, recall, val_loss }
+  hyperparams     Json     // training hyperparameters used
+  datasetVersion  String   // hash of training dataset
+  trainedAt       DateTime @default(now())
+  isActive        Boolean  @default(false)  // only one active at a time
+  isBaseline      Boolean  @default(false)  // rollback target
+  promotedAt      DateTime?
+  retiredAt       DateTime?
+  trainDurationS  Int?     // seconds to train
+  trainSamples    Int?     // number of training samples
+  notes           String?
+
+  predictions PredictionOutcome[]
+
+  @@index([isActive])
+  @@index([trainedAt])
+  @@map("model_versions")
+}
+
+model PredictionOutcome {
+  id                Int      @id @default(autoincrement())
+  artistId          Int
+  modelVersionId    Int
+  predictedAt       DateTime @default(now())
+  breakoutProb      Float    // 0-1 predicted probability
+  confidenceScore   Float    // model confidence 0-1
+  topSignals        Json     // [{ signal: string, weight: float, value: float }]
+  // Outcome fields (filled in after 90-day evaluation window)
+  outcomeAt         DateTime?
+  actualBrokeOut    Boolean?  // null = pending, true/false = resolved
+  chartedAt         DateTime? // date artist first appeared on target chart
+  chartName         String?   // which chart (e.g. "Billboard Hot 100")
+  peakChartRank     Int?
+  // Evaluation
+  wasCorrect        Boolean?  // predictedProb > 0.5 matches actualBrokeOut
+  evaluated         Boolean  @default(false)
+  evaluatedAt       DateTime?
+  feedbackSource    String?  // "billboard_api" | "manual" | "chart_monitor"
+
+  artist       Artist       @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  modelVersion ModelVersion @relation(fields: [modelVersionId], references: [id])
+
+  @@index([artistId, predictedAt])
+  @@index([evaluated, predictedAt])
+  @@index([modelVersionId])
+  @@map("prediction_outcomes")
+}
+
+model IngestionJob {
+  id            Int      @id @default(autoincrement())
+  jobType       String   // "daily_snapshot" | "weekly_retrain" | "feedback_eval"
+  status        String   // "pending" | "running" | "completed" | "failed" | "partial"
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  artistsTotal  Int?
+  artistsDone   Int?     @default(0)
+  artistsFailed Int?     @default(0)
+  errorLog      String?  @db.Text
+  metadata      Json?    // job-specific metadata
+  durationMs    Int?
+
+  @@index([jobType, startedAt])
+  @@index([status])
+  @@map("ingestion_jobs")
+}
+
+model RetrainingRun {
+  id                  Int      @id @default(autoincrement())
+  triggeredBy         String   // "weekly_cron" | "feedback_threshold" | "manual"
+  status              String   // "pending" | "training" | "evaluating" | "promoted" | "rolled_back" | "failed"
+  previousVersionId   Int?
+  newVersionId        Int?
+  prevAuroc           Float?
+  newAuroc            Float?
+  accuracyDelta       Float?   // newAuroc - prevAuroc (negative = regression)
+  rolledBack          Boolean  @default(false)
+  rollbackReason      String?
+  newLabeledCases     Int?     // labeled cases that triggered this run
+  startedAt           DateTime @default(now())
+  completedAt         DateTime?
+  notes               String?
+
+  @@index([status])
+  @@index([startedAt])
+  @@map("retraining_runs")
 }
