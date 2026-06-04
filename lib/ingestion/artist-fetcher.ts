@@ -2,15 +2,35 @@ import { prisma } from "@/lib/prisma";
 import type { ArtistMetrics } from "./types";
 import { logger } from "@/lib/monitoring/logger";
 
+function classifySignalSource(dbSource: string | null): string {
+  if (!dbSource) return "unknown";
+  const s = dbSource.toLowerCase();
+  if (s.includes("tiktok") && s.includes("official")) return "tiktok_business";
+  if (s.includes("unofficial") || s.includes("har") || s.includes("scrape")) return "unofficial";
+  if (s.includes("spotify") || s.includes("official")) return "official";
+  if (s.includes("distrokid") || s.includes("tunecore") || s.includes("distributor")) return "distributor";
+  return "unknown";
+}
+
+export interface ArtistMetricsWithSources extends ArtistMetrics {
+  signalSources: Record<string, string>;  // signalType → source classification
+  sourceCompleteness: number;             // 0-1: fraction of expected signals present
+}
+
+const EXPECTED_SIGNALS = [
+  "stream_velocity", "tiktok_growth", "save_rate", "follower_velocity",
+  "chart_momentum", "playlist_add", "radio_spike", "skip_rate_inv",
+];
+
 /**
- * Fetch the latest value for a given signalType from PredictionSignal
+ * Fetch the latest value and source for a given signalType from PredictionSignal
  * for the specified artistId within the last 30 days.
  */
-async function getLatestSignalValue(
+async function getLatestSignalRecord(
   artistId: number,
   signalType: string,
   since: Date
-): Promise<number | null> {
+): Promise<{ value: number; source: string | null } | null> {
   const signal = await prisma.predictionSignal.findFirst({
     where: {
       entityType: "artist",
@@ -19,36 +39,58 @@ async function getLatestSignalValue(
       recordedAt: { gte: since },
     },
     orderBy: { recordedAt: "desc" },
-    select: { value: true },
+    select: { value: true, source: true },
   });
-  return signal?.value ?? null;
+  if (!signal) return null;
+  return { value: signal.value, source: signal.source ?? null };
 }
 
 export async function fetchArtistMetrics(
   artistId: number,
   date: Date = new Date()
-): Promise<ArtistMetrics> {
+): Promise<ArtistMetricsWithSources> {
   const since = new Date(date);
   since.setDate(since.getDate() - 30);
 
   // Fetch all relevant signal types in parallel
   const [
-    streamVelocityRaw,
-    playlistRateRaw,
-    tiktokGrowthRaw,
-    followerVelocityRaw,
-    saveRateRaw,
-    skipRateRaw,
-    radioSpikeRaw,
+    streamVelocityRec,
+    playlistRateRec,
+    tiktokGrowthRec,
+    followerVelocityRec,
+    saveRateRec,
+    skipRateRec,
+    radioSpikeRec,
   ] = await Promise.all([
-    getLatestSignalValue(artistId, "stream_velocity", since),
-    getLatestSignalValue(artistId, "playlist_add", since),
-    getLatestSignalValue(artistId, "tiktok_growth", since),
-    getLatestSignalValue(artistId, "follower_velocity", since),
-    getLatestSignalValue(artistId, "save_rate", since),
-    getLatestSignalValue(artistId, "skip_rate", since),
-    getLatestSignalValue(artistId, "radio_spike", since),
+    getLatestSignalRecord(artistId, "stream_velocity", since),
+    getLatestSignalRecord(artistId, "playlist_add", since),
+    getLatestSignalRecord(artistId, "tiktok_growth", since),
+    getLatestSignalRecord(artistId, "follower_velocity", since),
+    getLatestSignalRecord(artistId, "save_rate", since),
+    getLatestSignalRecord(artistId, "skip_rate", since),
+    getLatestSignalRecord(artistId, "radio_spike", since),
   ]);
+
+  const streamVelocityRaw = streamVelocityRec?.value ?? null;
+  const playlistRateRaw = playlistRateRec?.value ?? null;
+  const tiktokGrowthRaw = tiktokGrowthRec?.value ?? null;
+  const followerVelocityRaw = followerVelocityRec?.value ?? null;
+  const saveRateRaw = saveRateRec?.value ?? null;
+  const skipRateRaw = skipRateRec?.value ?? null;
+  const radioSpikeRaw = radioSpikeRec?.value ?? null;
+
+  // Build signalSources map from DB source fields
+  const signalSources: Record<string, string> = {};
+  if (streamVelocityRec) signalSources["stream_velocity"] = classifySignalSource(streamVelocityRec.source);
+  if (playlistRateRec) signalSources["playlist_add"] = classifySignalSource(playlistRateRec.source);
+  if (tiktokGrowthRec) signalSources["tiktok_growth"] = classifySignalSource(tiktokGrowthRec.source);
+  if (followerVelocityRec) signalSources["follower_velocity"] = classifySignalSource(followerVelocityRec.source);
+  if (saveRateRec) signalSources["save_rate"] = classifySignalSource(saveRateRec.source);
+  if (skipRateRec) signalSources["skip_rate_inv"] = classifySignalSource(skipRateRec.source);
+  if (radioSpikeRec) signalSources["radio_spike"] = classifySignalSource(radioSpikeRec.source);
+
+  const available = EXPECTED_SIGNALS.filter(s => signalSources[s] !== undefined);
+  const sourceCompleteness = available.length / EXPECTED_SIGNALS.length;
 
   // Log missing signals at debug level
   const missing: string[] = [];
@@ -107,6 +149,8 @@ export async function fetchArtistMetrics(
     preSaveCount: null,  // not available from PredictionSignal
     radioSpins: radioSpikeRaw !== null ? Math.round(radioSpikeRaw * 100) : null,
     chartRank,
+    signalSources,
+    sourceCompleteness,
   };
 }
 
@@ -114,8 +158,8 @@ export async function fetchArtistMetricsBatch(
   artistIds: number[],
   date: Date,
   concurrency: number = 20
-): Promise<Map<number, ArtistMetrics | Error>> {
-  const results = new Map<number, ArtistMetrics | Error>();
+): Promise<Map<number, ArtistMetricsWithSources | Error>> {
+  const results = new Map<number, ArtistMetricsWithSources | Error>();
 
   // Process in chunks of `concurrency`
   for (let i = 0; i < artistIds.length; i += concurrency) {

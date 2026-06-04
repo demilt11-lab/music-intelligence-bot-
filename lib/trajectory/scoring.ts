@@ -1,6 +1,29 @@
 // Scoring functions — rule-based + statistical, no ML model dependency
 import { TrajectorySignal, TrajectoryScore } from './types';
 
+// Source reliability discount factors.
+// Unofficial/scraped data is discounted to reduce its influence when data
+// provenance cannot be verified. A policy change by the platform can make
+// unofficial signals disappear overnight.
+const SOURCE_RELIABILITY: Record<string, number> = {
+  official:          1.00,  // licensed API or official data partner
+  tiktok_business:   0.95,  // TikTok for Business API (delayed but reliable)
+  distributor:       0.90,  // distributor-provided data (Tunecore, DistroKid)
+  unofficial:        0.70,  // HAR scraping / unofficial API (30% discount)
+  scraped:           0.65,  // HTML scraping (35% discount — most fragile)
+  unknown:           0.80,  // default when source not tagged
+};
+
+function getSourceDiscount(source?: string): number {
+  if (!source) return SOURCE_RELIABILITY.unknown;
+  const key = source.toLowerCase();
+  return SOURCE_RELIABILITY[key] ?? SOURCE_RELIABILITY.unknown;
+}
+
+// Apply source reliability discount before using signal values
+const discountedValue = (signal: TrajectorySignal): number =>
+  signal.value * getSourceDiscount(signal.source);
+
 /**
  * Exponentially weighted moving average.
  */
@@ -71,9 +94,10 @@ export function estimateBreakoutProb(
     prob = Math.min(1, prob + 0.1 * recentChartEntries.length);
   }
 
-  // Boost for high tiktok_growth signals
+  // Only count high-tiktok signals from reliable sources
   const highTiktok = signals.filter(
-    (s) => s.signalType === 'tiktok_growth' && s.value > 0.5,
+    s => s.signalType === 'tiktok_growth'
+      && s.value * getSourceDiscount(s.source) > 0.5,
   );
   if (highTiktok.length > 0) {
     prob = Math.min(1, prob + 0.05 * highTiktok.length);

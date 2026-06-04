@@ -1,5 +1,54 @@
 import { prisma } from "@/lib/prisma";
+import type { PrismaClient } from "@prisma/client";
 import type { ArtistMetrics } from "./types";
+
+const SIGNAL_TTL_HOURS: Record<string, number> = {
+  stream_velocity:   48,   // Spotify data: 48h max age
+  tiktok_growth:     6,    // TikTok data: 6h max age (volatile)
+  save_rate:         72,   // Save rate: 72h (changes slowly)
+  follower_velocity: 24,   // Social: 24h
+  chart_momentum:    168,  // Chart data: weekly refresh
+  radio_spike:       168,  // Radio: weekly
+  playlist_signal:   24,   // Playlist: daily
+};
+
+export interface FreshnessResult {
+  signalType: string;
+  lastUpdated: Date | null;
+  ageHours: number;
+  isStale: boolean;
+  ttlHours: number;
+}
+
+export function checkSignalFreshness(
+  signalType: string,
+  lastUpdated: Date | null
+): FreshnessResult {
+  const ttlHours = SIGNAL_TTL_HOURS[signalType] ?? 24;
+  if (!lastUpdated) {
+    return { signalType, lastUpdated: null, ageHours: Infinity, isStale: true, ttlHours };
+  }
+  const ageHours = (Date.now() - lastUpdated.getTime()) / 3_600_000;
+  return { signalType, lastUpdated, ageHours, isStale: ageHours > ttlHours, ttlHours };
+}
+
+export async function getNullifiedStaleSignals(
+  artistId: number,
+  prisma: PrismaClient
+): Promise<Record<string, boolean>> {
+  // Returns map of signalType → isStale for this artist's latest signals
+  const signals = await prisma.predictionSignal.findMany({
+    where: { entityType: "artist", entityId: artistId },
+    orderBy: { recordedAt: "desc" },
+    distinct: ["signalType"],
+  });
+  const result: Record<string, boolean> = {};
+  for (const sig of signals) {
+    const { isStale } = checkSignalFreshness(sig.signalType, sig.recordedAt);
+    result[sig.signalType] = isStale;
+  }
+  return result;
+}
 
 const BATCH_SIZE = 500;
 
