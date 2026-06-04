@@ -1,0 +1,31 @@
+metrics:
+  classification:
+    - auroc
+    - auprc
+    - f1
+    - precision
+    - recall
+    - accuracy
+    - mcc
+  regression:
+    - mae
+    - rmse
+    - r2
+
+thresholds:
+  viral_classification: 0.5
+  high_confidence: 0.8
+
+plots:
+  confusion_matrix: true
+  roc_curve: true
+  precision_recall_curve: true
+  feature_importance: true
+  calibration_curve: true
+  shap_values: false  # requires shap library
+
+report:
+  format: html  # html | pdf | json
+  include_plots: true
+  include_examples: true
+  top_n_features: 20

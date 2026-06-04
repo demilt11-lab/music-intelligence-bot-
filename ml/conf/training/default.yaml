@@ -1,0 +1,40 @@
+epochs: 100
+batch_size: 256
+learning_rate: 1.0e-3
+weight_decay: 1.0e-4
+warmup_steps: 500
+scheduler: cosine  # cosine | step | plateau
+gradient_clip: 1.0
+early_stopping:
+  patience: 10
+  monitor: val_auroc
+  mode: max
+mixed_precision: true
+num_workers: 4
+pin_memory: true
+
+hyperparameter_search:
+  enabled: true
+  trials: 20
+  sampler: tpe  # tpe | random | grid
+  pruner: median
+  metric: val_auroc
+  direction: maximize
+  params:
+    learning_rate:
+      type: float
+      low: 1.0e-4
+      high: 1.0e-2
+      log: true
+    dropout:
+      type: float
+      low: 0.1
+      high: 0.5
+    batch_size:
+      type: categorical
+      choices: [128, 256, 512]
+    weight_decay:
+      type: float
+      low: 1.0e-5
+      high: 1.0e-3
+      log: true

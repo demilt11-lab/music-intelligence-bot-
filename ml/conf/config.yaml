@@ -1,0 +1,20 @@
+defaults:
+  - data: default
+  - model: transformer
+  - training: default
+  - evaluation: default
+  - registry: mlflow
+  - _self_
+
+project:
+  name: music-viral-prediction
+  version: "1.0.0"
+  seed: 42
+
+paths:
+  data_dir: data/
+  raw_dir: data/raw/
+  processed_dir: data/processed/
+  checkpoints_dir: checkpoints/
+  exports_dir: exports/
+  reports_dir: reports/

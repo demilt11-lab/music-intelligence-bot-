@@ -1,0 +1,8 @@
+name: neural_net_baseline
+type: neural_net
+
+hidden_dims: [512, 256, 128, 64]
+dropout: 0.3
+batch_norm: true
+activation: relu
+output_activation: sigmoid

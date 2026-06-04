@@ -1,0 +1,46 @@
+supabase:
+  url: ${oc.env:SUPABASE_URL}
+  key: ${oc.env:SUPABASE_SERVICE_KEY}
+  tables:
+    tracks: tracks
+    signals: prediction_signals
+    trajectories: trajectory_predictions
+
+features:
+  numeric:
+    - stream_velocity
+    - tiktok_growth
+    - chart_momentum
+    - playlist_signal
+    - radio_spike
+    - momentum
+    - breakout_prob
+    - virality_score
+    - peak_score_estimate
+    - confidence
+  categorical:
+    - entity_type
+  temporal:
+    - computed_at
+  target: is_viral  # derived: virality_score > 0.7
+
+splits:
+  train: 0.70
+  val: 0.15
+  test: 0.15
+  stratify: true
+  random_state: 42
+
+preprocessing:
+  imputation_strategy: median
+  scaler: standard  # standard | minmax | robust
+  encode_categoricals: true
+  temporal_features: true  # extract day-of-week, month, etc.
+
+validation:
+  min_rows: 100
+  required_columns:
+    - momentum
+    - breakout_prob
+    - virality_score
+    - confidence
