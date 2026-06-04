@@ -33,3 +33,9 @@ xgboost>=2.0.0
 # Viz
 matplotlib>=3.8.0
 seaborn>=0.13.0
+
+# Deep learning additions
+optuna>=3.5.0
+optuna-integration>=3.6.0
+torchmetrics>=1.3.0
+# skl2onnx>=1.16.0  # optional ONNX export
