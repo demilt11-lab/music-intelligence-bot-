@@ -8,10 +8,10 @@ async function main() {
   const keyHash = crypto.createHash('sha256').update(raw).digest('hex')
 
   await prisma.apiKey.upsert({
-    where: { keyHash },
+    where: { hashedKey: keyHash },
     update: {},
     create: {
-      keyHash,
+      hashedKey: keyHash,
       name: 'test-key',
       ownerId: 'seed',
       scopes: ['trajectory:read', 'signals:write'],
