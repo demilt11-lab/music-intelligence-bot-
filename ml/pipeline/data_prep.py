@@ -137,6 +137,28 @@ class FeatureEngineer:
         df["confidence_weighted_score"] = df["virality_score"] * df["confidence"]
         df["breakout_momentum_ratio"] = df["breakout_prob"] / (df["momentum"] + 1e-8)
 
+        # Save rate quality score: penalize high streams with low saves (manufactured plays)
+        if "save_rate" in df.columns and "stream_velocity" in df.columns:
+            df["save_stream_quality"] = df["save_rate"] * np.log1p(df["stream_velocity"] + 1)
+        elif "save_rate" in df.columns:
+            df["save_stream_quality"] = df["save_rate"]
+
+        # Organic growth composite: streams + saves + follower — excludes TikTok spikes
+        df["organic_score"] = (
+            0.45 * df.get("stream_velocity", pd.Series(0, index=df.index)) +
+            0.35 * df.get("save_rate", pd.Series(0, index=df.index)).fillna(0) +
+            0.20 * df.get("follower_velocity", pd.Series(0, index=df.index)).fillna(0)
+        )
+
+        # TikTok conversion rate: does TikTok growth translate to streams?
+        # High tiktok + low streams = ephemeral viral; high both = breakout
+        if "tiktok_growth" in df.columns and "stream_velocity" in df.columns:
+            df["tiktok_stream_conversion"] = df["tiktok_growth"] * df["stream_velocity"]
+
+        # Skip rate signal if available (default 0.5 = unknown)
+        if "skip_rate_inv" not in df.columns:
+            df["skip_rate_inv"] = 0.5
+
         # Temporal cyclic encoding from computed_at
         if "computed_at" in df.columns:
             ts = pd.to_datetime(df["computed_at"], errors="coerce", utc=True)
@@ -186,6 +208,13 @@ class DataValidator:
         inf_cols = [c for c in numeric_cols if np.isinf(df[c]).any()]
         if inf_cols:
             errors.append(f"Infinite values found in columns: {inf_cols}")
+
+        # Warn when save_rate is missing — it's a critical A&R signal
+        if "save_rate" not in df.columns:
+            warnings.append(
+                "Column 'save_rate' is missing. This is a critical A&R signal "
+                "(saves/streams ratio) and should be included for accurate breakout prediction."
+            )
 
         # Class balance warning
         if "is_viral" in df.columns:

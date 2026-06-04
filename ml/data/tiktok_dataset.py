@@ -19,8 +19,12 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 # Label constants
 # ---------------------------------------------------------------------------
 
-VIRAL_TIKTOK_THRESHOLD = 10_000   # uses in 30 days
+VIRAL_TIKTOK_THRESHOLD = 10_000   # uses in 30 days = confirmed viral
 VIRAL_WINDOW_DAYS = 30
+
+# Early breakout tier: consistent growth signal (industry A&R emerging threshold)
+EMERGING_TIKTOK_THRESHOLD = 1_000  # uses/week showing consistent growth = "watch list"
+EMERGING_WINDOW_DAYS = 7
 
 
 # ---------------------------------------------------------------------------
@@ -40,10 +44,17 @@ class SongRecord(BaseModel):
     engagement_series: List[float]   # 90-day daily engagement
     audio_features: List[float]      # 64-dim
     metadata_features: List[float]   # 32-dim
+    is_emerging: bool = False        # tiktok_uses_7d >= 1_000 (early A&R watch signal)
+    tiktok_uses_7d: int = 0          # 7-day TikTok uses for emerging detection
+    save_rate: float = 0.0           # saves/streams ratio
+    follower_velocity: float = 0.0   # monthly follower growth rate
+    skip_rate: float = 0.5           # stream skip rate (lower is better)
+    pre_save_count: int = 0          # pre-release pre-saves
 
     @model_validator(mode="after")
     def derive_is_viral(self) -> "SongRecord":
         self.is_viral = self.tiktok_uses_30d >= VIRAL_TIKTOK_THRESHOLD
+        self.is_emerging = self.tiktok_uses_7d >= EMERGING_TIKTOK_THRESHOLD
         return self
 
 
@@ -83,10 +94,14 @@ class TikTokViralDataset(Dataset):
         return torch.tensor(ids, dtype=torch.long)
 
     def _build_timeseries(self, rec: SongRecord) -> Tensor:
-        """Build (seq_len, 8) tensor from 90-day engagement + derived features."""
+        """Build (seq_len, 10) tensor from 90-day engagement + derived features.
+
+        Channels 0-7: raw, log1p, cumsum, diff, 7d-avg, 14d-avg, rel-change, zscore
+        Channels 8-9: save_rate and follower_velocity (static, repeated across time)
+        """
         eng = np.array(rec.engagement_series, dtype=np.float32)
         T = min(len(eng), self.seq_len)
-        out = np.zeros((self.seq_len, 8), dtype=np.float32)
+        out = np.zeros((self.seq_len, 10), dtype=np.float32)
         if T > 0:
             e = eng[:T]
             # channels: raw, log1p, cumsum, diff, 7d-avg, 14d-avg, rel-change, zscore
@@ -98,11 +113,14 @@ class TikTokViralDataset(Dataset):
             rel = diff / (e + 1e-8)
             std = e.std() + 1e-8
             zscore = (e - e.mean()) / std
-            out[:T] = np.stack([e, log_e, cum, diff, avg7, avg14, rel, zscore], axis=-1)
+            out[:T, :8] = np.stack([e, log_e, cum, diff, avg7, avg14, rel, zscore], axis=-1)
+            # Static A&R signals repeated across time dimension
+            out[:T, 8] = float(rec.save_rate)
+            out[:T, 9] = float(rec.follower_velocity)
 
         if self.augment:
-            # Gaussian noise
-            out[:T] += np.random.randn(*out[:T].shape).astype(np.float32) * 0.01
+            # Gaussian noise (only on engagement channels, not static signals)
+            out[:T, :8] += np.random.randn(T, 8).astype(np.float32) * 0.01
             # Random timestep dropout (zero out 10%)
             drop_mask = np.random.rand(T) < 0.10
             out[:T][drop_mask] = 0.0
@@ -112,7 +130,7 @@ class TikTokViralDataset(Dataset):
                 new_T = max(1, int(T * stretch))
                 src_idx = np.linspace(0, T - 1, new_T).astype(int).clip(0, T - 1)
                 warped = out[src_idx]
-                out = np.zeros((self.seq_len, 8), dtype=np.float32)
+                out = np.zeros((self.seq_len, 10), dtype=np.float32)
                 write_T = min(new_T, self.seq_len)
                 out[:write_T] = warped[:write_T]
                 T = write_T
@@ -125,7 +143,7 @@ class TikTokViralDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, Tensor]:
         rec = self.records[idx]
 
-        ts = self._build_timeseries(rec)   # (seq_len, 8)
+        ts = self._build_timeseries(rec)   # (seq_len, 10)
 
         audio = np.array(rec.audio_features[:64], dtype=np.float32)
         if len(audio) < 64:
@@ -147,7 +165,7 @@ class TikTokViralDataset(Dataset):
         actual_len = min(len(rec.engagement_series), self.seq_len)
 
         return {
-            "timeseries": ts,                                           # (seq_len, 8)
+            "timeseries": ts,                                           # (seq_len, 10)
             "audio": audio_t,                                           # (64,)
             "metadata": meta_t,                                         # (32,)
             "text_tokens": text_tokens,                                 # (32,)
@@ -159,6 +177,10 @@ class TikTokViralDataset(Dataset):
             ),
             "label_peak": torch.tensor(rec.peak_viral_score, dtype=torch.float32),
             "song_id": torch.tensor(rec.song_id, dtype=torch.long),
+            "save_rate": torch.tensor(rec.save_rate, dtype=torch.float32),
+            "follower_velocity": torch.tensor(rec.follower_velocity, dtype=torch.float32),
+            "skip_rate": torch.tensor(rec.skip_rate, dtype=torch.float32),
+            "label_emerging": torch.tensor(float(rec.is_emerging), dtype=torch.float32),
         }
 
 
@@ -197,6 +219,12 @@ class ViralDataSynthesizer:
                 uses_30d = max(VIRAL_TIKTOK_THRESHOLD, uses_30d)
                 days_v: Optional[float] = float(np.random.randint(spike_start, 30))
                 peak = float(np.clip(np.random.normal(75, 15), 40, 100))
+                # A&R signals: viral distribution
+                save_rate = float(np.random.beta(3, 5))           # mean ~0.37
+                follower_velocity = float(np.random.uniform(0.10, 0.40))
+                skip_rate = float(np.random.beta(2, 8))            # mean ~0.20
+                pre_save_count = int(np.random.lognormal(7, 1.5))
+                uses_7d = max(0, int(uses_30d // 4 + np.random.normal(0, 500)))
             else:
                 audio_features = list(np.random.beta(2, 5, 64).astype(np.float32))
                 # lower engagement, long tail
@@ -205,6 +233,12 @@ class ViralDataSynthesizer:
                 uses_30d = min(uses_30d, VIRAL_TIKTOK_THRESHOLD - 1)
                 days_v = None
                 peak = float(np.clip(np.random.normal(25, 15), 0, 60))
+                # A&R signals: non-viral distribution
+                save_rate = float(np.random.beta(1.5, 7))         # mean ~0.18
+                follower_velocity = float(np.random.uniform(0.0, 0.12))
+                skip_rate = float(np.random.beta(4, 4))            # mean ~0.50
+                pre_save_count = int(np.random.lognormal(4, 1.5))
+                uses_7d = max(0, int(np.random.lognormal(3, 2)))
 
             metadata = list(np.random.randn(32).astype(np.float32) * 0.5)
 
@@ -220,6 +254,11 @@ class ViralDataSynthesizer:
                 engagement_series=engagement,
                 audio_features=audio_features,
                 metadata_features=metadata,
+                tiktok_uses_7d=uses_7d,
+                save_rate=float(np.clip(save_rate, 0.0, 1.0)),
+                follower_velocity=float(np.clip(follower_velocity, 0.0, 1.0)),
+                skip_rate=float(np.clip(skip_rate, 0.0, 1.0)),
+                pre_save_count=pre_save_count,
             ))
 
         return records

@@ -23,15 +23,18 @@ export function zScore(value: number, mean: number, std: number): number {
 
 /**
  * Weighted sum of feature scores, clamped to [0, 1].
- * weights: stream_velocity=0.3, tiktok_growth=0.4, chart_momentum=0.2, playlist=0.05, radio=0.05
+ * Industry A&R-aligned weights — TikTok reduced from 0.40, save_rate and
+ * follower_velocity added as explicit breakout signals.
  */
 export function computeMomentum(features: Record<string, number>): number {
   const weights: Record<string, number> = {
-    stream_velocity: 0.3,
-    tiktok_growth: 0.4,
-    chart_momentum: 0.2,
-    playlist: 0.05,
-    radio: 0.05,
+    stream_velocity:   0.22,  // Spotify organic — reliable longevity signal
+    tiktok_growth:     0.28,  // TikTok — strong but ephemeral, reduced from 0.40
+    save_rate:         0.18,  // NEW: save/stream ratio — emotional connection
+    chart_momentum:    0.15,  // Chart trajectory
+    follower_velocity: 0.09,  // NEW: social growth velocity
+    playlist:          0.05,  // Playlist adds
+    radio:             0.03,  // Radio (legacy, reduced weight for digital-first)
   };
 
   let momentum = 0;
@@ -56,7 +59,8 @@ export function estimateBreakoutProb(
   momentum: number,
   signals: TrajectorySignal[],
 ): number {
-  let prob = sigmoid(momentum * 3 - 1.5);
+  // Recalibrated: center at 0.45 momentum, steeper slope for cleaner threshold
+  let prob = sigmoid(momentum * 3.5 - 1.575);
 
   // Boost for recent chart_entry signals (within last 14 days)
   const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
@@ -73,6 +77,17 @@ export function estimateBreakoutProb(
   );
   if (highTiktok.length > 0) {
     prob = Math.min(1, prob + 0.05 * highTiktok.length);
+  }
+
+  // Strong save rate (>0.3 normalized = actual >15% save rate) adds breakout confidence
+  const highSaveRate = signals.filter(s => s.signalType === 'save_rate' && s.value > 0.3);
+  if (highSaveRate.length > 0) {
+    prob = Math.min(1, prob + 0.08 * Math.min(highSaveRate.length, 2));
+  }
+  // Pre-save momentum adds early signal
+  const preSaves = signals.filter(s => s.signalType === 'pre_save_count' && s.value > 1000);
+  if (preSaves.length > 0) {
+    prob = Math.min(1, prob + 0.05);
   }
 
   return Math.max(0, Math.min(1, prob));

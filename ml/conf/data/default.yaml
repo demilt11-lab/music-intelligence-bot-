@@ -18,11 +18,15 @@ features:
     - virality_score
     - peak_score_estimate
     - confidence
+    - save_rate
+    - follower_velocity
+    - skip_rate_inv
+    - pre_save_normalized
   categorical:
     - entity_type
   temporal:
     - computed_at
-  target: is_viral  # derived: virality_score > 0.7
+  target: is_viral  # derived: virality_score > 0.7 OR tiktok_10k_30d
 
 splits:
   train: 0.70
