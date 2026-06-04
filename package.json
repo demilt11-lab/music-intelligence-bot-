@@ -8,9 +8,19 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test": "echo 'No JS tests yet' && exit 0",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "db:migrate:prod": "prisma migrate deploy",
+    "db:seed": "ts-node prisma/seed.ts",
+    "db:reset": "prisma migrate reset --force",
+    "db:studio": "prisma studio",
+    "start:prod": "NODE_ENV=production node .next/standalone/server.js",
+    "docker:build": "docker build -t music-intelligence-api .",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "health": "curl -sf http://localhost:3000/api/health | jq ."
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",

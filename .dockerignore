@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.claude
+.env*
+coverage
+ml/__pycache__
+ml/.venv
+*.pyc
+*.pyo
+*.md
+!README.md

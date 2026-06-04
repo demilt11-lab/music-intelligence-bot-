@@ -834,3 +834,92 @@ model TrackVersionCluster {
   @@unique([trackId, clusterId])
   @@map("track_version_clusters")
 }
+
+// ─────────────────────────────────────────────
+// API key management
+// ─────────────────────────────────────────────
+
+model ApiKey {
+  id        Int      @id @default(autoincrement())
+  keyHash   String   @unique
+  name      String
+  ownerId   String
+  scopes    String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  revokedAt DateTime?
+
+  @@map("api_keys")
+}
+
+// ─────────────────────────────────────────────
+// Auth layer
+// ─────────────────────────────────────────────
+
+model ApiKey {
+  id          Int      @id @default(autoincrement())
+  hashedKey   String   @unique
+  name        String
+  ownerId     String
+  scopes      String[] // e.g. ["trajectory:read", "signals:write"]
+  rateLimit   Int      @default(100)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+
+  usage ApiKeyUsage[]
+
+  @@map("api_keys")
+}
+
+model ApiKeyUsage {
+  id         Int      @id @default(autoincrement())
+  keyId      Int
+  endpoint   String
+  statusCode Int
+  latencyMs  Int
+  createdAt  DateTime @default(now())
+
+  key ApiKey @relation(fields: [keyId], references: [id], onDelete: Cascade)
+
+  @@index([keyId, createdAt])
+  @@map("api_key_usage")
+}
+
+// ─────────────────────────────────────────────
+// Trajectory engine
+// ─────────────────────────────────────────────
+
+model TrajectoryPrediction {
+  id                   Int      @id @default(autoincrement())
+  entityType           String
+  entityId             Int
+  momentum             Float
+  breakoutProb         Float
+  viralityScore        Float
+  estimatedDaysToViral Float
+  peakScoreEstimate    Float
+  confidence           Float
+  modelVersion         String
+  computedAt           DateTime @default(now())
+
+  @@unique([entityType, entityId])
+  @@index([viralityScore])
+  @@map("trajectory_predictions")
+}
+
+model PredictionSignal {
+  id         Int      @id @default(autoincrement())
+  entityType String
+  entityId   Int
+  signalType String
+  value      Float
+  source     String?
+  recordedAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, recordedAt])
+  @@index([signalType, recordedAt])
+  @@map("prediction_signals")
+}
