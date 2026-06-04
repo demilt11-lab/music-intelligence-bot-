@@ -8,7 +8,11 @@ export type TrajectorySignal = {
     | 'tiktok_growth'
     | 'chart_entry'
     | 'playlist_add'
-    | 'radio_spike';
+    | 'radio_spike'
+    | 'save_rate'          // saves/streams ratio (0-1)
+    | 'follower_velocity'  // monthly follower growth rate (0-1 normalized)
+    | 'pre_save_count'     // pre-release pre-save normalized count
+    | 'skip_rate';         // skip rate (lower = better, invert in scoring)
   value: number;
   recordedAt: Date;
   source?: string;

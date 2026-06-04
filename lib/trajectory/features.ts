@@ -79,6 +79,51 @@ export function extractRadioSpike(weeklySpins: number[], baseline: number): numb
   return (latest - baseline) / std;
 }
 
+export function extractSaveRate(signals: TrajectorySignal[]): number {
+  // Save rate: ratio of saves to streams. >0.25 = strong emotional connection.
+  // Normalizes to [0,1]: save_rate / 0.5 (cap at 50% save rate = perfect score)
+  const saveSignals = signals.filter(s => s.signalType === 'save_rate');
+  if (saveSignals.length === 0) return 0;
+  const latest = saveSignals.sort((a, b) =>
+    new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime()
+  )[0];
+  return Math.min(latest.value / 0.5, 1.0);  // normalize: 50% save rate = 1.0
+}
+
+export function extractFollowerVelocity(signals: TrajectorySignal[]): number {
+  // Monthly follower growth rate. Target: +15%/month = strong breakout signal.
+  // Normalize to [0,1]: velocity / 0.5 (50% monthly growth = perfect score)
+  const velSignals = signals.filter(s => s.signalType === 'follower_velocity');
+  if (velSignals.length < 2) return 0;
+  const sorted = velSignals.sort((a, b) =>
+    new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime()
+  );
+  const growthRate = sorted[sorted.length - 1].value;  // already a rate
+  return Math.min(Math.max(growthRate / 0.5, 0), 1.0);
+}
+
+export function extractPreSaveSignal(signals: TrajectorySignal[]): number {
+  // Pre-save count normalized. High pre-saves = audience anticipation.
+  // Normalize against a reference of 10K pre-saves = strong signal.
+  const preSaveSignals = signals.filter(s => s.signalType === 'pre_save_count');
+  if (preSaveSignals.length === 0) return 0;
+  const latest = preSaveSignals.sort((a, b) =>
+    new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime()
+  )[0];
+  return Math.min(latest.value / 10_000, 1.0);
+}
+
+export function extractSkipRateSignal(signals: TrajectorySignal[]): number {
+  // Skip rate inverted: (1 - skip_rate). Low skip = strong song retention.
+  // Industry benchmark: <30% skip rate = good. Return (1 - rate), so 0% skip = 1.0.
+  const skipSignals = signals.filter(s => s.signalType === 'skip_rate');
+  if (skipSignals.length === 0) return 0.5;  // default: unknown = neutral
+  const latest = skipSignals.sort((a, b) =>
+    new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime()
+  )[0];
+  return Math.min(Math.max(1 - latest.value, 0), 1.0);
+}
+
 /**
  * Aggregate all signals by type and return normalized feature dict.
  */
@@ -139,6 +184,12 @@ export function computeFeatureVector(
   for (const key of Object.keys(features)) {
     features[key] = Math.max(0, Math.min(1, (features[key] + 1) / 2));
   }
+
+  // New A&R signals (already normalized to [0,1])
+  features['save_rate'] = extractSaveRate(signals);
+  features['follower_velocity'] = extractFollowerVelocity(signals);
+  features['pre_save'] = extractPreSaveSignal(signals);
+  features['skip_rate_inv'] = extractSkipRateSignal(signals);
 
   return features;
 }
