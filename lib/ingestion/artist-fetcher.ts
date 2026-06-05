@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import type { ArtistMetrics } from "./types";
 import { logger } from "@/lib/monitoring/logger";
+import { withRetry } from "./retry";
+
+const FETCH_RETRY_OPTS = { attempts: 4, baseDelayMs: 250, maxDelayMs: 8_000 };
 
 function classifySignalSource(dbSource: string | null): string {
   if (!dbSource) return "unknown";
@@ -45,9 +48,9 @@ async function getLatestSignalRecord(
   return { value: signal.value, source: signal.source ?? null };
 }
 
-export async function fetchArtistMetrics(
+async function _fetchArtistMetrics(
   artistId: number,
-  date: Date = new Date()
+  date: Date
 ): Promise<ArtistMetricsWithSources> {
   const since = new Date(date);
   since.setDate(since.getDate() - 30);
@@ -152,6 +155,13 @@ export async function fetchArtistMetrics(
     signalSources,
     sourceCompleteness,
   };
+}
+
+export async function fetchArtistMetrics(
+  artistId: number,
+  date: Date = new Date()
+): Promise<ArtistMetricsWithSources> {
+  return withRetry(() => _fetchArtistMetrics(artistId, date), FETCH_RETRY_OPTS);
 }
 
 export async function fetchArtistMetricsBatch(
