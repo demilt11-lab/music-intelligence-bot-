@@ -17,12 +17,25 @@ labels. Only chart_monitor / billboard_api / manual labels are admitted.
 """
 import json
 import logging
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 log = logging.getLogger(__name__)
+
+try:
+    from ml.monitoring.telemetry import telemetry as _tel
+except Exception:
+    _tel = None  # type: ignore[assignment]
+
+
+class _null_ctx:
+    """No-op context manager used when telemetry is unavailable."""
+    def __enter__(self): return self
+    def __exit__(self, *_): pass
+    def set_attribute(self, *_): pass
 
 
 @dataclass
@@ -95,8 +108,11 @@ class LoopOrchestrator:
         uncertain_predictions : list[PredictionOutput], optional
             New predictions in confidence 40-60% range to route to human review.
         """
+        _loop_start = time.monotonic()
         ran_at = datetime.now(timezone.utc).isoformat()
         error: Optional[str] = None
+        _span_ctx = _tel.span("loop_orchestrator.run") if _tel else _null_ctx()
+        _span = _span_ctx.__enter__()
 
         # ── 1. Evaluate outcomes ─────────────────────────────────────────
         from ml.self_teaching.feedback_loop import FeedbackLoop, AccuracyTracker
@@ -228,6 +244,30 @@ class LoopOrchestrator:
                 log.exception("Step 5: retraining failed: %s", exc)
         else:
             log.info("Step 5: no retraining triggered (labels=%d, drift=%s)", new_labeled, drift_action)
+
+        _loop_duration = time.monotonic() - _loop_start
+        _span_ctx.__exit__(None, None, None)
+
+        if _tel:
+            # Emit PSI scores for any drifting features
+            try:
+                from ml.self_teaching.drift_detector import DriftMonitor
+                monitor = DriftMonitor(
+                    reference_snapshot_path=self.reference_snapshot_path,
+                    outcomes_path=self.outcomes_path,
+                )
+                if hasattr(monitor, "_last_report") and monitor._last_report:
+                    for sig in monitor._last_report.data_drift_signals:
+                        _tel.record_drift(sig.feature, sig.psi)
+            except Exception:
+                pass
+
+            _tel.record_loop_run(
+                duration_seconds=_loop_duration,
+                labels_admitted=labels_admitted,
+                retraining_action=retraining_action,
+                error=error,
+            )
 
         return LoopRunResult(
             ran_at=ran_at,

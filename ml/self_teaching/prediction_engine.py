@@ -17,6 +17,11 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
+try:
+    from ml.monitoring.telemetry import telemetry as _tel
+except Exception:
+    _tel = None  # type: ignore[assignment]
+
 
 # ---------------------------------------------------------------------------
 # PredictionOutput
@@ -164,12 +169,22 @@ class BreakoutPredictor:
         return self._model_available
 
     def predict(self, artist_id: int, features: dict) -> PredictionOutput:
+        _t0 = time.monotonic()
         cache_key = str(artist_id)
 
         # Cache hit
         cached = self._cache.get(cache_key)
         if cached is not None:
-            return PredictionOutput(**{**cached, "from_cache": True, "warning": None})
+            out = PredictionOutput(**{**cached, "from_cache": True, "warning": None})
+            if _tel:
+                _tel.record_prediction(
+                    artist_id=artist_id,
+                    breakout_prob=out.breakout_probability,
+                    confidence=out.confidence_score,
+                    latency_seconds=time.monotonic() - _t0,
+                    from_cache=True,
+                )
+            return out
 
         # Model unavailable — try stale cache then neutral fallback
         if not self._model_available:
@@ -232,6 +247,16 @@ class BreakoutPredictor:
         # Cache
         import dataclasses
         self._cache.set(cache_key, dataclasses.asdict(output))
+
+        if _tel:
+            _tel.record_prediction(
+                artist_id=artist_id,
+                breakout_prob=output.breakout_probability,
+                confidence=output.confidence_score,
+                latency_seconds=time.monotonic() - _t0,
+                from_cache=False,
+            )
+
         return output
 
     def predict_batch(self, requests: list[dict]) -> list[PredictionOutput]:
