@@ -58,6 +58,8 @@ model Artist {
   tiktokUserChartRows TiktokUserChartRow[]
   dailySnapshots    ArtistDailySnapshot[]
   predictionOutcomes PredictionOutcome[]
+  watchlistEntries  Watchlist[]
+  alerts            Alert[]
 
   @@map("artists")
 }
@@ -1028,4 +1030,66 @@ model RetrainingRun {
   @@index([status])
   @@index([startedAt])
   @@map("retraining_runs")
+}
+
+// ─────────────────────────────────────────────
+// Watchlist, Alerts, Notifications
+// ─────────────────────────────────────────────
+
+model Watchlist {
+  id         Int      @id @default(autoincrement())
+  userId     String   // Supabase auth.users UUID
+  artistId   Int
+  addedAt    DateTime @default(now())
+  notes      String?
+  priority   String   @default("normal") // "high" | "normal" | "low"
+
+  artist     Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  alerts     Alert[]
+
+  @@unique([userId, artistId])
+  @@index([userId])
+  @@index([artistId])
+  @@map("watchlist")
+}
+
+model Alert {
+  id            Int       @id @default(autoincrement())
+  userId        String    // Supabase auth.users UUID
+  watchlistId   Int?
+  artistId      Int
+  alertType     String    // "viral_threshold" | "spike_detected" | "forecast_change" | "risk_elevated"
+  severity      String    @default("medium") // "high" | "medium" | "low"
+  threshold     Float?    // e.g. viral_prob threshold that triggered alert
+  actualValue   Float?    // value that crossed the threshold
+  message       String    @db.Text
+  read          Boolean   @default(false)
+  resolvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  watchlist     Watchlist? @relation(fields: [watchlistId], references: [id], onDelete: SetNull)
+  artist        Artist     @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  notifications Notification[]
+
+  @@index([userId, read, createdAt])
+  @@index([artistId])
+  @@index([alertType, createdAt])
+  @@map("alerts")
+}
+
+model Notification {
+  id          Int       @id @default(autoincrement())
+  userId      String    // Supabase auth.users UUID
+  alertId     Int
+  channel     String    // "in_app" | "email"
+  status      String    @default("pending") // "pending" | "sent" | "failed"
+  sentAt      DateTime?
+  failReason  String?
+  createdAt   DateTime  @default(now())
+
+  alert       Alert     @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([alertId])
+  @@map("notifications")
 }

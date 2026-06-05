@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, Search, Zap, LogOut, User, Settings } from "lucide-react";
+import { Search, Zap, LogOut, User, Settings } from "lucide-react";
 import { useUser } from "@/hooks/useUser";
+import { AlertsBell } from "@/components/alerts/AlertsBell";
 import { useState } from "react";
 
 export function Navbar() {
@@ -32,10 +33,7 @@ export function Navbar() {
 
       <div className="ml-auto flex items-center gap-2">
         {/* Notifications */}
-        <Link href="/alerts" className="relative w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-800 transition-colors">
-          <Bell className="w-4 h-4 text-zinc-400" />
-          <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-violet-500" />
-        </Link>
+        <AlertsBell />
 
         {/* User menu */}
         <div className="relative">
