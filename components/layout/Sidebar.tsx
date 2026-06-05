@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Search, TrendingUp, Bell, Bookmark, BarChart2 } from "lucide-react";
+import { LayoutDashboard, Search, TrendingUp, Bell, Bookmark, BarChart2, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -10,6 +10,7 @@ const links = [
   { href: "/analytics", icon: BarChart2, label: "Analytics" },
   { href: "/watchlist", icon: Bookmark, label: "Watchlist" },
   { href: "/alerts", icon: Bell, label: "Alerts" },
+  { href: "/monitor", icon: Activity, label: "Model Monitor" },
 ];
 
 export function Sidebar() {

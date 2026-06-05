@@ -60,6 +60,7 @@ model Artist {
   predictionOutcomes PredictionOutcome[]
   watchlistEntries  Watchlist[]
   alerts            Alert[]
+  humanReviewItems  HumanReviewItem[]
 
   @@map("artists")
 }
@@ -957,7 +958,8 @@ model ModelVersion {
   trainSamples    Int?     // number of training samples
   notes           String?
 
-  predictions PredictionOutcome[]
+  predictions      PredictionOutcome[]
+  featureSnapshots ModelFeatureSnapshot[]
 
   @@index([isActive])
   @@index([trainedAt])
@@ -1030,6 +1032,91 @@ model RetrainingRun {
   @@index([status])
   @@index([startedAt])
   @@map("retraining_runs")
+}
+
+// ─────────────────────────────────────────────
+// Continuous Learning: Human Review + Drift
+// ─────────────────────────────────────────────
+
+model HumanReviewItem {
+  id                String   @id @default(uuid())
+  artistId          Int
+  predictionId      Int?     // FK to PredictionOutcome if available
+  breakoutProb      Float    // 0-100
+  confidenceScore   Float    // 0-1
+  topSignals        Json     // [{signal, value, weight}]
+  predictedAt       DateTime
+  reason            String   // "low_confidence" | "contradictory_signals" | "cold_start"
+  status            String   @default("pending") // "pending" | "reviewed" | "expired"
+  enqueuedAt        DateTime @default(now())
+  expiresAt         DateTime // 14 days after enqueue
+
+  artist            Artist         @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  decision          HumanReviewDecision?
+
+  @@index([status, enqueuedAt])
+  @@index([artistId])
+  @@map("human_review_items")
+}
+
+model HumanReviewDecision {
+  id                String   @id @default(uuid())
+  reviewId          String   @unique
+  artistId          Int
+  reviewerId        String   // Supabase user id of A&R reviewer
+  decision          String   // "breakout" | "no_breakout" | "uncertain"
+  notes             String?  @db.Text
+  decidedAt         DateTime @default(now())
+  originalProb      Float    // model's original prediction
+  labelWeight       Float    @default(1.0) // 1.0 = confirmed, 0.5 = uncertain
+  usedInTraining    Boolean  @default(false)
+  trainingRunId     Int?     // RetrainingRun where this label was used
+
+  reviewItem        HumanReviewItem @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([usedInTraining, decidedAt])
+  @@index([reviewerId])
+  @@map("human_review_decisions")
+}
+
+model DriftEvent {
+  id              Int      @id @default(autoincrement())
+  detectedAt      DateTime @default(now())
+  driftType       String   // "data" | "performance" | "feature"
+  severity        String   // "none" | "investigate" | "retrain" | "alert_team"
+  affectedFeature String?  // null for performance drift
+  psiScore        Float?   // PSI value for data drift
+  currentValue    Float?   // current mean/accuracy
+  referenceValue  Float?   // baseline mean/accuracy
+  delta           Float?   // currentValue - referenceValue
+  summary         String   @db.Text
+  resolvedAt      DateTime?
+  triggeredRetrain Boolean @default(false)
+  retrainingRunId  Int?
+
+  @@index([driftType, detectedAt])
+  @@index([severity, resolvedAt])
+  @@map("drift_events")
+}
+
+model ModelFeatureSnapshot {
+  id            Int      @id @default(autoincrement())
+  modelVersionId Int
+  capturedAt    DateTime @default(now())
+  featureName   String
+  mean          Float
+  std           Float
+  p25           Float
+  p50           Float
+  p75           Float
+  nullRate      Float
+  sampleCount   Int
+
+  modelVersion  ModelVersion @relation(fields: [modelVersionId], references: [id])
+
+  @@unique([modelVersionId, featureName])
+  @@index([modelVersionId])
+  @@map("model_feature_snapshots")
 }
 
 // ─────────────────────────────────────────────
