@@ -409,8 +409,10 @@ class RuleBasedScorer:
                 if group:
                     tier_group_fired[group] = True
             else:
+                gap = _gap_pct(val, op, threshold)
+                gap_str = f" [{gap}]" if gap else ""
                 all_missed.append(
-                    f"{name}: {sig_key}={_fmt(val)} did not meet {op} {threshold}"
+                    f"{name}: {sig_key}={_fmt(val)} did not meet {op} {threshold}{gap_str}"
                 )
 
         # ── 2. Normalise + weight each category → composite 0-100 ─────────
@@ -618,6 +620,13 @@ def _normalise_signals(signals: Dict) -> Dict:
         # repeat_listen_rate ≥ 1.5 ≈ engagement rate ≥ 5%
         out["youtube_engagement_rate"] = min((out["repeat_listen_rate"] - 1.0) / 10.0, 0.20)
 
+    # youtube_subscriber_velocity → youtube_sub_velocity (long-form alias)
+    if "youtube_subscriber_velocity" in out and "youtube_sub_velocity" not in out:
+        out["youtube_sub_velocity"] = out["youtube_subscriber_velocity"]
+
+    # tiktok_video_growth_rate (MoM fraction) → tiktok_videos_per_week (approximate)
+    # Not aliased automatically — growth rate and absolute count are different concepts.
+
     return out
 
 
@@ -628,6 +637,24 @@ def _eval_op(val, op: str, threshold) -> bool:
     if op == "<=":  return val <= threshold
     if op == "<":   return val <  threshold
     return False
+
+
+def _gap_pct(val, op: str, threshold) -> str:
+    """Return a human-readable proximity string for narrowly missed rules."""
+    if val is None or isinstance(val, bool) or threshold == 0:
+        return ""
+    try:
+        if op in (">=", ">"):
+            gap = (threshold - val) / abs(threshold)
+            if 0 < gap <= 0.25:
+                return f"{gap*100:.0f}% below threshold"
+        elif op in ("<=", "<"):
+            gap = (val - threshold) / abs(threshold) if threshold != 0 else 0
+            if 0 < gap <= 0.25:
+                return f"{gap*100:.0f}% above threshold"
+    except (TypeError, ZeroDivisionError):
+        pass
+    return ""
 
 
 def _fmt(val) -> str:

@@ -164,7 +164,7 @@ class AccuracyTracker:
         df = df.dropna(subset=["predicted_at"])
 
         trend = []
-        now = pd.Timestamp.utcnow()
+        now = pd.Timestamp.now("UTC")
         for i in range(n_periods - 1, -1, -1):
             week_end   = now - timedelta(weeks=i)
             week_start = week_end - timedelta(weeks=1)
@@ -231,7 +231,7 @@ class AccuracyTracker:
         df = self._read_outcomes()
         if df.empty:
             return df
-        cutoff = pd.Timestamp.utcnow() - pd.Timedelta(days=since_days)
+        cutoff = pd.Timestamp.now("UTC") - pd.Timedelta(days=since_days)
         df["predicted_at"] = pd.to_datetime(df["predicted_at"], utc=True, errors="coerce")
         return df[df["predicted_at"] >= cutoff].copy()
 
