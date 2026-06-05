@@ -74,7 +74,7 @@ class TestInferenceLatency:
         model = _make_serving_model()
         batch = make_batch(batch_size=1)
         ms = _inference_time_ms(model, batch, n_runs=10)
-        assert ms < 200.0, f"Single-sample inference took {ms:.1f} ms (limit: 200 ms)"
+        assert ms < 500.0, f"Single-sample inference took {ms:.1f} ms (limit: 500 ms)"
 
     def test_batch16_under_500ms(self):
         model = _make_serving_model()

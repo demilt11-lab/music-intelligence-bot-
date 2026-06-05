@@ -120,11 +120,13 @@ class TestViralTransformerLoss:
         days_b = torch.ones(B, 1) * 10.0
         days_b[2:] = 999.0  # change non-viral days (should not affect loss)
 
-        base_args = (torch.randn(B, 1), None, viral_labels, torch.rand(B, 1) * 30, torch.rand(B, 1) * 80, None)
-        losses_a = loss_fn(base_args[0], days_a, torch.rand(B, 1) * 100, None,
-                           viral_labels, torch.rand(B, 1) * 30, torch.rand(B, 1) * 80, None)
-        losses_b = loss_fn(base_args[0], days_b, torch.rand(B, 1) * 100, None,
-                           viral_labels, torch.rand(B, 1) * 30, torch.rand(B, 1) * 80, None)
+        fixed_logits = torch.randn(B, 1)
+        fixed_days_labels = torch.ones(B, 1) * 15.0
+        fixed_peak_labels = torch.ones(B, 1) * 50.0
+        losses_a = loss_fn(fixed_logits, days_a, torch.rand(B, 1) * 100, None,
+                           viral_labels, fixed_days_labels, fixed_peak_labels, None)
+        losses_b = loss_fn(fixed_logits, days_b, torch.rand(B, 1) * 100, None,
+                           viral_labels, fixed_days_labels, fixed_peak_labels, None)
         # Same logits and viral labels → same viral loss; days only differ in non-viral
         assert torch.isclose(losses_a.days, losses_b.days, atol=1e-4)
 
@@ -196,8 +198,8 @@ class TestViralClassificationHead:
     def test_logits_not_clamped(self):
         head = ViralClassificationHead(d_model=32, dropout=0.0)
         with torch.no_grad():
-            nn.init.constant_(head.classifier[-1].weight, 1.0)
-            nn.init.constant_(head.classifier[-1].bias, 10.0)
+            nn.init.constant_(head.net[-1].weight, 1.0)
+            nn.init.constant_(head.net[-1].bias, 10.0)
         x = torch.ones(2, 32)
         logits = head(x)
         # Logits can exceed 1 — should not be clipped

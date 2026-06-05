@@ -8,12 +8,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-import hydra
+try:
+    import hydra
+except ImportError:
+    hydra = None
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from omegaconf import DictConfig, OmegaConf
+try:
+    from omegaconf import DictConfig, OmegaConf
+except ImportError:
+    DictConfig = dict
+    OmegaConf = None
 from sklearn.metrics import roc_auc_score
 
 log = logging.getLogger(__name__)
@@ -578,10 +585,13 @@ def _build_model_cfg(cfg: DictConfig, model_type: str) -> DictConfig:
     return OmegaConf.merge(cfg, overrides)
 
 
-@hydra.main(config_path="../conf", config_name="config", version_base=None)
-def main(cfg: DictConfig) -> None:
+def main(cfg=None) -> None:
     TrainingPipeline().run(cfg)
 
 
 if __name__ == "__main__":
-    main()
+    if hydra is not None:
+        import functools
+        hydra.main(config_path="../conf", config_name="config", version_base=None)(main)()
+    else:
+        main()

@@ -9,9 +9,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-import hydra
+try:
+    import hydra
+except ImportError:
+    hydra = None
 import numpy as np
-from omegaconf import DictConfig
+try:
+    from omegaconf import DictConfig
+except ImportError:
+    DictConfig = dict
 from pydantic import BaseModel, Field, field_validator
 
 log = logging.getLogger(__name__)
@@ -365,10 +371,13 @@ class ExportPipeline:
         log.info("=== Export Pipeline Complete ===")
 
 
-@hydra.main(config_path="../conf", config_name="config", version_base=None)
-def main(cfg: DictConfig) -> None:
+def main(cfg=None) -> None:
     ExportPipeline().run(cfg)
 
 
 if __name__ == "__main__":
-    main()
+    if hydra is not None:
+        import functools
+        hydra.main(config_path="../conf", config_name="config", version_base=None)(main)()
+    else:
+        main()

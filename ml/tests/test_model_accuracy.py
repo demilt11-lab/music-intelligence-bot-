@@ -280,6 +280,7 @@ class TestGradientFlow:
         """Freezing audio encoder should stop gradients through it."""
         for p in tiny_model.audio_encoder.parameters():
             p.requires_grad_(False)
+        tiny_model.zero_grad()
 
         tiny_model.train()
         out = tiny_model(**{k: batch[k] for k in [
@@ -323,6 +324,8 @@ class TestOverfitSanity:
         batch["input_ids"] = (batch["input_ids"][:, :16] % 64).clamp(min=0)
         batch["text_attention_mask"] = batch["text_attention_mask"][:, :16]
         batch["clip_target"] = batch["clip_target"][:, :8]
+        batch["artist_ids"] = (batch["artist_ids"] % 10).clamp(min=1)
+        batch["genre_ids"] = (batch["genre_ids"] % 5).clamp(min=1)
 
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
         loss_fn = ViralTransformerLoss()
@@ -398,7 +401,7 @@ class TestMetricsCorrectness:
         labels = np.array([10.0, 16.0, 10.0, 20.0])  # errors: 0, 6, 0, 10
         m = compute_days_to_viral_metrics(preds, labels)
         assert m["within_7d_acc"] == pytest.approx(0.75)
-        assert m["within_14d_acc"] == pytest.approx(0.75)
+        assert m["within_14d_acc"] == pytest.approx(1.0)
 
     def test_peak_score_r2(self):
         preds = np.array([50.0, 60.0, 70.0, 80.0])

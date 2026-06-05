@@ -167,7 +167,7 @@ def test_tiktok_dataset_item_shapes(small_records):
     from ml.data.tiktok_dataset import TikTokViralDataset
     ds = TikTokViralDataset(small_records[:10], seq_len=90, augment=False)
     item = ds[0]
-    assert item["timeseries"].shape == (90, 8),  f"timeseries: {item['timeseries'].shape}"
+    assert item["timeseries"].shape == (90, 10),  f"timeseries: {item['timeseries'].shape}"
     assert item["audio"].shape == (64,),          f"audio: {item['audio'].shape}"
     assert item["metadata"].shape == (32,),       f"metadata: {item['metadata'].shape}"
     assert item["text_tokens"].shape == (32,),    f"text_tokens: {item['text_tokens'].shape}"

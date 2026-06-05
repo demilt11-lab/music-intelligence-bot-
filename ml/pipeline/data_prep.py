@@ -10,10 +10,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
-import hydra
 import numpy as np
 import pandas as pd
-from omegaconf import DictConfig
 from pydantic import BaseModel, Field, field_validator
 from sklearn.impute import SimpleImputer
 from sklearn.model_selection import train_test_split
@@ -188,9 +186,9 @@ class FeatureEngineer:
         # Cross-signal: TikTok virality WITH streaming follow-through
         # High tiktok + low saves = meme (don't sign); high both = genuine breakout
         df["viral_with_retention"] = (
-            df["tiktok_growth"].fillna(0)
-            * df["save_rate"].fillna(0)
-            * df["stream_velocity"].fillna(0)
+            df.get("tiktok_growth", pd.Series(0, index=df.index)).fillna(0)
+            * df.get("save_rate", pd.Series(0, index=df.index)).fillna(0)
+            * df.get("stream_velocity", pd.Series(0, index=df.index)).fillna(0)
         )
 
         # Chart momentum quality: rising chart + low skip = real momentum
@@ -229,7 +227,7 @@ class ValidationResult:
 class DataValidator:
     """Validates a DataFrame before training."""
 
-    def validate(self, df: pd.DataFrame, cfg: DictConfig) -> ValidationResult:
+    def validate(self, df: pd.DataFrame, cfg) -> ValidationResult:
         errors: list[str] = []
         warnings: list[str] = []
 
@@ -323,7 +321,7 @@ def generate_synthetic_data(n_rows: int = 2000, seed: int = 42) -> pd.DataFrame:
 class DataPreparationPipeline:
     """Orchestrates the full data preparation workflow."""
 
-    def run(self, cfg: DictConfig) -> None:
+    def run(self, cfg) -> None:
         log.info("=== Data Preparation Pipeline ===")
 
         # 1. Load data -------------------------------------------------------
@@ -429,7 +427,7 @@ class DataPreparationPipeline:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _load_data(self, cfg: DictConfig) -> pd.DataFrame:
+    def _load_data(self, cfg) -> pd.DataFrame:
         supabase_url = os.environ.get("SUPABASE_URL")
         supabase_key = os.environ.get("SUPABASE_SERVICE_KEY")
 
@@ -446,10 +444,24 @@ class DataPreparationPipeline:
         return generate_synthetic_data(n_rows=2000, seed=cfg.project.seed)
 
 
-@hydra.main(config_path="../conf", config_name="config", version_base=None)
-def main(cfg: DictConfig) -> None:
+def main(cfg=None) -> None:
+    try:
+        import hydra
+        from omegaconf import DictConfig
+    except ImportError:
+        pass
     DataPreparationPipeline().run(cfg)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        import hydra
+        from omegaconf import DictConfig
+
+        @hydra.main(config_path="../conf", config_name="config", version_base=None)
+        def _hydra_main(cfg: DictConfig) -> None:
+            DataPreparationPipeline().run(cfg)
+
+        _hydra_main()
+    except ImportError:
+        main()
