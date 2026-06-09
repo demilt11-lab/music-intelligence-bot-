@@ -13,7 +13,6 @@ export function cn(...inputs: Array<string | undefined | null | false>): string 
   for (const input of inputs) {
     if (!input) continue
     const parts = input.trim().split(/\s+/)
-
     for (const cls of parts) {
       if (cls) classes.push(cls)
     }
@@ -88,6 +87,7 @@ export function formatDelta(
 
   const pct = value * 100
   const sign = pct > 0 ? '+' : ''
+
   return `${sign}${pct.toFixed(decimals)}%`
 }
 
@@ -98,6 +98,7 @@ export function formatRawDelta(
   if (value === null || value === undefined || isNaN(value)) return '—'
 
   const sign = value > 0 ? '+' : ''
+
   return `${sign}${value.toFixed(decimals)}%`
 }
 
