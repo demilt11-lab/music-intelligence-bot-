@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import { SidebarNav } from '@/components/layout/SidebarNav'
 import { ToastProvider } from '@/components/ui/Toast'
 
 const inter = Inter({
@@ -58,22 +57,9 @@ export default function RootLayout({
         </a>
 
         <ToastProvider>
-          <div className="relative min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.12),_transparent_30%),radial-gradient(circle_at_80%_20%,_rgba(34,197,94,0.08),_transparent_22%),linear-gradient(180deg,_#0a0a0b_0%,_#0d0f14_45%,_#0a0a0b_100%)]">
-            <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:32px_32px]" />
-            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent_0%,rgba(0,0,0,0.18)_100%)]" />
-
-            <div className="relative flex min-h-screen">
-              <SidebarNav />
-              <main
-                id="main-content"
-                className="relative flex-1 min-w-0 overflow-x-hidden"
-              >
-                <div className="min-h-screen">
-                  {children}
-                </div>
-              </main>
-            </div>
-          </div>
+          <main id="main-content" className="min-h-screen">
+            {children}
+          </main>
         </ToastProvider>
       </body>
     </html>
