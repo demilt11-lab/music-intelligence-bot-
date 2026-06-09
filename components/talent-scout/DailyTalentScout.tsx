@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { CompanionHeader } from './CompanionHeader'
-import { ScoutTrackCard, ScoutTrack } from './ScoutTrackCard'
+import { ScoutTrackCard, type ScoutTrack } from './ScoutTrackCard'
 import { TrackCardSkeleton } from '@/components/ui/Skeleton'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
 
@@ -32,18 +32,24 @@ export function DailyTalentScout() {
     setError(null)
 
     try {
-      const params = new URLSearchParams({ code2, mode, limit: '50' })
+      const params = new URLSearchParams({
+        code2,
+        mode,
+        limit: '50',
+      })
+
       const res = await fetch(`/api/talent-scout/daily?${params}`)
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
-        throw new Error((body as any).error ?? `Request failed ${res.status}`)
+        throw new Error((body as { error?: string }).error ?? `Request failed ${res.status}`)
       }
 
       const json: ApiResponse = await res.json()
       setData(json.obj.map((t, i) => ({ ...t, rank: i + 1 })))
-    } catch (err: any) {
-      setError(err.message ?? 'Failed to load data.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load data.'
+      setError(message)
       setData([])
     } finally {
       setIsLoading(false)
@@ -93,7 +99,9 @@ export function DailyTalentScout() {
                       Buddy is scanning {code2} for {formatModeLabel(mode).toLowerCase()}
                     </h2>
                     <p className="max-w-2xl text-sm leading-6 text-zinc-300">
-                      Review emerging records, prioritize high-conviction signals, and move faster on artists showing early traction across music and social ecosystems.
+                      Review emerging records, prioritize high-conviction signals, and move
+                      faster on artists showing early traction across music and social
+                      ecosystems.
                     </p>
                   </div>
                 </div>
@@ -147,6 +155,7 @@ export function DailyTalentScout() {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
                     Suggested actions
                   </p>
+
                   <div className="mt-4 flex flex-wrap gap-2">
                     {[
                       'Review top 10 signals',
@@ -168,16 +177,16 @@ export function DailyTalentScout() {
             </div>
           </section>
 
-          {error && !isLoading && (
+          {error && !isLoading ? (
             <div role="alert" className="rounded-[22px] border border-rose-500/20 bg-rose-500/10 p-4">
               <CompanionMessage
                 message={`Something went wrong: ${error} — I’ll keep trying.`}
                 type="warning"
               />
             </div>
-          )}
+          ) : null}
 
-          {isLoading && (
+          {isLoading ? (
             <div
               className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3"
               aria-label="Loading tracks"
@@ -187,21 +196,19 @@ export function DailyTalentScout() {
                 <TrackCardSkeleton key={i} />
               ))}
             </div>
-          )}
+          ) : null}
 
-          {!isLoading && !error && data.length === 0 && (
+          {!isLoading && !error && data.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.82),rgba(10,10,11,0.94))] px-6 py-20 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-2xl text-zinc-500">
                 ◎
               </div>
 
               <div className="mt-5 max-w-md space-y-2">
-                <p className="text-sm font-medium text-zinc-200">
-                  No live scout signals yet
-                </p>
+                <p className="text-sm font-medium text-zinc-200">No live scout signals yet</p>
                 <p className="text-sm leading-6 text-zinc-500">
                   {mode === 'ugc_early'
-                    ? "Buddy is watching for early UGC breakouts in this market. The ingest pipeline refreshes throughout the day, so new signals should appear as momentum builds."
+                    ? 'Buddy is watching for early UGC breakouts in this market. The ingest pipeline refreshes throughout the day, so new signals should appear as momentum builds.'
                     : 'No tracks match the active scout lens right now. Try switching market or returning to early-breakout mode.'}
                 </p>
               </div>
@@ -213,22 +220,18 @@ export function DailyTalentScout() {
                 Refresh scout feed
               </button>
             </div>
-          )}
+          ) : null}
 
-          {!isLoading && data.length > 0 && (
+          {!isLoading && data.length > 0 ? (
             <div
               className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3"
               aria-label={`${data.length} tracks`}
             >
               {data.map((track, idx) => (
-                <ScoutTrackCard
-                  key={track.trackId}
-                  track={track}
-                  index={idx}
-                />
+                <ScoutTrackCard key={track.trackId} track={track} index={idx} />
               ))}
             </div>
-          )}
+          ) : null}
         </div>
 
         <aside className="space-y-5">
@@ -248,14 +251,17 @@ export function DailyTalentScout() {
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs font-medium text-zinc-400">A&R read</p>
                 <p className="mt-1 text-sm leading-6 text-zinc-300">
-                  Focus on records that are gaining attention early without needing full platform saturation. This view is best for finding movement before the wider market reacts.
+                  Focus on records that are gaining attention early without needing full
+                  platform saturation. This view is best for finding movement before the
+                  wider market reacts.
                 </p>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs font-medium text-zinc-400">Recommended move</p>
                 <p className="mt-1 text-sm leading-6 text-zinc-300">
-                  Shortlist the top signals, review artist consistency, then route the strongest names into playlist, curator, and campaign analysis.
+                  Shortlist the top signals, review artist consistency, then route the
+                  strongest names into playlist, curator, and campaign analysis.
                 </p>
               </div>
             </div>
@@ -290,3 +296,5 @@ export function DailyTalentScout() {
     </section>
   )
 }
+
+export default DailyTalentScout
