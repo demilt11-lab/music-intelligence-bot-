@@ -129,6 +129,7 @@ export default function ArtistPage({
 
       try {
         const res = await fetch(`/api/artists/${params.artistId}/trajectory`)
+
         if (!res.ok) {
           setData(null)
           setLoading(false)
@@ -318,7 +319,9 @@ export default function ArtistPage({
                   <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-200/70">
                     Followers 28d
                   </p>
-                  <p className={`mt-1 text-lg font-semibold ${deltaTone(snapshot?.followersDelta28d)}`}>
+                  <p
+                    className={`mt-1 text-lg font-semibold ${deltaTone(snapshot?.followersDelta28d)}`}
+                  >
                     {formatPct(snapshot?.followersDelta28d)}
                   </p>
                 </div>
@@ -360,7 +363,6 @@ export default function ArtistPage({
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
                 Snapshot metrics
               </h2>
-
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                   {
