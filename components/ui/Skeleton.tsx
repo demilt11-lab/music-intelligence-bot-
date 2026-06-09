@@ -28,11 +28,7 @@ export function SkeletonBox({
 }: SkeletonProps) {
   return (
     <div
-      className={cn(
-        'rounded-md bg-white/[0.06]',
-        animated && 'shimmer',
-        className
-      )}
+      className={cn('rounded-md bg-white/[0.06]', animated && 'shimmer', className)}
       style={{
         width: typeof width === 'number' ? `${width}px` : width,
         height: typeof height === 'number' ? `${height}px` : height,
@@ -52,7 +48,7 @@ function CardSkeleton({ className, animated = true }: SkeletonProps) {
   return (
     <div
       className={cn(
-        'rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,11,0.96))] p-4 flex flex-col gap-3',
+        'flex flex-col gap-3 rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,11,0.96))] p-4',
         className
       )}
       aria-hidden="true"
@@ -97,10 +93,7 @@ function StatSkeleton({ className, animated = true }: SkeletonProps) {
 function TableRowSkeleton({ className, animated = true }: SkeletonProps) {
   return (
     <div
-      className={cn(
-        'flex items-center gap-4 border-b border-white/10 px-4 py-3',
-        className
-      )}
+      className={cn('flex items-center gap-4 border-b border-white/10 px-4 py-3', className)}
       aria-hidden="true"
     >
       <SkeletonBox className="h-9 w-9 shrink-0 rounded-md" animated={animated} />
