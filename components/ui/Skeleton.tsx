@@ -1,30 +1,23 @@
-'use client';
+'use client'
 
-import React, { HTMLAttributes } from 'react';
-import { cn } from '@/lib/utils';
+import React, { HTMLAttributes } from 'react'
+import { cn } from '@/lib/utils'
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+export type SkeletonVariant =
+  | 'text'
+  | 'card'
+  | 'avatar'
+  | 'stat'
+  | 'table-row'
+  | 'chart'
 
-/** Shape variant for the Skeleton. */
-export type SkeletonVariant = 'text' | 'card' | 'avatar' | 'stat' | 'table-row' | 'chart';
-
-/** Props for the base Skeleton component. */
 export interface SkeletonProps extends HTMLAttributes<HTMLDivElement> {
-  /** Shape/context variant. @default "text" */
-  variant?: SkeletonVariant;
-  /** Width override (CSS value). */
-  width?: string | number;
-  /** Height override (CSS value). */
-  height?: string | number;
-  /** Whether to show the shimmer animation. @default true */
-  animated?: boolean;
+  variant?: SkeletonVariant
+  width?: string | number
+  height?: string | number
+  animated?: boolean
 }
 
-// ─── Base shimmer element ─────────────────────────────────────────────────────
-
-/**
- * Base shimmer rectangle used to compose skeleton layouts.
- */
 export function SkeletonBox({
   className,
   width,
@@ -36,9 +29,9 @@ export function SkeletonBox({
   return (
     <div
       className={cn(
-        'rounded-md bg-slate-800',
+        'rounded-md bg-white/[0.06]',
         animated && 'shimmer',
-        className,
+        className
       )}
       style={{
         width: typeof width === 'number' ? `${width}px` : width,
@@ -48,50 +41,49 @@ export function SkeletonBox({
       aria-hidden="true"
       {...rest}
     />
-  );
+  )
 }
 
-// ─── Variant skeletons ────────────────────────────────────────────────────────
-
-/** Single line of text skeleton. */
 function TextSkeleton({ className, width = '100%', ...rest }: SkeletonProps) {
-  return <SkeletonBox className={cn('h-4', className)} width={width} {...rest} />;
+  return <SkeletonBox className={cn('h-4', className)} width={width} {...rest} />
 }
 
-/** Card skeleton with image placeholder and text lines. */
 function CardSkeleton({ className, animated = true }: SkeletonProps) {
   return (
     <div
       className={cn(
-        'rounded-xl bg-slate-900 border border-slate-800 p-4 flex flex-col gap-3',
-        className,
+        'rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,11,0.96))] p-4 flex flex-col gap-3',
+        className
       )}
       aria-hidden="true"
     >
-      <SkeletonBox className="h-32 w-full rounded-lg" animated={animated} />
+      <SkeletonBox className="h-32 w-full rounded-[16px]" animated={animated} />
       <SkeletonBox className="h-4 w-3/4" animated={animated} />
       <SkeletonBox className="h-3 w-1/2" animated={animated} />
-      <div className="flex gap-2 mt-1">
+      <div className="mt-1 flex gap-2">
         <SkeletonBox className="h-6 w-16 rounded-full" animated={animated} />
         <SkeletonBox className="h-6 w-16 rounded-full" animated={animated} />
       </div>
     </div>
-  );
+  )
 }
 
-/** Circular avatar skeleton. */
-function AvatarSkeleton({ className, width = 40, height = 40, animated = true }: SkeletonProps) {
+function AvatarSkeleton({
+  className,
+  width = 40,
+  height = 40,
+  animated = true,
+}: SkeletonProps) {
   return (
     <SkeletonBox
-      className={cn('rounded-full shrink-0', className)}
+      className={cn('shrink-0 rounded-full', className)}
       width={width}
       height={height}
       animated={animated}
     />
-  );
+  )
 }
 
-/** Stat card skeleton (large number + label). */
 function StatSkeleton({ className, animated = true }: SkeletonProps) {
   return (
     <div className={cn('flex flex-col gap-2', className)} aria-hidden="true">
@@ -99,34 +91,34 @@ function StatSkeleton({ className, animated = true }: SkeletonProps) {
       <SkeletonBox className="h-8 w-28" animated={animated} />
       <SkeletonBox className="h-3 w-16" animated={animated} />
     </div>
-  );
+  )
 }
 
-/** Table row skeleton. */
 function TableRowSkeleton({ className, animated = true }: SkeletonProps) {
   return (
     <div
-      className={cn('flex items-center gap-4 px-4 py-3 border-b border-slate-800', className)}
+      className={cn(
+        'flex items-center gap-4 border-b border-white/10 px-4 py-3',
+        className
+      )}
       aria-hidden="true"
     >
-      <SkeletonBox className="h-9 w-9 rounded-md shrink-0" animated={animated} />
-      <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+      <SkeletonBox className="h-9 w-9 shrink-0 rounded-md" animated={animated} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <SkeletonBox className="h-3.5" width="55%" animated={animated} />
         <SkeletonBox className="h-3" width="35%" animated={animated} />
       </div>
-      <SkeletonBox className="h-6 w-16 rounded-full shrink-0" animated={animated} />
+      <SkeletonBox className="h-6 w-16 shrink-0 rounded-full" animated={animated} />
       <SkeletonBox className="h-3.5 w-20 shrink-0" animated={animated} />
       <SkeletonBox className="h-3.5 w-14 shrink-0" animated={animated} />
     </div>
-  );
+  )
 }
 
-/** Chart area skeleton. */
 function ChartSkeleton({ className, animated = true }: SkeletonProps) {
   return (
     <div className={cn('flex flex-col gap-3', className)} aria-hidden="true">
-      {/* Y-axis labels + bars */}
-      <div className="flex items-end gap-2 h-32">
+      <div className="flex h-32 items-end gap-2">
         {Array.from({ length: 7 }, (_, i) => (
           <SkeletonBox
             key={i}
@@ -136,68 +128,101 @@ function ChartSkeleton({ className, animated = true }: SkeletonProps) {
           />
         ))}
       </div>
-      {/* X-axis labels */}
       <div className="flex gap-2">
         {Array.from({ length: 7 }, (_, i) => (
-          <SkeletonBox key={i} className="flex-1 h-3 rounded" animated={animated} />
+          <SkeletonBox key={i} className="h-3 flex-1 rounded" animated={animated} />
         ))}
       </div>
     </div>
-  );
+  )
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
-
-/**
- * Composable skeleton loading placeholder. Supports text, card, avatar,
- * stat, table-row, and chart variants with animated shimmer effect.
- */
 export function Skeleton({ variant = 'text', ...props }: SkeletonProps) {
   switch (variant) {
-    case 'card':      return <CardSkeleton {...props} />;
-    case 'avatar':    return <AvatarSkeleton {...props} />;
-    case 'stat':      return <StatSkeleton {...props} />;
-    case 'table-row': return <TableRowSkeleton {...props} />;
-    case 'chart':     return <ChartSkeleton {...props} />;
-    default:          return <TextSkeleton {...props} />;
+    case 'card':
+      return <CardSkeleton {...props} />
+    case 'avatar':
+      return <AvatarSkeleton {...props} />
+    case 'stat':
+      return <StatSkeleton {...props} />
+    case 'table-row':
+      return <TableRowSkeleton {...props} />
+    case 'chart':
+      return <ChartSkeleton {...props} />
+    default:
+      return <TextSkeleton {...props} />
   }
 }
 
-Skeleton.displayName = 'Skeleton';
+Skeleton.displayName = 'Skeleton'
 
-// Named exports for direct use
-export { TextSkeleton as SkeletonText };
-export { CardSkeleton as SkeletonCard };
-export { AvatarSkeleton as SkeletonAvatar };
-export { StatSkeleton as SkeletonStat };
-export { TableRowSkeleton as SkeletonTableRow };
-export { ChartSkeleton as SkeletonChart };
+export { TextSkeleton as SkeletonText }
+export { CardSkeleton as SkeletonCard }
+export { AvatarSkeleton as SkeletonAvatar }
+export { StatSkeleton as SkeletonStat }
+export { TableRowSkeleton as SkeletonTableRow }
+export { ChartSkeleton as SkeletonChart }
+export default Skeleton
 
-export default Skeleton;
-
-/** Track card skeleton for the A&R Scout grid. */
 export function TrackCardSkeleton() {
   return (
-    <div className="rounded-xl border border-slate-800/60 bg-slate-900/50 p-4 space-y-3" aria-hidden>
-      <div className="flex items-start gap-3">
-        <SkeletonBox className="w-8 h-8 rounded-full shrink-0" />
-        <div className="flex-1 space-y-2">
-          <SkeletonBox className="h-4 w-3/4" />
-          <SkeletonBox className="h-3 w-1/2" />
+    <div
+      className="space-y-4 rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.96)_0%,rgba(10,10,11,0.98)_100%)] p-4 shadow-[0_18px_40px_rgba(0,0,0,0.18)]"
+      aria-hidden
+    >
+      <div className="flex items-start gap-4">
+        <div className="flex w-11 shrink-0 flex-col items-center">
+          <SkeletonBox className="h-3 w-8" />
+          <SkeletonBox className="mt-2 h-8 w-8 rounded-md" />
         </div>
-        <SkeletonBox className="w-10 h-10 rounded-full shrink-0" />
-      </div>
-      <div className="space-y-1.5 pt-1">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="flex items-center gap-2">
-            <SkeletonBox className="w-4 h-4 rounded" />
-            <SkeletonBox className="h-3 w-12" />
-            <SkeletonBox className="flex-1 h-1.5 rounded-full" />
-            <SkeletonBox className="h-3 w-10" />
+
+        <div className="flex-1 space-y-2">
+          <div className="flex gap-2">
+            <SkeletonBox className="h-5 w-12 rounded-full" />
+            <SkeletonBox className="h-5 w-16 rounded-full" />
           </div>
-        ))}
+          <SkeletonBox className="h-5 w-4/5" />
+          <SkeletonBox className="h-4 w-2/3" />
+          <SkeletonBox className="h-4 w-full" />
+        </div>
+
+        <SkeletonBox className="h-[52px] w-[52px] shrink-0 rounded-full" />
       </div>
-      <SkeletonBox className="w-full h-8 rounded-lg" />
+
+      <div className="grid grid-cols-2 gap-3">
+        <SkeletonBox className="h-16 rounded-2xl" />
+        <SkeletonBox className="h-16 rounded-2xl" />
+      </div>
+
+      <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3">
+        <SkeletonBox className="mb-3 h-3 w-24" />
+        <div className="space-y-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center gap-3">
+              <SkeletonBox className="h-7 w-7 rounded-full" />
+              <div className="flex-1 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <SkeletonBox className="h-3 w-14" />
+                  <SkeletonBox className="h-3 w-12" />
+                </div>
+                <SkeletonBox className="h-2 w-full rounded-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3">
+        <SkeletonBox className="mb-3 h-3 w-28" />
+        <div className="flex items-start gap-2">
+          <SkeletonBox className="h-5 w-5 rounded-full" />
+          <div className="flex-1 space-y-2">
+            <SkeletonBox className="h-3 w-16" />
+            <SkeletonBox className="h-4 w-full" />
+            <SkeletonBox className="h-4 w-5/6" />
+          </div>
+        </div>
+      </div>
     </div>
-  );
+  )
 }
