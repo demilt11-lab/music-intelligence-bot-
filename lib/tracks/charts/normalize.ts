@@ -2,8 +2,8 @@ import {
   ChartAppearanceRow,
   ChartArtistRef,
   ChartAlbumRef,
-} from './types';
-import { RawChartRow } from './query';
+} from './types'
+import { RawChartRow } from './query'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -14,8 +14,8 @@ import { RawChartRow } from './query';
  * Returns `null` when the value is `null` or `undefined`.
  */
 function bigToString(v: bigint | string | number | null | undefined): string | null {
-  if (v === null || v === undefined) return null;
-  return String(v);
+  if (v === null || v === undefined) return null
+  return String(v)
 }
 
 /**
@@ -23,8 +23,8 @@ function bigToString(v: bigint | string | number | null | undefined): string | n
  * Returns `null` when the value is `null` or `undefined`.
  */
 function toNumber(v: bigint | number | null | undefined): number | null {
-  if (v === null || v === undefined) return null;
-  return Number(v);
+  if (v === null || v === undefined) return null
+  return Number(v)
 }
 
 /**
@@ -32,9 +32,9 @@ function toNumber(v: bigint | number | null | undefined): number | null {
  * Returns `null` when the input is `null` or `undefined`.
  */
 function toIsoString(v: Date | string | null | undefined): string | null {
-  if (v === null || v === undefined) return null;
-  if (typeof v === 'string') return v.slice(0, 10);
-  return v.toISOString().slice(0, 10);
+  if (v === null || v === undefined) return null
+  if (typeof v === 'string') return v.slice(0, 10)
+  return v.toISOString().slice(0, 10)
 }
 
 /**
@@ -42,23 +42,26 @@ function toIsoString(v: Date | string | null | undefined): string | null {
  * empty array when the string is null, undefined, or malformed.
  */
 function parseArtistsJson(raw: string | null | undefined): ChartArtistRef[] {
-  if (!raw) return [];
+  if (!raw) return []
+
   try {
     const parsed = JSON.parse(raw) as Array<{
-      id: number;
-      name: string;
-      imageUrl: string | null;
-      code2: string | null;
-    }>;
-    if (!Array.isArray(parsed)) return [];
+      id: number
+      name: string
+      imageUrl: string | null
+      code2: string | null
+    }>
+
+    if (!Array.isArray(parsed)) return []
+
     return parsed.map((a) => ({
       id: Number(a.id),
       name: a.name ?? '',
       imageUrl: a.imageUrl ?? null,
       code2: a.code2 ?? null,
-    }));
+    }))
   } catch {
-    return [];
+    return []
   }
 }
 
@@ -70,16 +73,19 @@ function parseArtistsJson(raw: string | null | undefined): ChartArtistRef[] {
 function parseExternalIdsJson(
   raw: string | null | undefined,
 ): Record<string, string[]> {
-  if (!raw) return {};
+  if (!raw) return {}
+
   try {
-    const parsed = JSON.parse(raw) as Record<string, string | string[]>;
-    const result: Record<string, string[]> = {};
+    const parsed = JSON.parse(raw) as Record<string, string | string[]>
+    const result: Record<string, string[]> = {}
+
     for (const [platform, id] of Object.entries(parsed)) {
-      result[platform] = Array.isArray(id) ? id : [id];
+      result[platform] = Array.isArray(id) ? id : [id]
     }
-    return result;
+
+    return result
   } catch {
-    return {};
+    return {}
   }
 }
 
@@ -105,7 +111,7 @@ export function normalizeChartRow(row: RawChartRow): ChartAppearanceRow {
           label: row.album_label ?? null,
           imageUrl: row.album_image_url ?? null,
         }
-      : null;
+      : null
 
   return {
     rank: row.rank ?? null,
@@ -126,5 +132,5 @@ export function normalizeChartRow(row: RawChartRow): ChartAppearanceRow {
     artists: parseArtistsJson(row.artists_json),
     album,
     externalIds: parseExternalIdsJson(row.external_ids_json),
-  };
+  }
 }
