@@ -63,6 +63,7 @@ function formatValue(v: string | number | null): string {
 function barWidth(v: string | number | null, max: number): number {
   const n = Number(v ?? 0)
   if (!n || !max) return 0
+
   return Math.min(100, (Math.log10(n + 1) / Math.log10(max + 1)) * 100)
 }
 
