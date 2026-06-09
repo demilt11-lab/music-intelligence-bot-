@@ -108,11 +108,12 @@ unit tests, plus an end-to-end smoke test against a real Postgres.
 | Path | Schedule (UTC) |
 |------|----------------|
 | `/api/cron/send-daily-digest` | `0 13 * * *` (daily 13:00) |
-| `/api/cron/check-alert-rules` | `0 */2 * * *` (every 2h) |
+| `/api/cron/check-alert-rules` | `0 14 * * *` (daily 14:00) |
 
 Vercel automatically attaches `Authorization: Bearer $CRON_SECRET` to cron
-requests **when `CRON_SECRET` is set**. Sub-daily schedules require the Vercel
-**Pro** plan.
+requests **when `CRON_SECRET` is set**. Both crons run **daily** because the
+Vercel **Hobby** plan only allows daily schedules. To run alert checks more
+frequently (e.g. every 2h: `0 */2 * * *`), upgrade to the **Pro** plan.
 
 ### GitHub Actions (ingestion, ETL, ML)
 The 16 workflows under `.github/workflows/` run ingestion, ETL, and ML training
