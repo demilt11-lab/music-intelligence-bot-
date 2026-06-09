@@ -35,7 +35,7 @@ export function RadioClient({ trackId }: Props) {
       setError(null)
 
       try {
-        const res = await fetch(`/api/v1/tracks/${trackId}/radio`)
+        const res = await fetch(`/api/tracks/${trackId}/radio`)
         if (!res.ok) {
           const body = await res.json().catch(() => null)
           throw new Error(body?.error || 'Failed to load radio data')
@@ -95,7 +95,7 @@ export function RadioClient({ trackId }: Props) {
               <span className="tabular-nums text-sm font-semibold text-slate-100">
                 {data.airplayTotals.totalSpins != null
                   ? formatNumber(data.airplayTotals.totalSpins)
-                  : '—'}
+                  : '\u2014'}
               </span>
             </div>
           )}
