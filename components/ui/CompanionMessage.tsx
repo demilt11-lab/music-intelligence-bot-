@@ -90,3 +90,5 @@ export function CompanionMessage({
     </div>
   )
 }
+
+export default CompanionMessage
