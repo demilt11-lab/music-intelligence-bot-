@@ -155,7 +155,6 @@ export function DailyTalentScout() {
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
                     Suggested actions
                   </p>
-
                   <div className="mt-4 flex flex-wrap gap-2">
                     {[
                       'Review top 10 signals',
@@ -203,7 +202,6 @@ export function DailyTalentScout() {
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-2xl text-zinc-500">
                 ◎
               </div>
-
               <div className="mt-5 max-w-md space-y-2">
                 <p className="text-sm font-medium text-zinc-200">No live scout signals yet</p>
                 <p className="text-sm leading-6 text-zinc-500">
@@ -212,7 +210,6 @@ export function DailyTalentScout() {
                     : 'No tracks match the active scout lens right now. Try switching market or returning to early-breakout mode.'}
                 </p>
               </div>
-
               <button
                 onClick={fetchData}
                 className="mt-6 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
@@ -239,7 +236,6 @@ export function DailyTalentScout() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
               Scout briefing
             </p>
-
             <div className="mt-4 space-y-4">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs font-medium text-zinc-400">Mode</p>
@@ -271,7 +267,6 @@ export function DailyTalentScout() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
               Workflow
             </p>
-
             <div className="mt-4 space-y-3">
               {[
                 'Scan today’s breakout candidates',
