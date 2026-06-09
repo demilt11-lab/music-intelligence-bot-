@@ -1,87 +1,74 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { NextResponse } from 'next/server'
+import { PrismaClient } from '@prisma/client'
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params
-  const trackId = Number(id)
+const prisma = new PrismaClient()
 
-  if (!Number.isFinite(trackId)) {
-    return NextResponse.json({ error: 'Invalid track id' }, { status: 400 })
+type RouteParams = {
+  params: { trackId: string }
+}
+
+export async function GET(_req: Request, { params }: RouteParams) {
+  const id = Number(params.trackId)
+  if (!id || Number.isNaN(id)) {
+    return NextResponse.json(
+      { error: 'Invalid trackId' },
+      { status: 400 }
+    )
   }
 
   try {
-    const track = await db.track.findUnique({
-      where: { id: trackId },
+    const track = await prisma.track.findUnique({
+      where: { id },
       include: {
         trackArtists: {
-          include: {
-            artist: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-          },
+          include: { artist: true },
+          orderBy: { position: 'asc' },
         },
-        statisticsLatest: true,
         trackAlbums: {
-          include: {
-            album: {
-              select: {
-                id: true,
-                name: true,
-                releaseDate: true,
-              },
-            },
-          },
-          take: 1,
+          include: { album: true },
+          orderBy: { trackNumber: 'asc' },
         },
+        statisticsLatest: true, // TrackStatisticsLatest
       },
     })
 
     if (!track) {
-      return NextResponse.json({ error: 'Track not found' }, { status: 404 })
+      return NextResponse.json(
+        { error: 'Track not found' },
+        { status: 404 }
+      )
     }
 
-    const primaryAlbum = track.trackAlbums?.[0]?.album ?? null
-    const stats = track.statisticsLatest
+    const primaryAlbum = track.trackAlbums[0]?.album ?? null
 
-    return NextResponse.json({
+    const payload = {
       obj: {
-        id: track.id,
-        name: track.title,
-        isrc: track.isrc ?? null,
-        releaseDate: primaryAlbum?.releaseDate ?? track.releaseDate ?? null,
-        albumLabel: null,
-        trackTier: null,
-        artists: track.trackArtists.map((ta: any) => ({
-          id: ta.artist.id,
+        id: String(track.id),
+        name: track.title, // UI expects `name`
+        isrc: track.isrc,
+        releaseDate: track.releaseDate?.toISOString() ?? null,
+        albumLabel: primaryAlbum?.label ?? null,
+        trackTier: track.tier ?? null,
+        artists: track.trackArtists.map((ta) => ({
+          id: String(ta.artist.id),
           name: ta.artist.name,
         })),
-        statistics: stats
+        statistics: track.statisticsLatest
           ? {
-              spotifyPopularity: track.popularity ?? null,
-              spotifyStreams: stats.totalStreams?.toString() ?? null,
-              tiktokVideoCount: stats.tiktokVideoCount?.toString() ?? null,
-              youtubeViews: stats.youtubeViews?.toString() ?? null,
+              spotifyPopularity: track.statisticsLatest.spotifyPopularity,
+              spotifyStreams: track.statisticsLatest.totalStreams,
+              tiktokVideoCount: track.statisticsLatest.tiktokCreations,
+              youtubeViews: track.statisticsLatest.youtubeViews,
             }
-          : {
-              spotifyPopularity: track.popularity ?? null,
-              spotifyStreams: null,
-              tiktokVideoCount: null,
-              youtubeViews: null,
-            },
+          : null,
       },
-    })
-  } catch (error) {
+    }
+
+    return NextResponse.json(payload, { status: 200 })
+  } catch (err) {
+    console.error('GET /api/tracks/[trackId] error', err)
     return NextResponse.json(
-      {
-        error: 'Failed to load track detail',
-        detail: error instanceof Error ? error.message : 'Unknown error',
-      },
+      { error: 'Internal error loading track' },
       { status: 500 }
     )
   }
