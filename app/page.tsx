@@ -72,9 +72,7 @@ export default function HomePage() {
                     className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3"
                   >
                     <p className="text-xs text-zinc-500">{item.label}</p>
-                    <p className="mt-1 text-sm font-medium text-zinc-200">
-                      {item.value}
-                    </p>
+                    <p className="mt-1 text-sm font-medium text-zinc-200">{item.value}</p>
                   </div>
                 ))}
               </div>
@@ -162,7 +160,6 @@ export default function HomePage() {
                   <div className="absolute left-10 top-28 h-40 w-32 rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]" />
                   <div className="absolute right-12 top-24 h-48 w-40 rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))]" />
                   <div className="absolute bottom-12 left-8 right-8 h-24 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]" />
-
                   <div className="absolute bottom-24 left-[14%] h-24 w-24 rounded-full bg-emerald-500/10 blur-3xl" />
                   <div className="absolute right-[18%] top-[20%] h-24 w-24 rounded-full bg-sky-500/10 blur-3xl" />
 
