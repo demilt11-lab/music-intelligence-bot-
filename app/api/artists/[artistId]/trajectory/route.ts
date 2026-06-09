@@ -25,29 +25,33 @@ export async function GET(
 
       db.artistDailyStats.findMany({
         where: { artistId },
-        orderBy: { date: 'asc' },
+        orderBy: { date: 'desc' },
         take: 120,
       }),
 
       db.track.findMany({
         where: {
-          artists: {
+          trackArtists: {
             some: {
               artistId,
             },
           },
         },
         include: {
-          albums: {
-            select: {
-              id: true,
-              name: true,
+          trackAlbums: {
+            include: {
+              album: {
+                select: {
+                  id: true,
+                  name: true,
+                },
+              },
             },
             take: 1,
           },
-          statistics: {
+          statisticsLatest: {
             select: {
-              spotifyStreams: true,
+              totalStreams: true,
             },
           },
         },
@@ -64,33 +68,32 @@ export async function GET(
         artist: {
           id: artist.id.toString(),
           name: artist.name,
-          code2: artist.code2 ?? null,
+          code2: (artist as any).code2 ?? null,
         },
         snapshot: snapshot
           ? {
               ...snapshot,
+              id: Number(snapshot.id),
               artistId: Number(snapshot.artistId),
             }
           : null,
         history: history.map((h) => ({
           ...h,
           artistId: Number(h.artistId),
-          totalStreams: h.totalStreams.toString(),
-          totalListeners: h.totalListeners?.toString() ?? null,
-          totalFollowers: h.totalFollowers?.toString() ?? null,
-          playlistReach: h.playlistReach?.toString() ?? null,
+          totalStreams: (h as any).totalStreams?.toString() ?? '0',
+          playlistReach: (h as any).playlistReach?.toString() ?? null,
         })),
         releases: releases.map((r) => ({
-          id: r.id,
-          name: r.name,
+          id: r.id.toString(),
+          name: r.title,
           isrc: r.isrc ?? null,
-          albums: r.albums.map((a) => ({
-            id: Number(a.id),
-            name: a.name,
+          albums: r.trackAlbums.map((ta: any) => ({
+            id: ta.album.id,
+            name: ta.album.name,
           })),
-          statistics: r.statistics
+          statistics: r.statisticsLatest
             ? {
-                spotifyStreams: r.statistics.spotifyStreams?.toString() ?? null,
+                spotifyStreams: (r.statisticsLatest as any).totalStreams?.toString() ?? null,
               }
             : null,
         })),
