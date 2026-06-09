@@ -35,18 +35,6 @@ export interface RawChartRow {
  * Queries chart appearances for a specific track on a specific chart within a
  * date window.
  *
- * The query joins:
- * - `chart_snapshots` — one row per chart × date.
- * - `chart_rows` — one row per track × snapshot.
- * - `tracks` — for track metadata.
- * - `track_artists` — to gather contributing artists.
- * - `artists` — for artist names and images.
- * - `track_albums` — to link the primary album.
- * - `albums` — for album metadata.
- * - `external_ids` — for platform IDs (entity_type = 'track').
- *
- * Results are ordered by snapshot date ascending.
- *
  * @param trackId - Internal track ID to filter by.
  * @param chartType - Chart type identifier to filter by.
  * @param since - ISO date string; inclusive lower bound on snapshot date.
@@ -73,7 +61,7 @@ export async function queryTrackChartAppearances(
       cs.code2,
       cs.chart_type,
       t.id AS track_id,
-      t.name AS track_name,
+      t.title AS track_name,
       t.isrc,
       t.image_url AS track_image_url,
 
@@ -93,7 +81,7 @@ export async function queryTrackChartAppearances(
       )::text AS artists_json,
 
       al.id AS album_id,
-      al.name AS album_name,
+      al.title AS album_name,
       al.upc AS album_upc,
       al.release_date::text AS album_release_date,
       al.label AS album_label,
