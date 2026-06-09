@@ -52,6 +52,7 @@ function formatValue(v: string | number | null): string {
 
   const n = Number(v)
   if (Number.isNaN(n)) return String(v)
+
   if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
@@ -76,7 +77,8 @@ export function PlatformBar({
   const display = formatValue(value)
   const hasData = display !== '—'
   const width = hasData ? barWidth(value, maxValue) : 0
-  const velocity = secondaryValue != null && secondaryValue !== '0' ? Number(secondaryValue) : null
+  const velocity =
+    secondaryValue != null && secondaryValue !== '0' ? Number(secondaryValue) : null
   const showVelocity = velocity != null && !Number.isNaN(velocity)
 
   return (
@@ -111,7 +113,7 @@ export function PlatformBar({
                 {display}
               </span>
 
-              {showVelocity && (
+              {showVelocity ? (
                 <span
                   className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${
                     velocity > 0
@@ -122,7 +124,7 @@ export function PlatformBar({
                   {velocity > 0 ? '+' : ''}
                   {velocity.toFixed(0)}%
                 </span>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -143,3 +145,5 @@ export function PlatformBar({
     </div>
   )
 }
+
+export default PlatformBar
