@@ -6,29 +6,36 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
+  const trackId = Number(id)
+
+  if (!Number.isFinite(trackId)) {
+    return NextResponse.json({ error: 'Invalid track id' }, { status: 400 })
+  }
 
   try {
     const track = await db.track.findUnique({
-      where: { id },
+      where: { id: trackId },
       include: {
-        artists: {
+        trackArtists: {
           include: {
             artist: {
               select: {
                 id: true,
                 name: true,
-                code2: true,
               },
             },
           },
         },
-        statistics: true,
-        albums: {
-          select: {
-            id: true,
-            name: true,
-            releaseDate: true,
-            label: true,
+        statisticsLatest: true,
+        trackAlbums: {
+          include: {
+            album: {
+              select: {
+                id: true,
+                name: true,
+                releaseDate: true,
+              },
+            },
           },
           take: 1,
         },
@@ -39,29 +46,34 @@ export async function GET(
       return NextResponse.json({ error: 'Track not found' }, { status: 404 })
     }
 
-    const primaryAlbum = track.albums?.[0] ?? null
+    const primaryAlbum = track.trackAlbums?.[0]?.album ?? null
+    const stats = track.statisticsLatest
 
     return NextResponse.json({
       obj: {
         id: track.id,
-        name: track.name,
+        name: track.title,
         isrc: track.isrc ?? null,
-        releaseDate: primaryAlbum?.releaseDate ?? null,
-        albumLabel: primaryAlbum?.label ?? null,
-        trackTier: (track as any).trackTier ?? null,
-        artists: track.artists.map((ta: any) => ({
+        releaseDate: primaryAlbum?.releaseDate ?? track.releaseDate ?? null,
+        albumLabel: null,
+        trackTier: null,
+        artists: track.trackArtists.map((ta: any) => ({
           id: ta.artist.id,
           name: ta.artist.name,
-          code2: ta.artist.code2 ?? null,
         })),
-        statistics: track.statistics
+        statistics: stats
           ? {
-              spotifyPopularity: track.statistics.spotifyPopularity ?? null,
-              spotifyStreams: track.statistics.spotifyStreams?.toString() ?? null,
-              tiktokVideoCount: track.statistics.tiktokVideoCount?.toString() ?? null,
-              youtubeViews: track.statistics.youtubeViews?.toString() ?? null,
+              spotifyPopularity: track.popularity ?? null,
+              spotifyStreams: stats.totalStreams?.toString() ?? null,
+              tiktokVideoCount: stats.tiktokVideoCount?.toString() ?? null,
+              youtubeViews: stats.youtubeViews?.toString() ?? null,
             }
-          : null,
+          : {
+              spotifyPopularity: track.popularity ?? null,
+              spotifyStreams: null,
+              tiktokVideoCount: null,
+              youtubeViews: null,
+            },
       },
     })
   } catch (error) {
