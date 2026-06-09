@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { validateTrackChartParams } from '@/lib/tracks/charts/validate';
-import { getTrackChartAppearances } from '@/lib/tracks/charts/service';
-import { handleApiError } from '@/lib/shared/errors';
-import { successResponse } from '@/lib/shared/response';
+import { NextRequest, NextResponse } from 'next/server'
+import { validateTrackChartParams } from '@/lib/tracks/charts/validate'
+import { getTrackChartAppearances } from '@/lib/tracks/charts/service'
+import { handleApiError } from '@/lib/shared/errors'
+import { successResponse } from '@/lib/shared/response'
 
 /**
  * GET /api/tracks/[trackId]/charts/[chartType]
@@ -15,7 +15,7 @@ import { successResponse } from '@/lib/shared/response';
  * - `until` — ISO date string (default: today)
  *
  * @param request - Incoming Next.js request object (carries search params).
- * @param params  - Route segment params containing `trackId` and `chartType`.
+ * @param params - Route segment params containing `trackId` and `chartType`.
  * @returns JSON response conforming to {@link TrackChartsResponse}.
  */
 export async function GET(
@@ -23,15 +23,18 @@ export async function GET(
   { params }: { params: { id: string; chartType: string } },
 ): Promise<NextResponse> {
   try {
-    const searchParams = request.nextUrl.searchParams;
+    const searchParams = request.nextUrl.searchParams
+
     const validatedParams = validateTrackChartParams(
       params.id,
       params.chartType,
       searchParams,
-    );
-    const result = await getTrackChartAppearances(validatedParams);
-    return successResponse(result);
+    )
+
+    const result = await getTrackChartAppearances(validatedParams)
+
+    return successResponse(result)
   } catch (err) {
-    return handleApiError(err);
+    return handleApiError(err)
   }
 }
