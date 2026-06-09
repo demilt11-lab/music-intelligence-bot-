@@ -2,7 +2,6 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { formatNumber } from '@/lib/utils'
 
 export interface WatchlistEntry {
   id: number
@@ -21,10 +20,8 @@ interface WatchlistGridProps {
 
 function DeltaBadge({ delta }: { delta: number | null }) {
   if (delta == null) return null
-
   const pct = (delta * 100).toFixed(1)
   const positive = delta >= 0
-
   return (
     <span
       className={[
@@ -42,12 +39,10 @@ function DeltaBadge({ delta }: { delta: number | null }) {
 
 function TrendBadge({ trendLabel }: { trendLabel: string | null }) {
   if (!trendLabel) return null
-
   const styles =
     trendLabel === 'VIRAL'
       ? 'border-amber-400/20 bg-amber-500/10 text-amber-300'
       : 'border-cyan-400/20 bg-cyan-500/10 text-cyan-300'
-
   return (
     <span
       className={`inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${styles}`}
@@ -59,7 +54,6 @@ function TrendBadge({ trendLabel }: { trendLabel: string | null }) {
 
 function getEntityIcon(type: string) {
   const normalized = type.toLowerCase()
-
   if (normalized.includes('artist')) return '♪'
   if (normalized.includes('track')) return '♫'
   return '◎'
@@ -67,7 +61,6 @@ function getEntityIcon(type: string) {
 
 function getEntityHref(item: WatchlistEntry) {
   const normalized = item.entityType.toLowerCase()
-
   if (normalized.includes('artist')) return `/artists/${item.entityId}`
   if (normalized.includes('track')) return `/tracks/${item.entityId}`
   return undefined
@@ -103,14 +96,12 @@ export function WatchlistGrid({ items, onRemove }: WatchlistGridProps) {
       </div>
     )
   }
-
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {items.map((item) => {
         const href = getEntityHref(item)
         const scorePercent =
           item.viralScore != null ? `${Math.round(item.viralScore * 100)}` : '—'
-
         return (
           <article
             key={item.id}
@@ -120,18 +111,15 @@ export function WatchlistGrid({ items, onRemove }: WatchlistGridProps) {
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-sm text-zinc-300">
                 {getEntityIcon(item.entityType)}
               </div>
-
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-400">
                     {item.entityType}
                   </span>
-
                   <span className="text-[11px] font-medium text-zinc-500">
                     #{item.entityId}
                   </span>
                 </div>
-
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
@@ -141,7 +129,6 @@ export function WatchlistGrid({ items, onRemove }: WatchlistGridProps) {
                       {formatAddedDate(item.addedAt)}
                     </p>
                   </div>
-
                   <div className="text-right">
                     <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">
                       Viral score
@@ -152,7 +139,6 @@ export function WatchlistGrid({ items, onRemove }: WatchlistGridProps) {
                   </div>
                 </div>
               </div>
-
               <button
                 type="button"
                 onClick={() => onRemove(item.id)}
@@ -176,17 +162,15 @@ export function WatchlistGrid({ items, onRemove }: WatchlistGridProps) {
                 </svg>
               </button>
             </div>
-
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <DeltaBadge delta={item.viralScoreDelta} />
               <TrendBadge trendLabel={item.trendLabel} />
               {item.viralScore != null && (
                 <span className="inline-flex items-center rounded-full border border-emerald-400/15 bg-emerald-500/8 px-2 py-1 text-[10px] font-medium text-emerald-200/90">
-                  Score {formatNumber(item.viralScore, { maximumFractionDigits: 2 })}
+                  Score {(item.viralScore * 100).toFixed(1)}
                 </span>
               )}
             </div>
-
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/6">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-emerald-200 transition-all duration-700"
@@ -198,12 +182,10 @@ export function WatchlistGrid({ items, onRemove }: WatchlistGridProps) {
                 aria-hidden
               />
             </div>
-
             <div className="mt-4 flex items-center justify-between gap-3">
               <p className="text-xs leading-5 text-zinc-500">
                 Shortlisted for continued monitoring and fast revisit.
               </p>
-
               {href ? (
                 <Link
                   href={href}
