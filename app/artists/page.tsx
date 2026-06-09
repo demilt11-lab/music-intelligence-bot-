@@ -38,25 +38,29 @@ const STATUS_CONFIG: Record<
     label: 'About to break',
     badge: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
     dot: 'bg-amber-400',
-    summary: 'Highest-priority artists showing breakout probability and near-term momentum.',
+    summary:
+      'Highest-priority artists showing breakout probability and near-term momentum.',
   },
   GROWING: {
     label: 'Growing',
     badge: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
     dot: 'bg-emerald-400',
-    summary: 'Artists with positive movement that may be ready for deeper scouting review.',
+    summary:
+      'Artists with positive movement that may be ready for deeper scouting review.',
   },
   STABLE: {
     label: 'Stable',
     badge: 'bg-white/5 text-zinc-300 border-white/10',
     dot: 'bg-zinc-400',
-    summary: 'Artists maintaining their current position without major acceleration or decline.',
+    summary:
+      'Artists maintaining their current position without major acceleration or decline.',
   },
   DECLINING: {
     label: 'Declining',
     badge: 'bg-rose-500/10 text-rose-300 border-rose-500/20',
     dot: 'bg-rose-400',
-    summary: 'Artists losing momentum and requiring caution before allocation or outreach.',
+    summary:
+      'Artists losing momentum and requiring caution before allocation or outreach.',
   },
 }
 
@@ -90,7 +94,6 @@ export default function ArtistsDashboardPage() {
 
   useEffect(() => {
     setLoading(true)
-
     const params = new URLSearchParams()
     if (status) params.set('status', status)
     if (genre) params.set('genre', genre)
@@ -145,8 +148,8 @@ export default function ArtistsDashboardPage() {
                         {loading
                           ? 'Scanning artist trajectories across streaming, playlist, and audience growth signals.'
                           : total === 0
-                          ? 'No artists match the current filter set. Widen the lens to surface more opportunities.'
-                          : `Tracking ${total} artist${total !== 1 ? 's' : ''} in this cohort. ${cfg.summary}`}
+                            ? 'No artists match the current filter set. Widen the lens to surface more opportunities.'
+                            : `Tracking ${total} artist${total !== 1 ? 's' : ''} in this cohort. ${cfg.summary}`}
                       </p>
                     </div>
                   </div>
@@ -156,7 +159,9 @@ export default function ArtistsDashboardPage() {
                       <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
                         Results
                       </p>
-                      <p className="mt-1 text-lg font-semibold text-white">{loading ? '—' : total}</p>
+                      <p className="mt-1 text-lg font-semibold text-white">
+                        {loading ? '—' : total}
+                      </p>
                     </div>
 
                     <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3">
@@ -286,7 +291,6 @@ export default function ArtistsDashboardPage() {
                           ))}
                         </tr>
                       </thead>
-
                       <tbody className="divide-y divide-white/10">
                         {data.map((row) => {
                           const sc = STATUS_CONFIG[row.status] ?? STATUS_CONFIG.STABLE
@@ -305,7 +309,9 @@ export default function ArtistsDashboardPage() {
                                     {row.name || row.artistId}
                                   </Link>
                                 ) : (
-                                  <span className="text-zinc-400">{row.name || 'Unknown'}</span>
+                                  <span className="text-zinc-400">
+                                    {row.name || 'Unknown'}
+                                  </span>
                                 )}
                               </td>
 
@@ -330,15 +336,27 @@ export default function ArtistsDashboardPage() {
                                 {fmtProb(row.breakProbability)}
                               </td>
 
-                              <td className={`px-4 py-3 text-right mono-num ${metricTone(row.streams28dDelta)}`}>
+                              <td
+                                className={`px-4 py-3 text-right mono-num ${metricTone(
+                                  row.streams28dDelta
+                                )}`}
+                              >
                                 {fmt(row.streams28dDelta)}
                               </td>
 
-                              <td className={`px-4 py-3 text-right mono-num ${metricTone(row.playlistsDelta28d)}`}>
+                              <td
+                                className={`px-4 py-3 text-right mono-num ${metricTone(
+                                  row.playlistsDelta28d
+                                )}`}
+                              >
                                 {fmt(row.playlistsDelta28d)}
                               </td>
 
-                              <td className={`px-4 py-3 text-right mono-num ${metricTone(row.followersDelta28d)}`}>
+                              <td
+                                className={`px-4 py-3 text-right mono-num ${metricTone(
+                                  row.followersDelta28d
+                                )}`}
+                              >
                                 {fmt(row.followersDelta28d)}
                               </td>
                             </tr>
@@ -366,8 +384,8 @@ export default function ArtistsDashboardPage() {
                   loading
                     ? 'I’m compiling the current artist movement picture now.'
                     : total === 0
-                    ? 'No clear artist signals under the active filters. Open the lens to uncover more opportunities.'
-                    : `This view is best for identifying ${cfg.label.toLowerCase()} talent and routing the strongest names into deeper artist, track, and playlist analysis.`
+                      ? 'No clear artist signals under the active filters. Open the lens to uncover more opportunities.'
+                      : `This view is best for identifying ${cfg.label.toLowerCase()} talent and routing the strongest names into deeper artist, track, and playlist analysis.`
                 }
               />
             </div>
@@ -381,7 +399,9 @@ export default function ArtistsDashboardPage() {
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs font-medium text-zinc-400">Recommended move</p>
                 <p className="mt-1 text-sm leading-6 text-zinc-300">
-                  Review artists with rising break probability and positive stream or playlist lift first, then branch into artist detail pages for closer validation.
+                  Review artists with rising break probability and positive stream or
+                  playlist lift first, then branch into artist detail pages for closer
+                  validation.
                 </p>
               </div>
             </div>
