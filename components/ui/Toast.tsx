@@ -64,7 +64,6 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const toast = useCallback(
     (message: string, type: ToastType = 'info', duration = 4000) => {
       const id = `toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
-
       setToasts((prev) => [...prev.slice(-4), { id, message, type, duration }])
 
       if (duration > 0) {
@@ -94,11 +93,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
 export function useToast(): ToastContextValue {
   const ctx = useContext(ToastContext)
-
   if (!ctx) {
     throw new Error('useToast must be used inside <ToastProvider>')
   }
-
   return ctx
 }
 
