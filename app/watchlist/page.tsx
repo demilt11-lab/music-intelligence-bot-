@@ -66,8 +66,12 @@ export default function WatchlistPage() {
   const summary = useMemo(() => {
     return {
       total: items.length,
-      artists: items.filter((item: any) => item.artistName || item.artist || item.type === 'artist').length,
-      tracks: items.filter((item: any) => item.trackName || item.track || item.type === 'track').length,
+      artists: items.filter(
+        (item: any) => item.artistName || item.artist || item.type === 'artist'
+      ).length,
+      tracks: items.filter(
+        (item: any) => item.trackName || item.track || item.type === 'track'
+      ).length,
     }
   }, [items])
 
@@ -119,7 +123,8 @@ export default function WatchlistPage() {
                         Buddy is tracking your active targets
                       </h2>
                       <p className="max-w-3xl text-sm leading-6 text-zinc-300">
-                        Use this list as your operating shortlist for follow-up, review, and export across artist and track opportunities that matter most right now.
+                        Use this list as your operating shortlist for follow-up, review, and export
+                        across artist and track opportunities that matter most right now.
                       </p>
                     </div>
                   </div>
@@ -161,8 +166,8 @@ export default function WatchlistPage() {
                       loading
                         ? 'I’m pulling your current watchlist now.'
                         : items.length === 0
-                        ? 'Your shortlist is empty right now. Add artists or tracks from scout and intelligence views to build a live decision queue.'
-                        : `You currently have ${items.length} watchlist item${items.length !== 1 ? 's' : ''}. This list works best as a focused operating queue rather than a long archive.`
+                          ? 'Your shortlist is empty right now. Add artists or tracks from scout and intelligence views to build a live decision queue.'
+                          : `You currently have ${items.length} watchlist item${items.length !== 1 ? 's' : ''}. This list works best as a focused operating queue rather than a long archive.`
                     }
                   />
                 </div>
@@ -183,10 +188,7 @@ export default function WatchlistPage() {
 
               {error && !loading && (
                 <div className="rounded-[22px] border border-rose-500/20 bg-rose-500/10 p-4">
-                  <CompanionMessage
-                    type="warning"
-                    message={error}
-                  />
+                  <CompanionMessage type="warning" message={error} />
                 </div>
               )}
 
@@ -196,11 +198,10 @@ export default function WatchlistPage() {
                     ◎
                   </div>
                   <div className="space-y-2">
-                    <p className="text-sm font-medium text-zinc-200">
-                      No watchlist items yet
-                    </p>
+                    <p className="text-sm font-medium text-zinc-200">No watchlist items yet</p>
                     <p className="max-w-md text-sm leading-6 text-zinc-500">
-                      Build your shortlist by saving promising artists and tracks from Buddy Scout, artist pages, and track intelligence views.
+                      Build your shortlist by saving promising artists and tracks from Buddy Scout,
+                      artist pages, and track intelligence views.
                     </p>
                   </div>
                 </div>
@@ -218,12 +219,12 @@ export default function WatchlistPage() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
               Buddy read
             </p>
-
             <div className="mt-4 space-y-3">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs font-medium text-zinc-400">Purpose</p>
                 <p className="mt-1 text-sm leading-6 text-zinc-300">
-                  Use the watchlist as your live A&R queue for names that require continued monitoring, team review, or export into external workflows.
+                  Use the watchlist as your live A&R queue for names that require continued
+                  monitoring, team review, or export into external workflows.
                 </p>
               </div>
 
@@ -240,7 +241,6 @@ export default function WatchlistPage() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
               Workflow
             </p>
-
             <div className="mt-4 space-y-3">
               {[
                 'Save promising artists and tracks',
