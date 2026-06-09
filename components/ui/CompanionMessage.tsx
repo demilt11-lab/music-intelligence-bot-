@@ -1,37 +1,92 @@
-import React from 'react';
+import React from 'react'
 
 interface CompanionMessageProps {
-  message: string;
-  type?: 'insight' | 'action' | 'warning' | 'info';
-  compact?: boolean;
-  className?: string;
+  message: string
+  type?: 'insight' | 'action' | 'warning' | 'info'
+  compact?: boolean
+  className?: string
 }
 
 const TYPE_CONFIG = {
-  insight: { border: 'border-emerald-500/20', bg: 'bg-emerald-500/5',  text: 'text-emerald-300', dot: 'bg-emerald-500', icon: '◎' },
-  action:  { border: 'border-violet-500/20',  bg: 'bg-violet-500/5',   text: 'text-violet-300',  dot: 'bg-violet-500',  icon: '▸' },
-  warning: { border: 'border-amber-500/20',   bg: 'bg-amber-500/5',    text: 'text-amber-300',   dot: 'bg-amber-500',   icon: '⚡' },
-  info:    { border: 'border-slate-600/40',   bg: 'bg-slate-800/40',   text: 'text-slate-400',   dot: 'bg-slate-500',   icon: '·' },
-};
+  insight: {
+    border: 'border-emerald-400/20',
+    bg: 'bg-emerald-500/10',
+    text: 'text-emerald-200',
+    iconWrap: 'bg-emerald-500/14 border-emerald-400/20',
+    icon: '◎',
+    label: 'Insight',
+  },
+  action: {
+    border: 'border-cyan-400/20',
+    bg: 'bg-cyan-500/10',
+    text: 'text-cyan-200',
+    iconWrap: 'bg-cyan-500/14 border-cyan-400/20',
+    icon: '→',
+    label: 'Action',
+  },
+  warning: {
+    border: 'border-amber-400/20',
+    bg: 'bg-amber-500/10',
+    text: 'text-amber-200',
+    iconWrap: 'bg-amber-500/14 border-amber-400/20',
+    icon: '!',
+    label: 'Watchout',
+  },
+  info: {
+    border: 'border-white/10',
+    bg: 'bg-white/5',
+    text: 'text-zinc-300',
+    iconWrap: 'bg-white/8 border-white/10',
+    icon: '·',
+    label: 'Note',
+  },
+} as const
 
-export function CompanionMessage({ message, type = 'info', compact = false, className = '' }: CompanionMessageProps) {
-  const cfg = TYPE_CONFIG[type];
+export function CompanionMessage({
+  message,
+  type = 'info',
+  compact = false,
+  className = '',
+}: CompanionMessageProps) {
+  const cfg = TYPE_CONFIG[type]
 
   if (compact) {
     return (
-      <p className={`text-[11px] ${cfg.text} leading-relaxed ${className}`}>
-        <span className="mr-1" aria-hidden>{cfg.icon}</span>
-        {message}
+      <p
+        className={`flex items-start gap-2 text-xs leading-6 ${cfg.text} ${className}`}
+        role="note"
+      >
+        <span
+          className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] ${cfg.iconWrap}`}
+          aria-hidden
+        >
+          {cfg.icon}
+        </span>
+        <span>{message}</span>
       </p>
-    );
+    )
   }
 
   return (
-    <div className={`rounded-lg border ${cfg.border} ${cfg.bg} px-3 py-2 ${className}`} role="note">
-      <div className="flex gap-2">
-        <span className={`mt-0.5 text-xs shrink-0 ${cfg.text}`} aria-hidden>{cfg.icon}</span>
-        <p className={`text-xs leading-relaxed ${cfg.text}`}>{message}</p>
+    <div
+      className={`rounded-[18px] border ${cfg.border} ${cfg.bg} px-4 py-3 ${className}`}
+      role="note"
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${cfg.iconWrap} ${cfg.text}`}
+          aria-hidden
+        >
+          {cfg.icon}
+        </span>
+
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
+            {cfg.label}
+          </p>
+          <p className={`mt-1 text-sm leading-6 ${cfg.text}`}>{message}</p>
+        </div>
       </div>
     </div>
-  );
+  )
 }
