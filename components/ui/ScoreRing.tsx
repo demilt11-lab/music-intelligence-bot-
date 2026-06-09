@@ -19,7 +19,8 @@ function getRingTheme(score: number) {
       text: '#a7f3d0',
       glow: '0 0 24px rgba(52, 211, 153, 0.18)',
       track: 'rgba(255,255,255,0.08)',
-      surface: 'radial-gradient(circle at 30% 30%, rgba(52,211,153,0.16), rgba(16,185,129,0.06) 45%, rgba(255,255,255,0.02) 100%)',
+      surface:
+        'radial-gradient(circle at 30% 30%, rgba(52,211,153,0.16), rgba(16,185,129,0.06) 45%, rgba(255,255,255,0.02) 100%)',
     }
   }
 
@@ -29,7 +30,8 @@ function getRingTheme(score: number) {
       text: '#fde68a',
       glow: '0 0 24px rgba(251, 191, 36, 0.16)',
       track: 'rgba(255,255,255,0.08)',
-      surface: 'radial-gradient(circle at 30% 30%, rgba(251,191,36,0.14), rgba(245,158,11,0.06) 45%, rgba(255,255,255,0.02) 100%)',
+      surface:
+        'radial-gradient(circle at 30% 30%, rgba(251,191,36,0.14), rgba(245,158,11,0.06) 45%, rgba(255,255,255,0.02) 100%)',
     }
   }
 
@@ -38,7 +40,8 @@ function getRingTheme(score: number) {
     text: '#e4e4e7',
     glow: '0 0 24px rgba(255, 255, 255, 0.06)',
     track: 'rgba(255,255,255,0.08)',
-    surface: 'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.08), rgba(255,255,255,0.03) 45%, rgba(255,255,255,0.02) 100%)',
+    surface:
+      'radial-gradient(circle at 30% 30%, rgba(255,255,255,0.08), rgba(255,255,255,0.03) 45%, rgba(255,255,255,0.02) 100%)',
   }
 }
 
@@ -112,3 +115,5 @@ export function ScoreRing({
     </div>
   )
 }
+
+export default ScoreRing
