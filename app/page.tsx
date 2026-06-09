@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { BuddyCharacter } from '@/components/buddy/BuddyCharacter'
 
 const QUICK_TASKS = [
   'Scout breakout Jersey club artists',
@@ -163,23 +164,7 @@ export default function HomePage() {
                   <div className="absolute bottom-24 left-[14%] h-24 w-24 rounded-full bg-emerald-500/10 blur-3xl" />
                   <div className="absolute right-[18%] top-[20%] h-24 w-24 rounded-full bg-sky-500/10 blur-3xl" />
 
-                  <div className="relative z-10 flex flex-col items-center">
-                    <div className="relative flex h-[330px] w-[250px] items-center justify-center">
-                      <div className="absolute inset-x-8 bottom-1 h-10 rounded-full bg-emerald-400/20 blur-2xl" />
-                      <div className="absolute left-1/2 top-0 h-20 w-20 -translate-x-1/2 rounded-full border border-emerald-300/30 bg-[radial-gradient(circle_at_50%_40%,rgba(167,243,208,0.95),rgba(16,185,129,0.35)_52%,rgba(255,255,255,0.06)_100%)] shadow-[0_0_40px_rgba(52,211,153,0.28)]" />
-                      <div className="absolute left-1/2 top-[74px] h-[158px] w-[158px] -translate-x-1/2 rounded-[42px] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] shadow-[0_30px_80px_rgba(0,0,0,0.35)]" />
-                      <div className="absolute left-1/2 top-[110px] flex -translate-x-1/2 items-center gap-6">
-                        <span className="h-3 w-3 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.9)]" />
-                        <span className="h-3 w-3 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.9)]" />
-                      </div>
-                      <div className="absolute left-1/2 top-[145px] h-10 w-16 -translate-x-1/2 rounded-full border border-emerald-300/20 bg-emerald-400/10" />
-                      <div className="absolute left-1/2 top-[248px] h-24 w-[180px] -translate-x-1/2 rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))]" />
-                    </div>
-
-                    <div className="mt-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-300">
-                      Buddy is idle — awaiting your next assignment.
-                    </div>
-                  </div>
+                  <BuddyCharacter />
                 </div>
               </div>
             </div>
