@@ -36,30 +36,24 @@ function getHeat(score: number): 'hot' | 'rising' | 'cool' {
 
 const HEAT_STYLES = {
   hot: {
-    badge:
-      'border-amber-400/20 bg-amber-500/10 text-amber-300',
-    accent:
-      'from-amber-400/30 via-orange-400/10 to-transparent',
+    badge: 'border-amber-400/20 bg-amber-500/10 text-amber-300',
+    accent: 'from-amber-400/30 via-orange-400/10 to-transparent',
     glow: 'shadow-[0_0_0_1px_rgba(251,191,36,0.08),0_18px_40px_rgba(245,158,11,0.14)]',
     label: 'Breakout',
   },
   rising: {
-    badge:
-      'border-emerald-400/20 bg-emerald-500/10 text-emerald-300',
-    accent:
-      'from-emerald-400/25 via-emerald-500/10 to-transparent',
+    badge: 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300',
+    accent: 'from-emerald-400/25 via-emerald-500/10 to-transparent',
     glow: 'shadow-[0_0_0_1px_rgba(52,211,153,0.08),0_18px_40px_rgba(16,185,129,0.12)]',
     label: 'Rising',
   },
   cool: {
-    badge:
-      'border-white/10 bg-white/5 text-zinc-300',
-    accent:
-      'from-white/10 via-white/[0.03] to-transparent',
+    badge: 'border-white/10 bg-white/5 text-zinc-300',
+    accent: 'from-white/10 via-white/[0.03] to-transparent',
     glow: 'shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_18px_40px_rgba(0,0,0,0.16)]',
     label: 'Watching',
   },
-}
+} as const
 
 function getActionType(type: string): 'insight' | 'action' | 'warning' | 'info' {
   if (type === 'ugc_double_down') return 'insight'
@@ -72,15 +66,12 @@ function getSignalSummary(track: ScoutTrack) {
   if (track.totalScore >= 0.7) {
     return 'High-conviction signal with real breakout urgency.'
   }
-
   if (track.totalScore >= 0.5) {
     return 'Momentum is strong enough for immediate A&R review.'
   }
-
   if (track.totalScore >= 0.25) {
     return 'Early movement is forming; monitor closely.'
   }
-
   return 'Low-friction watchlist candidate for continued tracking.'
 }
 
@@ -126,11 +117,11 @@ export function ScoutTrackCard({
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              {track.code2 && (
+              {track.code2 ? (
                 <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-400">
                   {track.code2}
                 </span>
-              )}
+              ) : null}
 
               <span
                 className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] ${heatStyle.badge}`}
@@ -191,6 +182,7 @@ export function ScoutTrackCard({
               secondaryValue={track.tiktokVelocity !== 0 ? String(track.tiktokVelocity) : null}
               maxValue={tiktokMax}
             />
+
             <PlatformBar
               platform="spotify"
               value={
@@ -199,11 +191,13 @@ export function ScoutTrackCard({
               }
               maxValue={streamMax}
             />
+
             <PlatformBar
               platform="youtube"
               value={track.youtubeViews}
               maxValue={streamMax}
             />
+
             <PlatformBar
               platform="instagram"
               value={track.instagramPlays}
@@ -212,19 +206,22 @@ export function ScoutTrackCard({
           </div>
         </div>
 
-        {primaryAction && (
+        {primaryAction ? (
           <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3">
             <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
               Buddy recommendation
             </p>
+
             <CompanionMessage
               message={primaryAction.description}
               type={getActionType(primaryAction.type)}
               compact
             />
           </div>
-        )}
+        ) : null}
       </div>
     </article>
   )
 }
+
+export default ScoutTrackCard
