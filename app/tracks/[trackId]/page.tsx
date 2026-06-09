@@ -13,6 +13,7 @@ async function getTrack(trackId: string) {
     const res = await fetch(`${baseUrl}/api/tracks/${trackId}`, {
       cache: 'no-store',
     })
+
     if (!res.ok) return null
     const data = await res.json()
     return data.obj
@@ -161,10 +162,7 @@ export default async function TrackPage({ params }: TrackPageProps) {
 
             <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
               <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
-                <CompanionMessage
-                  type="insight"
-                  message={summarizeTrack(track)}
-                />
+                <CompanionMessage type="insight" message={summarizeTrack(track)} />
               </div>
 
               <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
@@ -239,7 +237,7 @@ export default async function TrackPage({ params }: TrackPageProps) {
                     <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
                       {label}
                     </p>
-                    <p className="mt-2 text-sm font-semibold text-zinc-100 tabular-nums">
+                    <p className="mt-2 text-sm font-semibold tabular-nums text-zinc-100">
                       {metricValue(value)}
                     </p>
                   </div>
