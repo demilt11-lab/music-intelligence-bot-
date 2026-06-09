@@ -1,39 +1,50 @@
-// app/api/talent-scout/daily/route.ts
-
-import { NextRequest, NextResponse } from 'next/server';
-import { ScoutSources, ScoutScore } from '@/lib/engine';
+import { NextRequest, NextResponse } from 'next/server'
+import { ScoutSources, ScoutScore } from '@/lib/engine'
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const date = searchParams.get('date') ?? undefined;
-    const code2 = searchParams.get('code2') ?? 'GLOBAL';
-    const limit = Number(searchParams.get('limit') ?? '50');
-    const mode = (searchParams.get('mode') ?? 'ugc_early') as 'ugc_early' | 'general';
+    const { searchParams } = new URL(req.url)
+    const date = searchParams.get('date') ?? undefined
+    const code2 = searchParams.get('code2') ?? 'GLOBAL'
+    const limit = Number(searchParams.get('limit') ?? '50')
+    const mode = (searchParams.get('mode') ?? 'ugc_early') as
+      | 'ugc_early'
+      | 'general'
 
-    // Debug: count rows in key tables
-    const { db } = await import('@/lib/db');
-    const trackCount = await db.track.count();
-    const chartRowCount = await db.chartRow.count();
-    const scoreCount = await db.talentScoutScore.count();
-    console.log(`[talent-scout-daily] DB counts: tracks=${trackCount}, chartRows=${chartRowCount}, scores=${scoreCount}`);
+    const { db } = await import('@/lib/db')
+    const trackCount = await db.track.count()
+    const chartRowCount = await db.chartRow.count()
+    const scoreCount = await db.talentScoutScore.count()
 
-    let tracks: Awaited<ReturnType<typeof ScoutSources.fetchTopTiktokBreakoutTracks>>;
-    let tier4Error: string | undefined;
+    console.log(
+      `[talent-scout-daily] DB counts: tracks=${trackCount}, chartRows=${chartRowCount}, scores=${scoreCount}`
+    )
+
+    let tracks: Awaited<ReturnType<typeof ScoutSources.fetchTopTiktokBreakoutTracks>>
+    let tier4Error: string | undefined
+
     try {
-      tracks = await ScoutSources.fetchTopTiktokBreakoutTracks({ date, code2, limit });
+      tracks = await ScoutSources.fetchTopTiktokBreakoutTracks({ date, code2, limit })
     } catch (err: any) {
-      tier4Error = err.message ?? String(err);
-      console.error('[talent-scout-daily] fetchTopTiktokBreakoutTracks threw:', tier4Error);
-      tracks = [];
+      tier4Error = err.message ?? String(err)
+      console.error(
+        '[talent-scout-daily] fetchTopTiktokBreakoutTracks threw:',
+        tier4Error
+      )
+      tracks = []
     }
-    console.log(`[talent-scout-daily] fetchTopTiktokBreakoutTracks returned ${tracks.length} tracks for code2=${code2}`);
-    tracks = await ScoutSources.hydrateInternalStreaming(tracks);
-    tracks = await ScoutSources.hydrateLuminateMetrics(tracks);
-    tracks = await ScoutSources.hydrateMlSignals(tracks, date);
 
-    const ranked = ScoutScore.rankTalentTracks(tracks, mode);
-    console.log(`[talent-scout-daily] ranked ${ranked.length} tracks`);
+    console.log(
+      `[talent-scout-daily] fetchTopTiktokBreakoutTracks returned ${tracks.length} tracks for code2=${code2}`
+    )
+
+    tracks = await ScoutSources.hydrateInternalStreaming(tracks)
+    tracks = await ScoutSources.hydrateLuminateMetrics(tracks)
+    tracks = await ScoutSources.hydrateMlSignals(tracks, date)
+
+    const ranked = ScoutScore.rankTalentTracks(tracks, mode)
+
+    console.log(`[talent-scout-daily] ranked ${ranked.length} tracks`)
 
     return NextResponse.json({
       obj: ranked,
@@ -42,19 +53,24 @@ export async function GET(req: NextRequest) {
         code2,
         limit,
         mode,
-        dbCounts: { tracks: trackCount, chartRows: chartRowCount, scores: scoreCount },
+        dbCounts: {
+          tracks: trackCount,
+          chartRows: chartRowCount,
+          scores: scoreCount,
+        },
         tier4TrackCount: tracks.length,
         rankedCount: ranked.length,
         tier4Error,
         description:
           'NOV8TE proprietary daily UGC trend-spotting list combining internal ML, UGC, streaming, and Luminate metrics.',
       },
-    });
+    })
   } catch (err: any) {
-    console.error('[talent-scout-daily]', err);
+    console.error('[talent-scout-daily]', err)
+
     return NextResponse.json(
       { error: err.message ?? 'Internal error' },
-      { status: 500 },
-    );
+      { status: 500 }
+    )
   }
 }
