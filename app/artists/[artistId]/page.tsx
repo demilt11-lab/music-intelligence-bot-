@@ -126,15 +126,24 @@ export default function ArtistPage({
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const res = await fetch(`/api/artists/${params.artistId}/trajectory`)
-      if (!res.ok) {
+
+      try {
+        const res = await fetch(`/api/artists/${params.artistId}/trajectory`)
+        if (!res.ok) {
+          setData(null)
+          setLoading(false)
+          return
+        }
+
+        const json: TrajectoryResponse = await res.json()
+        setData(json.obj)
+      } catch {
+        setData(null)
+      } finally {
         setLoading(false)
-        return
       }
-      const json: TrajectoryResponse = await res.json()
-      setData(json.obj)
-      setLoading(false)
     }
+
     load()
   }, [params.artistId])
 
@@ -148,6 +157,7 @@ export default function ArtistPage({
     }
 
     const latest = data.history[0]
+
     return {
       latestStreams: latest?.totalStreams ?? null,
       latestPlaylists: latest?.playlistCount ?? null,
@@ -259,10 +269,13 @@ export default function ArtistPage({
                     {artist.name}
                   </h1>
                   <p className="text-sm text-zinc-400 sm:text-[15px]">
-                    {snapshot?.primaryGenre || 'Genre unavailable'} · {snapshot?.primaryCode2 || artist.code2 || 'Region unavailable'}
+                    {snapshot?.primaryGenre || 'Genre unavailable'} ·{' '}
+                    {snapshot?.primaryCode2 || artist.code2 || 'Region unavailable'}
                   </p>
                   <p className="max-w-3xl text-sm leading-6 text-zinc-300">
-                    Buddy is reading this artist across breakout probability, stream movement, playlist lift, follower change, and release context so you can judge whether the act deserves deeper A&R attention.
+                    Buddy is reading this artist across breakout probability, stream movement,
+                    playlist lift, follower change, and release context so you can judge whether
+                    the act deserves deeper A&R attention.
                   </p>
                 </div>
               </div>
@@ -378,9 +391,7 @@ export default function ArtistPage({
                     <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
                       {label}
                     </p>
-                    <p className={`mt-2 text-sm font-semibold ${tone}`}>
-                      {value}
-                    </p>
+                    <p className={`mt-2 text-sm font-semibold ${tone}`}>{value}</p>
                   </div>
                 ))}
               </div>
@@ -391,9 +402,7 @@ export default function ArtistPage({
                 <h2 className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
                   Trajectory history
                 </h2>
-                <p className="text-xs text-zinc-500">
-                  {history.length} records
-                </p>
+                <p className="text-xs text-zinc-500">{history.length} records</p>
               </div>
 
               <div className="mt-4 overflow-x-auto rounded-[20px] border border-white/10">
@@ -434,9 +443,7 @@ export default function ArtistPage({
                 <h2 className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
                   Releases
                 </h2>
-                <p className="text-xs text-zinc-500">
-                  {releases.length} tracks
-                </p>
+                <p className="text-xs text-zinc-500">{releases.length} tracks</p>
               </div>
 
               <div className="mt-4 overflow-x-auto rounded-[20px] border border-white/10">
@@ -485,9 +492,7 @@ export default function ArtistPage({
               <div className="mt-4 space-y-3">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-xs font-medium text-zinc-400">Artist</p>
-                  <p className="mt-1 text-sm font-semibold text-white">
-                    {artist.name}
-                  </p>
+                  <p className="mt-1 text-sm font-semibold text-white">{artist.name}</p>
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
