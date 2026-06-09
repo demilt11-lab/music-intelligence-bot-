@@ -168,7 +168,6 @@ export function TrackCardSkeleton() {
           <SkeletonBox className="h-3 w-8" />
           <SkeletonBox className="mt-2 h-8 w-8 rounded-md" />
         </div>
-
         <div className="flex-1 space-y-2">
           <div className="flex gap-2">
             <SkeletonBox className="h-5 w-12 rounded-full" />
@@ -178,7 +177,6 @@ export function TrackCardSkeleton() {
           <SkeletonBox className="h-4 w-2/3" />
           <SkeletonBox className="h-4 w-full" />
         </div>
-
         <SkeletonBox className="h-[52px] w-[52px] shrink-0 rounded-full" />
       </div>
 
