@@ -88,7 +88,6 @@ export function formatDelta(
 
   const pct = value * 100
   const sign = pct > 0 ? '+' : ''
-
   return `${sign}${pct.toFixed(decimals)}%`
 }
 
