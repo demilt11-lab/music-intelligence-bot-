@@ -13,7 +13,6 @@ async function getTrack(trackId: string) {
     const res = await fetch(`${baseUrl}/api/tracks/${trackId}`, {
       cache: 'no-store',
     })
-
     if (!res.ok) return null
     const data = await res.json()
     return data.obj
@@ -116,7 +115,9 @@ export default async function TrackPage({ params }: TrackPageProps) {
                     {formatArtists(track)}
                   </p>
                   <p className="max-w-3xl text-sm leading-6 text-zinc-300">
-                    Buddy is reading this record across metadata, platform traction, charts, and radio context so you can assess whether it deserves deeper A&R attention.
+                    Buddy is reading this record across metadata, platform traction,
+                    charts, and radio context so you can assess whether it deserves
+                    deeper A&R attention.
                   </p>
                 </div>
               </div>
@@ -195,7 +196,6 @@ export default async function TrackPage({ params }: TrackPageProps) {
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
                 Core metadata
               </h2>
-
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                   { label: 'ISRC', value: track.isrc },
@@ -222,7 +222,6 @@ export default async function TrackPage({ params }: TrackPageProps) {
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
                 Platform stats
               </h2>
-
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {[
                   { label: 'Spotify popularity', value: track.statistics?.spotifyPopularity },
@@ -254,7 +253,6 @@ export default async function TrackPage({ params }: TrackPageProps) {
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
                 Buddy read
               </p>
-
               <div className="mt-4 space-y-3">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-xs font-medium text-zinc-400">Track</p>
@@ -273,7 +271,9 @@ export default async function TrackPage({ params }: TrackPageProps) {
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-xs font-medium text-zinc-400">Recommended move</p>
                   <p className="mt-1 text-sm leading-6 text-zinc-300">
-                    Use chart progression and radio support together to judge whether this record is moving as a short-term breakout, a steady growth story, or just early noise.
+                    Use chart progression and radio support together to judge whether
+                    this record is moving as a short-term breakout, a steady growth
+                    story, or just early noise.
                   </p>
                 </div>
               </div>
@@ -283,7 +283,6 @@ export default async function TrackPage({ params }: TrackPageProps) {
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
                 Workflow
               </p>
-
               <div className="mt-4 space-y-3">
                 {[
                   'Validate platform traction',
