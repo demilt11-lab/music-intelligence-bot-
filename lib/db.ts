@@ -23,4 +23,6 @@ export const db =
     datasources: datasourceUrl ? { db: { url: datasourceUrl } } : undefined,
   })
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = db
+}
