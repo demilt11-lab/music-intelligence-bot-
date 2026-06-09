@@ -7,7 +7,7 @@ import { TrackCardSkeleton } from '@/components/ui/Skeleton'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
 
 type ApiResponse = {
-  obj: (ScoutTrack & { totalScore: number })[]
+  obj: ScoutTrack[]
   meta: {
     date?: string
     code2: string
@@ -145,7 +145,7 @@ export function DailyTalentScout() {
                     type="info"
                     message={
                       topTrack
-                        ? `Top priority right now is ${topTrack.trackName} by ${topTrack.artistName}. It is leading this scan based on combined momentum signals and should be reviewed first for A&R follow-up.`
+                        ? `Top priority right now is ${topTrack.name} by ${topTrack.artists.join(', ')}. It is leading this scan based on combined momentum signals and should be reviewed first for A&R follow-up.`
                         : `I’m standing by with the latest scout pass. Once signals load in, I’ll highlight the best breakout opportunities for immediate review.`
                     }
                   />
