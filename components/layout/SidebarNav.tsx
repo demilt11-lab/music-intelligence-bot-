@@ -7,7 +7,6 @@ const NAV_ITEMS = [
   { href: '/', label: 'Home', icon: '⌂' },
   { href: '/talent-scout', label: 'Buddy Scout', icon: '◎', hot: true },
   { href: '/artists', label: 'Artists', icon: '♪' },
-  { href: '/tracks', label: 'Tracks', icon: '♫' },
   { href: '/playlists', label: 'Playlists', icon: '▤' },
   { href: '/curators', label: 'Curators', icon: '✦' },
   { href: '/watchlist', label: 'Watchlist', icon: '◈' },
@@ -47,11 +46,13 @@ export function SidebarNav() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
             Session
           </p>
+
           <div className="mt-3 space-y-2">
             <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
               <span className="text-xs text-zinc-400">Mode</span>
               <span className="text-xs font-medium text-emerald-300">Live Scout</span>
             </div>
+
             <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
               <span className="text-xs text-zinc-400">Status</span>
               <span className="inline-flex items-center gap-2 text-xs font-medium text-zinc-200">
@@ -120,7 +121,7 @@ export function SidebarNav() {
             Pipeline health
           </p>
 
-          <div className="mt-3 flex items-center justify-between">
+          <div className="mt-3 flex items-center justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-white">ML signal pipeline</p>
               <p className="mt-1 text-xs leading-5 text-zinc-400">
@@ -138,3 +139,5 @@ export function SidebarNav() {
     </aside>
   )
 }
+
+export default SidebarNav
