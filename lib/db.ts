@@ -6,7 +6,6 @@ function buildDatasourceUrl(): string | undefined {
   const url = process.env.DATABASE_URL
   if (!url) return undefined
   if (url.includes('pgbouncer=true')) return url
-
   const sep = url.includes('?') ? '&' : '?'
   return `${url}${sep}pgbouncer=true&connection_limit=1`
 }
