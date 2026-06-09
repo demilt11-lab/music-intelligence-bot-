@@ -35,11 +35,11 @@ export function PageShell({
                     {title}
                   </h1>
 
-                  {description && (
+                  {description ? (
                     <p className="max-w-3xl text-sm leading-6 text-zinc-300 sm:text-[15px]">
                       {description}
                     </p>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
@@ -60,16 +60,16 @@ export function PageShell({
                   </div>
                 </div>
 
-                {actions && <div className="flex items-center gap-2">{actions}</div>}
+                {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
               </div>
             </div>
           </div>
         </section>
 
-        <section className="relative">
-          {children}
-        </section>
+        <section className="relative">{children}</section>
       </main>
     </div>
   )
 }
+
+export default PageShell
