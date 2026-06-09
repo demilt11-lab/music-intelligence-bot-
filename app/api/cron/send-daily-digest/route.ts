@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { assembleDigest } from '@/lib/digest/assembler';
+import { verifyCronSecret } from '@/lib/platform/cron-auth';
 
-function verifyCronSecret(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET}`;
-}
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
   if (!verifyCronSecret(req)) {

@@ -1,23 +1,22 @@
 import { NextResponse } from 'next/server'
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { db } from '@/lib/db'
+import { successResponse } from '@/lib/shared/response'
 
 type RouteParams = {
-  params: { trackId: string }
+  params: { id: string }
 }
 
 export async function GET(_req: Request, { params }: RouteParams) {
-  const id = Number(params.trackId)
+  const id = Number(params.id)
   if (!id || Number.isNaN(id)) {
     return NextResponse.json(
-      { error: 'Invalid trackId' },
+      { error: 'Invalid track id' },
       { status: 400 }
     )
   }
 
   try {
-    const track = await prisma.track.findUnique({
+    const track = await db.track.findUnique({
       where: { id },
       include: {
         trackArtists: {
@@ -48,7 +47,9 @@ export async function GET(_req: Request, { params }: RouteParams) {
         isrc: track.isrc,
         releaseDate: track.releaseDate?.toISOString() ?? null,
         albumLabel: primaryAlbum?.label ?? null,
-        trackTier: track.tier ?? null,
+        // `Track` has no tier concept in the schema; expose null so the UI
+        // renders an em-dash rather than crashing on an undefined field.
+        trackTier: null,
         artists: track.trackArtists.map((ta) => ({
           id: String(ta.artist.id),
           name: ta.artist.name,
@@ -64,9 +65,11 @@ export async function GET(_req: Request, { params }: RouteParams) {
       },
     }
 
-    return NextResponse.json(payload, { status: 200 })
+    // successResponse serialises BigInt fields (totalStreams, tiktokCreations,
+    // youtubeViews) to strings so JSON.stringify does not throw.
+    return successResponse(payload, 200)
   } catch (err) {
-    console.error('GET /api/tracks/[trackId] error', err)
+    console.error('GET /api/tracks/[id] error', err)
     return NextResponse.json(
       { error: 'Internal error loading track' },
       { status: 500 }

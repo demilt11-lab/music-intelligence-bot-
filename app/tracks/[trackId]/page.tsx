@@ -22,7 +22,7 @@ async function getTrack(trackId: string) {
 }
 
 type TrackPageProps = {
-  params: Promise<{ trackId: string }>
+  params: { trackId: string }
 }
 
 function formatArtists(track: any) {
@@ -46,12 +46,14 @@ function summarizeTrack(track: any) {
   return 'This is currently a lower-signal record, but it remains useful as a watchlist candidate while broader momentum develops.'
 }
 
-function metricValue(value: unknown) {
-  return value ?? '—'
+function metricValue(value: unknown): string | number {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'number' || typeof value === 'string') return value
+  return String(value)
 }
 
 export default async function TrackPage({ params }: TrackPageProps) {
-  const { trackId } = await params
+  const { trackId } = params
   const track = await getTrack(trackId)
 
   if (!track) {

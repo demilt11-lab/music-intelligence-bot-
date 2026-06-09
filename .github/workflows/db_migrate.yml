@@ -25,6 +25,10 @@ jobs:
           # Use session pooler (port 5432) instead of transaction pooler (port 6543)
           # Session pooler supports DDL/schema operations; transaction pooler hangs
           SESSION_URL=$(echo "$DATABASE_URL" | sed 's/:6543\//:5432\//')
-          DATABASE_URL="$SESSION_URL" DIRECT_URL="$SESSION_URL" npx prisma db push --accept-data-loss
+          # NOTE: --accept-data-loss intentionally removed. Without it, db push
+          # applies additive changes automatically but ABORTS (non-zero exit) on
+          # any destructive change (dropped column/table), forcing human review.
+          # Never re-add --accept-data-loss to an automated production workflow.
+          DATABASE_URL="$SESSION_URL" DIRECT_URL="$SESSION_URL" npx prisma db push
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

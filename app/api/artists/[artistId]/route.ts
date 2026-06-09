@@ -8,9 +8,9 @@ const BASE_URL =
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ artistId: string }> }
+  { params }: { params: { artistId: string } }
 ) {
-  const { artistId } = await params
+  const { artistId } = params
 
   try {
     const res = await fetch(`${BASE_URL}/api/v1/artists/${artistId}`, {

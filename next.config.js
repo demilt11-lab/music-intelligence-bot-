@@ -61,7 +61,6 @@ const nextConfig = {
   compress: true,
   reactStrictMode: true,
   productionBrowserSourceMaps: false,
-    typescript: { ignoreBuildErrors: true },
 
   experimental: {
     // Keep Prisma out of the edge bundle
