@@ -520,3 +520,19 @@ npm install
 npx prisma generate
 npm run dev
 ```
+
+## Validation
+
+```bash
+npm run typecheck   # tsc --noEmit (build is type-checked too)
+npm run lint        # next lint
+npm test            # unit tests (node:test + tsx, no DB required)
+npm run smoke       # end-to-end smoke test (requires DB + running server)
+```
+
+## Deployment
+
+See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for the full production runbook:
+environment variables, database setup, Vercel build/cron config, the ML
+service, GitHub Actions secrets, post-deploy verification, and known
+deployment debt.

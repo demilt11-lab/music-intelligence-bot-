@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifyCronSecret } from '@/lib/platform/cron-auth';
 
-function verifyCronSecret(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET}`;
-}
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 // This cron fires the internal ETL endpoint (runs in a separate process/service)
 export async function GET(req: NextRequest) {

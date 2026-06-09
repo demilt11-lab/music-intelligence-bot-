@@ -2,15 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { ScoutSources } from '@/lib/engine';
 import { emptyTrack } from '@/lib/talentScout/emptyTrack';
+import { verifyCronSecret } from '@/lib/platform/cron-auth';
 
-// Vercel cron jobs call this endpoint — verify the secret header
-function verifyCronSecret(req: NextRequest) {
-  const secret = req.headers.get('authorization');
-  if (secret !== `Bearer ${process.env.CRON_SECRET}`) {
-    return false;
-  }
-  return true;
-}
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
 
 type MetricKey = 'viralScore' | 'breakProbability' | 'streams7dDelta';
 

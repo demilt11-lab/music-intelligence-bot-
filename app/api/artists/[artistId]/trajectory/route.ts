@@ -3,9 +3,9 @@ import { db } from '@/lib/db'
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ artistId: string }> }
+  { params }: { params: { artistId: string } }
 ) {
-  const { artistId: artistIdParam } = await params
+  const { artistId: artistIdParam } = params
   const artistId = Number(artistIdParam)
 
   if (!Number.isFinite(artistId)) {
@@ -43,7 +43,7 @@ export async function GET(
               album: {
                 select: {
                   id: true,
-                  name: true,
+                  title: true,
                 },
               },
             },
@@ -87,9 +87,9 @@ export async function GET(
           id: r.id.toString(),
           name: r.title,
           isrc: r.isrc ?? null,
-          albums: r.trackAlbums.map((ta: any) => ({
+          albums: r.trackAlbums.map((ta) => ({
             id: ta.album.id,
-            name: ta.album.name,
+            name: ta.album.title,
           })),
           statistics: r.statisticsLatest
             ? {
