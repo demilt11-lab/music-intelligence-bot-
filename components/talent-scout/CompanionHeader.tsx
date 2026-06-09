@@ -55,6 +55,7 @@ export function CompanionHeader({
   isLoading,
 }: CompanionHeaderProps) {
   const message = buildMessage(trackCount, hotCount, code2)
+
   const currentTime = new Date().toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
@@ -74,7 +75,6 @@ export function CompanionHeader({
                     ◎
                   </span>
                 </div>
-
                 <span
                   className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0b0b0d] bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.9)]"
                   aria-label="Buddy online"
@@ -84,9 +84,8 @@ export function CompanionHeader({
               <div className="min-w-0 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-emerald-300">
-                    Buddy A&amp;R Scout
+                    Buddy A&R Scout
                   </span>
-
                   <span className="text-[11px] text-zinc-500">
                     {isLoading ? 'Scanning live…' : `Updated ${currentTime}`}
                   </span>
@@ -98,7 +97,6 @@ export function CompanionHeader({
                   <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
                     Mode: {formatModeLabel(mode)}
                   </span>
-
                   <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1">
                     Market: {markets.find((m) => m.value === code2)?.label ?? code2}
                   </span>
@@ -153,7 +151,6 @@ export function CompanionHeader({
               <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
                 Scout lens
               </span>
-
               <div className="inline-flex rounded-full border border-white/10 bg-white/5 p-1">
                 {(['ugc_early', 'general'] as const).map((m) => {
                   const active = mode === m
@@ -185,7 +182,6 @@ export function CompanionHeader({
               >
                 Market
               </label>
-
               <select
                 id="market-select"
                 value={code2}
