@@ -210,7 +210,6 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     }
   }
 
-  // Artist-name queries work reliably; genre: filters can return 0 in some Vercel environments
   const queries = [
     'Sabrina Carpenter',
     'Kendrick Lamar',
@@ -266,7 +265,6 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     `[scout-sources] Tier4 direct search returned ${spotifyTracks.length} tracks`
   )
 
-  // Fallback: if Spotify search returned nothing, use seed tracks so the pipeline is always non-empty
   const seedTracks =
     spotifyTracks.length > 0
       ? spotifyTracks
@@ -405,7 +403,9 @@ export async function hydrateLuminateMetrics(
   })
 
   const latestByTrack = new Map<number, Date>()
-  luminateStreams.forEach((g) => latestByTrack.set(g.entityId, g._max.date!))
+  luminateStreams.forEach((g) => {
+    if (g._max.date) latestByTrack.set(g.entityId, g._max.date)
+  })
 
   const streamRows = await db.luminateStream.findMany({
     where: { entityType: 'track', entityId: { in: trackIds } },
@@ -421,17 +421,20 @@ export async function hydrateLuminateMetrics(
 
   const airplayRows = await db.luminateAirplay.findMany({
     where: { entityType: 'track', entityId: { in: trackIds } },
+    orderBy: [{ entityId: 'asc' }, { date: 'desc' }],
   })
 
   const latestAirplayByTrack = new Map<
     number,
-    { audience: string | null; spins: string | null }
+    { date: Date; audience: string | null; spins: string | null }
   >()
 
   for (const r of airplayRows) {
     const prev = latestAirplayByTrack.get(r.entityId)
-    if (!prev || r.date > (prev as any).date) {
+
+    if (!prev || r.date > prev.date) {
       latestAirplayByTrack.set(r.entityId, {
+        date: r.date,
         audience: r.audience,
         spins: r.spins,
       })
@@ -472,6 +475,7 @@ export async function hydrateMlSignals(
 
   return tracks.map((t) => {
     const m = byTrack.get(t.trackId)
+
     return {
       ...t,
       viralScore: m?.viralScore ?? t.viralScore,
