@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { BuddyCharacter } from '@/components/buddy/BuddyCharacter'
 
 const QUICK_TASKS = [
   'Scout breakout Jersey club artists',
@@ -155,31 +156,8 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="relative flex min-h-[560px] items-end justify-center rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(9,12,18,0.55),rgba(5,7,10,0.85))] p-6">
-                  <div className="absolute inset-x-10 top-10 h-28 rounded-[24px] border border-cyan-400/10 bg-[linear-gradient(180deg,rgba(10,20,35,0.65),rgba(6,10,18,0.2))] shadow-[0_0_80px_rgba(34,211,238,0.08)]" />
-                  <div className="absolute left-10 top-28 h-40 w-32 rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]" />
-                  <div className="absolute right-12 top-24 h-48 w-40 rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))]" />
-                  <div className="absolute bottom-12 left-8 right-8 h-24 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]" />
-                  <div className="absolute bottom-24 left-[14%] h-24 w-24 rounded-full bg-emerald-500/10 blur-3xl" />
-                  <div className="absolute right-[18%] top-[20%] h-24 w-24 rounded-full bg-sky-500/10 blur-3xl" />
-
-                  <div className="relative z-10 flex flex-col items-center">
-                    <div className="relative flex h-[330px] w-[250px] items-center justify-center">
-                      <div className="absolute inset-x-8 bottom-1 h-10 rounded-full bg-emerald-400/20 blur-2xl" />
-                      <div className="absolute left-1/2 top-0 h-20 w-20 -translate-x-1/2 rounded-full border border-emerald-300/30 bg-[radial-gradient(circle_at_50%_40%,rgba(167,243,208,0.95),rgba(16,185,129,0.35)_52%,rgba(255,255,255,0.06)_100%)] shadow-[0_0_40px_rgba(52,211,153,0.28)]" />
-                      <div className="absolute left-1/2 top-[74px] h-[158px] w-[158px] -translate-x-1/2 rounded-[42px] border border-white/12 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))] shadow-[0_30px_80px_rgba(0,0,0,0.35)]" />
-                      <div className="absolute left-1/2 top-[110px] flex -translate-x-1/2 items-center gap-6">
-                        <span className="h-3 w-3 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.9)]" />
-                        <span className="h-3 w-3 rounded-full bg-emerald-300 shadow-[0_0_14px_rgba(110,231,183,0.9)]" />
-                      </div>
-                      <div className="absolute left-1/2 top-[145px] h-10 w-16 -translate-x-1/2 rounded-full border border-emerald-300/20 bg-emerald-400/10" />
-                      <div className="absolute left-1/2 top-[248px] h-24 w-[180px] -translate-x-1/2 rounded-[32px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.03))]" />
-                    </div>
-
-                    <div className="mt-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-zinc-300">
-                      Buddy is idle — awaiting your next assignment.
-                    </div>
-                  </div>
+                <div className="relative flex min-h-[560px] items-center justify-center rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(9,12,18,0.55),rgba(5,7,10,0.85))] p-6">
+                  <BuddyCharacter />
                 </div>
               </div>
             </div>

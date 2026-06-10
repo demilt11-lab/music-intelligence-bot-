@@ -76,7 +76,9 @@ jobs:
       INTERNAL_API_BASE_URL: http://localhost:3000
       NEXT_PUBLIC_BASE_URL: http://localhost:3000
       NEXT_TELEMETRY_DISABLED: "1"
-      NODE_ENV: production
+      # NOTE: do NOT set NODE_ENV=production at the job level — it makes `npm ci`
+      # skip devDependencies (tailwindcss, typescript, postcss…), which breaks
+      # `next build`. `next build`/`next start` set production mode themselves.
     steps:
       - uses: actions/checkout@v4
 
