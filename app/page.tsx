@@ -156,14 +156,7 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="relative flex min-h-[560px] items-end justify-center rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(9,12,18,0.55),rgba(5,7,10,0.85))] p-6">
-                  <div className="absolute inset-x-10 top-10 h-28 rounded-[24px] border border-cyan-400/10 bg-[linear-gradient(180deg,rgba(10,20,35,0.65),rgba(6,10,18,0.2))] shadow-[0_0_80px_rgba(34,211,238,0.08)]" />
-                  <div className="absolute left-10 top-28 h-40 w-32 rounded-[22px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]" />
-                  <div className="absolute right-12 top-24 h-48 w-40 rounded-[24px] border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))]" />
-                  <div className="absolute bottom-12 left-8 right-8 h-24 rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))]" />
-                  <div className="absolute bottom-24 left-[14%] h-24 w-24 rounded-full bg-emerald-500/10 blur-3xl" />
-                  <div className="absolute right-[18%] top-[20%] h-24 w-24 rounded-full bg-sky-500/10 blur-3xl" />
-
+                <div className="relative flex min-h-[560px] items-center justify-center rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(9,12,18,0.55),rgba(5,7,10,0.85))] p-6">
                   <BuddyCharacter />
                 </div>
               </div>
