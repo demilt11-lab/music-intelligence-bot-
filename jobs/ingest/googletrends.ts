@@ -131,7 +131,7 @@ async function ingestTrack(track: TrackRow, snapshotDate: Date): Promise<boolean
       `[googletrends] RISING TRACK — trackId=${track.id} ` +
         `"${track.title}" by ${track.artistName} | ` +
         `avg=${result.averageInterest} peak=${result.peakInterest} ` +
-        `related=[${result.relatedQueries.slice(0, 3).join(", ")}]`
+        `related=[${(result.relatedQueries ?? []).slice(0, 3).join(", ")}]`
     );
   }
 

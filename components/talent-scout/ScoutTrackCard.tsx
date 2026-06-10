@@ -11,6 +11,7 @@ export type ScoutTrack = {
   name: string
   artists: string[]
   code2: string | null
+  source?: 'ugc_live' | 'ml_scores' | 'charts' | 'spotify_popular' | 'sample'
   totalScore: number
   tiktokViews: string | number
   tiktokVelocity: number
@@ -21,6 +22,8 @@ export type ScoutTrack = {
   instagramPlays: string | null
   actions: { type: string; description: string; expectedImpact: string }[]
 }
+
+const SIGNAL_BACKED = new Set(['ugc_live', 'ml_scores'])
 
 interface ScoutTrackCardProps {
   track: ScoutTrack
@@ -62,7 +65,13 @@ function getActionType(type: string): 'insight' | 'action' | 'warning' | 'info' 
   return 'info'
 }
 
-function getSignalSummary(track: ScoutTrack) {
+function getSignalSummary(track: ScoutTrack, isSignal: boolean) {
+  if (!isSignal) {
+    if (track.source === 'sample') {
+      return 'Sample row for layout preview — no real scouting data behind this card.'
+    }
+    return 'Fallback data without live breakout signals — shown for catalog context only.'
+  }
   if (track.totalScore >= 0.7) {
     return 'High-conviction signal with real breakout urgency.'
   }
@@ -80,13 +89,21 @@ export function ScoutTrackCard({
   index,
   className = '',
 }: ScoutTrackCardProps) {
-  const heat = getHeat(track.totalScore)
+  const isSignal = SIGNAL_BACKED.has(track.source ?? 'ugc_live')
+  const heat = isSignal ? getHeat(track.totalScore) : 'cool'
   const heatStyle = HEAT_STYLES[heat]
+  const badgeLabel = isSignal
+    ? heatStyle.label
+    : track.source === 'sample'
+      ? 'Sample'
+      : 'Catalog'
   const primaryAction = track.actions?.[0]
   const tiktokMax = 50_000_000
   const streamMax = 10_000_000
   const rank = index + 1
-  const scorePercent = Math.round(track.totalScore * 100)
+  const scorePercent = Math.round(
+    Math.max(0, Math.min(1, track.totalScore)) * 100
+  )
 
   return (
     <article
@@ -126,7 +143,7 @@ export function ScoutTrackCard({
               <span
                 className={`rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.18em] ${heatStyle.badge}`}
               >
-                {heatStyle.label}
+                {badgeLabel}
               </span>
             </div>
 
@@ -139,17 +156,19 @@ export function ScoutTrackCard({
             </p>
 
             <p className="mt-3 text-xs leading-5 text-zinc-300">
-              {getSignalSummary(track)}
+              {getSignalSummary(track, isSignal)}
             </p>
           </div>
 
-          <div className="shrink-0">
-            <ScoreRing
-              score={track.totalScore}
-              size={52}
-              label={`Score: ${scorePercent}`}
-            />
-          </div>
+          {isSignal ? (
+            <div className="shrink-0">
+              <ScoreRing
+                score={Math.max(0, Math.min(1, track.totalScore))}
+                size={52}
+                label={`Score: ${scorePercent}`}
+              />
+            </div>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -157,7 +176,9 @@ export function ScoutTrackCard({
             <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
               Conviction
             </p>
-            <p className="mt-1 text-sm font-semibold text-white">{scorePercent}/100</p>
+            <p className="mt-1 text-sm font-semibold text-white">
+              {isSignal ? `${scorePercent}/100` : 'n/a'}
+            </p>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-3">

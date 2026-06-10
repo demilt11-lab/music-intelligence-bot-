@@ -50,12 +50,17 @@ Copy `.env.example` → `.env.local` for local dev. In production set them in
 | Variable | Needed by |
 |----------|-----------|
 | `INTERNAL_API_BASE_URL` | **Server-rendered detail pages** (`/tracks/[id]`, `/curators/[id]`, `/playlists/[id]`, `/songwriters/[id]`) fetch the internal API server-side. Without an absolute base URL these pages render "not found". Set to your deployment URL (e.g. `https://app.example.com`). |
-| `NEXT_PUBLIC_API_KEY` + `NEXT_PUBLIC_API_BASE_URL` | The bundled dashboard pages call the v1 API. Use a **low-privilege, scoped** key — it ships in the browser bundle. |
+| `UI_TENANT_SLUG` | Tenant slug the first-party web UI operates under (default `workspace`, auto-created on first use). The UI no longer ships any API key to the browser — `/api/ui/*` routes resolve the tenant server-side. |
+| `SCOUT_SAMPLE_FALLBACK` | Set to `1` to let the Talent Scout return clearly-labeled sample rows when no UGC/ML/chart data exists (default off: an honest empty state is shown instead). |
 | `ML_ARTIST_TRAJECTORY_URL` | Artist trajectory prediction endpoint (points at the FastAPI ML service). |
 | `UPSTASH_REDIS_URL` + `UPSTASH_REDIS_TOKEN` | Rate limiting. If absent, rate limiting is disabled (all requests allowed). |
 | `ALLOWED_ORIGIN` | CORS allow-origin for `/api/*`. Defaults to `*`; set to your domain. |
-| `INTERNAL_CRON_SECRET` | Auth between the trajectory cron and the internal ETL endpoint. |
 | Data-provider keys | The ingest/ETL jobs (see `.env.example` for the full list). |
+
+> Removed in this hardening pass: `NEXT_PUBLIC_API_KEY` / `NEXT_PUBLIC_API_BASE_URL`
+> (the dashboard previously shipped a tenant API key in the browser bundle) and
+> `INTERNAL_CRON_SECRET` (the trajectory cron now runs the ETL inline instead of
+> calling a separate internal endpoint).
 
 See `.env.example` for the complete, annotated list (kept in sync with the code).
 

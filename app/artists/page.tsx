@@ -14,6 +14,8 @@ type BreakingArtist = {
   status: string
   statusScore: number
   breakProbability: number | null
+  modelBreakProbability?: number | null
+  breakProbabilitySource?: 'model' | 'heuristic'
   streams28dDelta: number
   playlistsDelta28d: number | null
   followersDelta28d: number | null
@@ -91,23 +93,50 @@ export default function ArtistsDashboardPage() {
   const [data, setData] = useState<BreakingArtist[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
-    setLoading(true)
-    const params = new URLSearchParams()
-    if (status) params.set('status', status)
-    if (genre) params.set('genre', genre)
-    if (code2) params.set('code2', code2)
-    params.set('limit', '100')
+    // Debounce the text filters and abort superseded requests so a slow
+    // older response can never overwrite a newer one.
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      setLoading(true)
+      setError(null)
 
-    fetch(`/api/artists/breaking?${params}`)
-      .then((r) => (r.ok ? r.json() : { obj: [], total: 0 }))
-      .then((json: BreakingResponse) => {
-        setData(json.obj)
-        setTotal(json.total)
-      })
-      .finally(() => setLoading(false))
-  }, [status, genre, code2])
+      const params = new URLSearchParams()
+      if (status) params.set('status', status)
+      if (genre) params.set('genre', genre)
+      if (code2) params.set('code2', code2)
+      params.set('limit', '100')
+
+      fetch(`/api/artists/breaking?${params}`, { signal: controller.signal })
+        .then(async (r) => {
+          if (!r.ok) {
+            const body = await r.json().catch(() => null)
+            throw new Error(body?.error ?? `Request failed (${r.status})`)
+          }
+          return r.json() as Promise<BreakingResponse>
+        })
+        .then((json) => {
+          setData(json.obj)
+          setTotal(json.total)
+          setLoading(false)
+        })
+        .catch((e: unknown) => {
+          if (e instanceof DOMException && e.name === 'AbortError') return
+          setError(e instanceof Error ? e.message : 'Failed to load artists')
+          setData([])
+          setTotal(0)
+          setLoading(false)
+        })
+    }, genre || code2 ? 300 : 0)
+
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [status, genre, code2, refreshKey])
 
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.STABLE
 
@@ -241,6 +270,24 @@ export default function ArtistsDashboardPage() {
                     />
                   ))}
                 </div>
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-rose-400/20 bg-rose-500/10 text-2xl text-rose-300">
+                    !
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-zinc-200">
+                      Artist data is unavailable right now
+                    </p>
+                    <p className="max-w-md text-sm text-zinc-500">{error}</p>
+                  </div>
+                  <button
+                    onClick={() => setRefreshKey((k) => k + 1)}
+                    className="rounded-full border border-rose-400/20 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-300 transition hover:bg-rose-500/20"
+                  >
+                    Retry
+                  </button>
+                </div>
               ) : data.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
                   <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-2xl text-zinc-500">
@@ -333,7 +380,16 @@ export default function ArtistsDashboardPage() {
                               </td>
 
                               <td className="px-4 py-3 text-right mono-num text-zinc-200">
-                                {fmtProb(row.breakProbability)}
+                                {row.breakProbabilitySource === 'model' &&
+                                row.modelBreakProbability != null ? (
+                                  fmtProb(row.modelBreakProbability)
+                                ) : row.breakProbability != null ? (
+                                  <span title="Heuristic estimate from momentum rules — no model output available yet">
+                                    ~{fmtProb(row.breakProbability)}
+                                  </span>
+                                ) : (
+                                  '—'
+                                )}
                               </td>
 
                               <td
@@ -365,6 +421,10 @@ export default function ArtistsDashboardPage() {
                       </tbody>
                     </table>
                   </div>
+                  <p className="border-t border-white/10 px-4 py-3 text-xs leading-5 text-zinc-500">
+                    Break % marked with ~ is a heuristic estimate derived from
+                    momentum rules; unmarked values come from the trained model.
+                  </p>
                 </div>
               )}
             </div>

@@ -1239,10 +1239,11 @@ model ArtistTrajectorySnapshot {
   maxTrackProbViral   Float?
   createdAt        DateTime @default(now())
 
-  @@index([artistId, date])
+  @@unique([artistId, date])
   @@index([status])
   @@index([primaryGenre])
   @@index([primaryCode2])
+  @@index([date])
 }
 
 model ArtistSpotifyReleaseStats {

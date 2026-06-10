@@ -1,11 +1,34 @@
 // lib/talentScout/sources.ts
 import { db } from '@/lib/db'
 
+/**
+ * Provenance of a scout result batch. The UI and API surface this so
+ * fallback data is never presented as a live breakout signal:
+ *  - ugc_live:        TikTok UGC momentum (the real early-breakout signal)
+ *  - ml_scores:       ETL/ML viral scores (signal-backed)
+ *  - charts:          chart appearances (established popularity, not breakout)
+ *  - spotify_popular: live Spotify popularity (catalog context only)
+ *  - sample:          explicitly-enabled demo placeholder (never a signal)
+ */
+export type ScoutDataSource =
+  | 'ugc_live'
+  | 'ml_scores'
+  | 'charts'
+  | 'spotify_popular'
+  | 'sample'
+
+/** Sources that represent real forward-looking breakout signals. */
+export const SIGNAL_SOURCES: ReadonlySet<ScoutDataSource> = new Set([
+  'ugc_live',
+  'ml_scores',
+])
+
 export type TalentScoutTrack = {
   trackId: number
   name: string
   artists: string[]
   code2: string | null
+  source: ScoutDataSource
   tiktokScore: number
   tiktokViews: string
   tiktokLikes: string
@@ -71,6 +94,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
           name: info?.name ?? 'Unknown',
           artists: info?.artists ?? [],
           code2: code2 === 'GLOBAL' ? null : code2,
+          source: 'ugc_live' as const,
           tiktokScore: computeTiktokScore({
             rank: i + 1,
             views: String(ugc.views7d),
@@ -129,6 +153,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
           name: info?.name ?? 'Unknown',
           artists: info?.artists ?? [],
           code2: latestScore.code2 === 'GLOBAL' ? null : latestScore.code2,
+          source: 'ml_scores' as const,
           tiktokScore: s.viralScore * Math.max(0, 1 - i / scoreRows.length),
           tiktokViews: '0',
           tiktokLikes: '0',
@@ -177,6 +202,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
         name: info?.name ?? 'Unknown',
         artists: info?.artists ?? [],
         code2: r.countryCode,
+        source: 'charts' as const,
         tiktokScore: Math.max(0, 1 - r.rank / 100),
         tiktokViews: '0',
         tiktokLikes: '0',
@@ -194,133 +220,49 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     })
   }
 
-  // ── Tier 4: live Spotify search (no DB required) ──
-  console.log('[scout-sources] Tier3 empty, falling back to live Spotify search...')
-
-  const { spotifyGet } = await import('@/lib/spotify/client')
-
-  type RawSearch = {
-    tracks: {
-      items: Array<{
-        id: string
-        name: string
-        popularity: number
-        artists: Array<{ name: string }>
-      }>
-    }
+  // ── Tier 4 (optional, off by default): sample placeholder rows ──
+  //
+  // The previous behavior here live-searched Spotify for global superstars
+  // and fabricated momentum scores for them, which presented established
+  // catalog as "breakout discoveries". With no real signal available the
+  // honest answer is an empty list (the UI explains why). Set
+  // SCOUT_SAMPLE_FALLBACK=1 to instead return clearly-labeled sample rows
+  // (source='sample', negative track IDs) for layout/demo walkthroughs.
+  if (process.env.SCOUT_SAMPLE_FALLBACK === '1') {
+    console.log('[scout-sources] No signal data — returning labeled sample rows')
+    return SAMPLE_TRACKS.slice(0, limit).map((t, i) => ({
+      trackId: -(i + 1),
+      name: t.name,
+      artists: t.artists,
+      code2: code2 === 'GLOBAL' ? null : code2,
+      source: 'sample' as const,
+      tiktokScore: 0,
+      tiktokViews: '0',
+      tiktokLikes: '0',
+      tiktokVelocity: 0,
+      spotifyStreamsLatest: null,
+      spotifyPopularity: null,
+      luminateStreamsLatest: null,
+      luminateAudienceLatest: null,
+      luminateSpinsLatest: null,
+      youtubeViews: null,
+      instagramPlays: null,
+      viralScore: null,
+      rightsComplexityScore: null,
+    }))
   }
 
-  const queries = [
-    'Sabrina Carpenter',
-    'Kendrick Lamar',
-    'Bad Bunny',
-    'Taylor Swift',
-    'SZA',
-    'Drake',
-    'The Weeknd',
-    'Doja Cat',
-    'Tyler the Creator',
-    'Billie Eilish',
-  ]
-
-  const seenIds = new Set<string>()
-  const seenNames = new Set<string>()
-  const spotifyTracks: Array<{
-    id: string
-    name: string
-    popularity: number
-    artists: Array<{ name: string }>
-  }> = []
-
-  for (const q of queries) {
-    if (spotifyTracks.length >= limit) break
-
-    try {
-      const res = await spotifyGet<RawSearch>('/search', {
-        q,
-        type: 'track',
-        limit: 5,
-      })
-
-      for (const t of res.tracks.items) {
-        const nameKey = t.name.toLowerCase().trim()
-
-        if (t.id && !seenIds.has(t.id) && !seenNames.has(nameKey)) {
-          seenIds.add(t.id)
-          seenNames.add(nameKey)
-          spotifyTracks.push(t)
-        }
-      }
-    } catch (err) {
-      console.warn(
-        `[scout-sources] Tier4 search failed for "${q}":`,
-        (err as Error).message
-      )
-    }
-  }
-
-  spotifyTracks.sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
-
-  console.log(
-    `[scout-sources] Tier4 direct search returned ${spotifyTracks.length} tracks`
-  )
-
-  const seedTracks =
-    spotifyTracks.length > 0
-      ? spotifyTracks
-      : [
-          {
-            id: 'seed1',
-            name: 'Blinding Lights',
-            popularity: 92,
-            artists: [{ name: 'The Weeknd' }],
-          },
-          {
-            id: 'seed2',
-            name: 'Shape of You',
-            popularity: 89,
-            artists: [{ name: 'Ed Sheeran' }],
-          },
-          {
-            id: 'seed3',
-            name: 'Dance Monkey',
-            popularity: 87,
-            artists: [{ name: 'Tones and I' }],
-          },
-          {
-            id: 'seed4',
-            name: 'Levitating',
-            popularity: 85,
-            artists: [{ name: 'Dua Lipa' }],
-          },
-          {
-            id: 'seed5',
-            name: 'Stay',
-            popularity: 83,
-            artists: [{ name: 'The Kid LAROI, Justin Bieber' }],
-          },
-        ]
-
-  return seedTracks.slice(0, limit).map((t, i) => ({
-    trackId: -(i + 1),
-    name: t.name,
-    artists: t.artists.map((a) => a.name),
-    code2: code2 === 'GLOBAL' ? null : code2,
-    tiktokScore: Math.max(0, 1 - i / Math.max(spotifyTracks.length, 1)),
-    tiktokViews: '0',
-    tiktokLikes: '0',
-    tiktokVelocity: 0,
-    spotifyStreamsLatest: null,
-    spotifyPopularity: t.popularity ?? null,
-    luminateStreamsLatest: null,
-    luminateAudienceLatest: null,
-    luminateSpinsLatest: null,
-    youtubeViews: null,
-    instagramPlays: null,
-    viralScore: null,
-    rightsComplexityScore: null,
-  }))
+  console.log('[scout-sources] No signal data available — returning empty set')
+  return []
 }
+
+const SAMPLE_TRACKS: Array<{ name: string; artists: string[] }> = [
+  { name: 'Sample Track A', artists: ['Demo Artist One'] },
+  { name: 'Sample Track B', artists: ['Demo Artist Two'] },
+  { name: 'Sample Track C', artists: ['Demo Artist Three'] },
+  { name: 'Sample Track D', artists: ['Demo Artist Four'] },
+  { name: 'Sample Track E', artists: ['Demo Artist Five'] },
+]
 
 async function loadTrackMeta(trackIds: number[]) {
   if (!trackIds.length) return new Map<number, { name: string; artists: string[] }>()

@@ -5,8 +5,10 @@ import os
 import joblib
 import pandas as pd
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
+
+from ml.utils.splits import leakage_safe_split
 
 MODEL_PATH = "output/artist_spotify_trend_model.joblib"
 SCALER_PATH = "output/artist_spotify_trend_scaler.joblib"
@@ -35,9 +37,13 @@ def train_model(csv_path: str):
   X = df[FEATURE_COLS].fillna(0.0)
   y = df["popular_within_6m"].astype(int)
 
-  X_train, X_test, y_train, y_test = train_test_split(
-      X, y, test_size=0.2, random_state=42, stratify=y
+  # Temporal, artist-disjoint split — random splits let future snapshots of
+  # an artist leak into training and overstate forecasting performance.
+  train_idx, test_idx, strategy = leakage_safe_split(
+      df, date_col="snapshot_date", group_col="artist_id", test_size=0.2
   )
+  X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+  y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
   scaler = StandardScaler()
   X_train_scaled = scaler.fit_transform(X_train)
@@ -51,9 +57,17 @@ def train_model(csv_path: str):
   joblib.dump(scaler, SCALER_PATH)
 
   acc = clf.score(X_test_scaled, y_test)
-  print(
-      f"Trained {MODEL_NAME} {MODEL_VERSION}, test accuracy={acc:.3f}"
-  )
+  if y_test.nunique() > 1:
+    auc = roc_auc_score(y_test, clf.predict_proba(X_test_scaled)[:, 1])
+    print(
+        f"Trained {MODEL_NAME} {MODEL_VERSION} (split={strategy}): "
+        f"test accuracy={acc:.3f}, ROC-AUC={auc:.3f}"
+    )
+  else:
+    print(
+        f"Trained {MODEL_NAME} {MODEL_VERSION} (split={strategy}): "
+        f"test accuracy={acc:.3f} (single-class test set — AUC unavailable)"
+    )
 
 
 def predict(csv_path: str, out_path: str):

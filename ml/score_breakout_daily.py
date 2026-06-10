@@ -63,6 +63,7 @@ def score_breakout_prob_for_date(conn, target_date: date) -> None:
     model = payload["model"]
     feature_cols = payload["feature_cols"]
     model_version = payload.get("model_version", "unknown")
+    feature_medians = payload.get("feature_medians", {})
 
     logger.info(f"Model version: {model_version}")
 
@@ -85,13 +86,30 @@ def score_breakout_prob_for_date(conn, target_date: date) -> None:
     df = pd.DataFrame(rows)
     logger.info(f"Scoring {len(df)} artists")
 
+    missing_cols = [c for c in feature_cols if c not in df.columns]
+    if missing_cols:
+        logger.error(
+            f"artist_features_daily is missing model features {missing_cols} — "
+            "schema drift between training and inference. Aborting scoring."
+        )
+        return
+
     X = df[feature_cols].copy()
     for col in feature_cols:
         X[col] = pd.to_numeric(X[col], errors="coerce")
 
-    # Impute missing with 0 (conservative: treat missing data as no signal)
-    # ASSUMPTION: missing features are treated as median/neutral (0 for growth %)
-    X = X.fillna(0.0)
+    # Impute with the training-time medians persisted in the model payload so
+    # inference matches training. Fall back to 0 only for legacy payloads.
+    imputed_counts = X.isna().sum()
+    for col in feature_cols:
+        X[col] = X[col].fillna(feature_medians.get(col, 0.0))
+    total_imputed = int(imputed_counts.sum())
+    if total_imputed:
+        worst = imputed_counts.sort_values(ascending=False).head(3)
+        logger.info(
+            f"Imputed {total_imputed} missing feature values "
+            f"(top: {', '.join(f'{c}={int(n)}' for c, n in worst.items() if n)})"
+        )
 
     probs = model.predict_proba(X)[:, 1]
 

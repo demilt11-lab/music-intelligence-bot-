@@ -1,45 +1,106 @@
-'use client'
-
-import React from 'react'
 import Link from 'next/link'
+import { db } from '@/lib/db'
 import { PageShell } from '@/components/ui/PageShell'
-import { ScoreRing } from '@/components/ui/ScoreRing'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
 
-const KPI_CARDS = [
-  {
-    label: 'Active watchlist',
-    value: '128',
-    detail: 'Artists, writers, and producers under active review',
-  },
-  {
-    label: 'Breakout signals',
-    value: '17',
-    detail: 'High-priority momentum shifts surfaced today',
-  },
-  {
-    label: 'Open scouting tasks',
-    value: '9',
-    detail: 'Buddy assignments waiting for deeper analysis',
-  },
-  {
-    label: 'Markets monitored',
-    value: '8',
-    detail: 'Priority territories across global A&R coverage',
-  },
-]
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-const MARKET_ROWS = [
-  { market: 'US', momentum: 'High', focus: 'Pop crossover and producer movement' },
-  { market: 'UK', momentum: 'Rising', focus: 'Alternative, dance, and songwriter traction' },
-  { market: 'Brazil', momentum: 'Rising', focus: 'Regional breakout acceleration' },
-  { market: 'Global', momentum: 'Mixed', focus: 'Cross-platform trend validation' },
-]
+type WorkspaceStats = {
+  watchlistCount: number
+  artistsTracked: number
+  tracksTracked: number
+  scoutSignals: number
+  scoutSignalDate: Date | null
+  marketsMonitored: number
+  statusCounts: Record<string, number>
+  latestSnapshotDate: Date | null
+  latestUgcDate: Date | null
+  latestChartDate: Date | null
+}
 
-const TEAM_FEED = [
-  'Three artists moved from early signal to priority review in the last 24 hours.',
-  'Playlist-to-UGC conversion is strongest on current pop and alt records.',
-  'Buddy is surfacing writer and producer signals earlier than traditional dashboard flows.',
+async function loadWorkspaceStats(): Promise<WorkspaceStats | null> {
+  try {
+    const [
+      watchlistCount,
+      artistsTracked,
+      tracksTracked,
+      latestScore,
+      latestUgc,
+      latestChart,
+      latestSnapshot,
+    ] = await Promise.all([
+      db.watchlistItem.count(),
+      db.artist.count(),
+      db.track.count(),
+      db.talentScoutScore.findFirst({ orderBy: { date: 'desc' }, select: { date: true } }),
+      db.ugcTrackMetrics.findFirst({ orderBy: { date: 'desc' }, select: { date: true } }),
+      db.chartSnapshot.findFirst({
+        orderBy: { snapshotDate: 'desc' },
+        select: { snapshotDate: true },
+      }),
+      db.artistTrajectorySnapshot.findFirst({
+        orderBy: { date: 'desc' },
+        select: { date: true },
+      }),
+    ])
+
+    const [scoutSignals, markets, statusRows] = await Promise.all([
+      latestScore
+        ? db.talentScoutScore.count({ where: { date: latestScore.date } })
+        : Promise.resolve(0),
+      db.ugcTrackMetrics.findMany({
+        distinct: ['code2'],
+        select: { code2: true },
+      }),
+      latestSnapshot
+        ? db.artistTrajectorySnapshot.groupBy({
+            by: ['status'],
+            where: { date: latestSnapshot.date },
+            _count: { _all: true },
+          })
+        : Promise.resolve([] as { status: string; _count: { _all: number } }[]),
+    ])
+
+    const statusCounts: Record<string, number> = {}
+    for (const row of statusRows) statusCounts[row.status] = row._count._all
+
+    return {
+      watchlistCount,
+      artistsTracked,
+      tracksTracked,
+      scoutSignals,
+      scoutSignalDate: latestScore?.date ?? null,
+      marketsMonitored: markets.length,
+      statusCounts,
+      latestSnapshotDate: latestSnapshot?.date ?? null,
+      latestUgcDate: latestUgc?.date ?? null,
+      latestChartDate: latestChart?.snapshotDate ?? null,
+    }
+  } catch (err) {
+    console.error('[analytics] failed to load workspace stats:', err)
+    return null
+  }
+}
+
+function fmtDate(d: Date | null): string {
+  if (!d) return 'no data yet'
+  return d.toISOString().slice(0, 10)
+}
+
+function freshnessTone(d: Date | null): string {
+  if (!d) return 'border-white/10 bg-white/5 text-zinc-400'
+  const ageDays = (Date.now() - d.getTime()) / 86_400_000
+  if (ageDays <= 2) return 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300'
+  if (ageDays <= 7) return 'border-amber-400/20 bg-amber-500/10 text-amber-300'
+  return 'border-rose-400/20 bg-rose-500/10 text-rose-300'
+}
+
+const STATUS_LABELS: [string, string][] = [
+  ['ABOUT_TO_BREAK', 'About to break'],
+  ['GROWING', 'Growing'],
+  ['STABLE', 'Stable'],
+  ['DECLINING', 'Declining'],
 ]
 
 function AnalyticsHeroActions() {
@@ -61,145 +122,147 @@ function AnalyticsHeroActions() {
   )
 }
 
-export default function AnalyticsPage() {
+export default async function AnalyticsPage() {
+  const stats = await loadWorkspaceStats()
+
+  const kpis = stats
+    ? [
+        {
+          label: 'Watchlist items',
+          value: stats.watchlistCount.toLocaleString(),
+          detail: 'Artists and tracks saved for active follow-up',
+        },
+        {
+          label: 'Scout signals (latest day)',
+          value: stats.scoutSignals.toLocaleString(),
+          detail: stats.scoutSignalDate
+            ? `Viral-score rows computed for ${fmtDate(stats.scoutSignalDate)}`
+            : 'No scout scores computed yet',
+        },
+        {
+          label: 'Artists in catalog',
+          value: stats.artistsTracked.toLocaleString(),
+          detail: `${stats.tracksTracked.toLocaleString()} tracks ingested alongside`,
+        },
+        {
+          label: 'Markets with UGC data',
+          value: stats.marketsMonitored.toLocaleString(),
+          detail: 'Distinct territories present in TikTok UGC metrics',
+        },
+      ]
+    : []
+
   return (
     <PageShell
       title="Analytics"
-      description="A strategic overview of scouting volume, market movement, breakout pressure, and the signals Buddy is prioritizing across the music intelligence workspace."
+      description="A live operational read on the workspace: catalog coverage, signal freshness, and where artist momentum is concentrated right now. Every number on this page is queried from the database."
       actions={<AnalyticsHeroActions />}
     >
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-5">
           <section className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,11,0.96))] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
             <div className="flex flex-col gap-5">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                <div className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                    Workspace overview
-                  </p>
-                  <h2 className="text-xl font-semibold tracking-[-0.03em] text-white sm:text-2xl">
-                    Buddy’s current intelligence footprint
-                  </h2>
-                  <p className="max-w-2xl text-sm leading-6 text-zinc-300">
-                    This page gives you a top-line read on scouting pressure, active
-                    opportunities, and where deeper review should happen next.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
-                      Status
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-emerald-300">
-                      Live overview
-                    </p>
-                  </div>
-                  <ScoreRing score={0.72} size={58} label="System confidence 72" />
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-                {KPI_CARDS.map((card) => (
-                  <div
-                    key={card.label}
-                    className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4"
-                  >
-                    <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
-                      {card.label}
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">
-                      {card.value}
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-zinc-400">{card.detail}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
-          <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,11,0.96))] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                Market pressure
-              </p>
-              <div className="mt-4 space-y-3">
-                {MARKET_ROWS.map((row) => (
-                  <div
-                    key={row.market}
-                    className="flex flex-col gap-3 rounded-[20px] border border-white/10 bg-white/[0.04] p-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-white">{row.market}</p>
-                      <p className="mt-1 text-sm leading-6 text-zinc-400">{row.focus}</p>
-                    </div>
-
-                    <span
-                      className={`inline-flex w-fit rounded-full border px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${
-                        row.momentum === 'High'
-                          ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300'
-                          : row.momentum === 'Rising'
-                            ? 'border-amber-400/20 bg-amber-500/10 text-amber-300'
-                            : 'border-white/10 bg-white/5 text-zinc-300'
-                      }`}
-                    >
-                      {row.momentum}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,11,0.96))] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                Buddy guidance
-              </p>
-              <div className="mt-4 space-y-3">
-                <CompanionMessage
-                  type="insight"
-                  message="Start in Talent Scout when you need urgent breakout triage. Use this overview to decide where the team’s attention should go next."
-                />
-                <CompanionMessage
-                  type="action"
-                  message="Use Search and route-specific pages to validate specific artists, tracks, playlists, and collaborators after top-line signals are identified."
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,11,0.96))] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
+              <div className="space-y-2">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                  Team feed
+                  Workspace overview
                 </p>
-                <h2 className="mt-2 text-lg font-semibold tracking-[-0.03em] text-white">
-                  What Buddy is seeing right now
+                <h2 className="text-xl font-semibold tracking-[-0.03em] text-white sm:text-2xl">
+                  Current intelligence footprint
                 </h2>
               </div>
 
-              <Link
-                href="/watchlist"
-                className="inline-flex w-fit items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-zinc-200 transition hover:bg-white/10"
-              >
-                Open watchlist
-              </Link>
-            </div>
-
-            <div className="mt-4 grid gap-3">
-              {TEAM_FEED.map((item, index) => (
-                <div
-                  key={item}
-                  className="flex items-start gap-3 rounded-[20px] border border-white/10 bg-white/[0.04] p-4"
-                >
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-400/20 bg-emerald-500/10 text-xs font-semibold text-emerald-300">
-                    {index + 1}
-                  </div>
-                  <p className="text-sm leading-6 text-zinc-300">{item}</p>
+              {stats ? (
+                <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+                  {kpis.map((card) => (
+                    <div
+                      key={card.label}
+                      className="rounded-[22px] border border-white/10 bg-white/[0.04] p-4"
+                    >
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
+                        {card.label}
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white">
+                        {card.value}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-zinc-400">{card.detail}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <div className="rounded-[22px] border border-rose-400/20 bg-rose-500/10 p-4">
+                  <CompanionMessage
+                    type="warning"
+                    message="Workspace metrics are unavailable — the database could not be reached. Check the deployment's DATABASE_URL and try again."
+                  />
+                </div>
+              )}
             </div>
           </section>
+
+          {stats ? (
+            <section className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,11,0.96))] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+                  Artist momentum cohorts
+                </p>
+                <p className="mt-2 text-xs leading-5 text-zinc-500">
+                  From the latest trajectory snapshot
+                  {stats.latestSnapshotDate ? ` (${fmtDate(stats.latestSnapshotDate)})` : ''}.
+                </p>
+                <div className="mt-4 space-y-3">
+                  {stats.latestSnapshotDate ? (
+                    STATUS_LABELS.map(([key, label]) => (
+                      <div
+                        key={key}
+                        className="flex items-center justify-between rounded-[20px] border border-white/10 bg-white/[0.04] p-4"
+                      >
+                        <p className="text-sm font-semibold text-white">{label}</p>
+                        <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-semibold tabular-nums text-zinc-200">
+                          {(stats.statusCounts[key] ?? 0).toLocaleString()}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-[20px] border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-zinc-400">
+                      No trajectory snapshots have been computed yet. Run the artist
+                      ETL (or the etl-artist-trajectory cron) to populate momentum
+                      cohorts.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,11,0.96))] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+                  Data freshness
+                </p>
+                <p className="mt-2 text-xs leading-5 text-zinc-500">
+                  Latest ingested day per signal source. Stale sources degrade
+                  ranking quality and are flagged here instead of hidden.
+                </p>
+                <div className="mt-4 space-y-3">
+                  {[
+                    { label: 'TikTok UGC metrics', date: stats.latestUgcDate },
+                    { label: 'Scout viral scores', date: stats.scoutSignalDate },
+                    { label: 'Chart snapshots', date: stats.latestChartDate },
+                    { label: 'Artist trajectories', date: stats.latestSnapshotDate },
+                  ].map((row) => (
+                    <div
+                      key={row.label}
+                      className="flex items-center justify-between rounded-[20px] border border-white/10 bg-white/[0.04] p-4"
+                    >
+                      <p className="text-sm text-zinc-300">{row.label}</p>
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-medium ${freshnessTone(row.date)}`}
+                      >
+                        {fmtDate(row.date)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          ) : null}
         </div>
 
         <aside className="space-y-5">
@@ -228,16 +291,16 @@ export default function AnalyticsPage() {
 
           <section className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,11,0.96))] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-              Notes
+              Reading this page
             </p>
             <div className="mt-4 space-y-3 text-sm leading-6 text-zinc-300">
               <p>
-                This first version is intentionally a strategic overview page rather than a fully
-                wired BI dashboard.
+                Counts come straight from the workspace database; nothing here is
+                projected or estimated.
               </p>
               <p>
-                It gives the homepage a valid destination now, while leaving room for real charts,
-                filters, and live metric integrations later.
+                If a source shows “no data yet”, its ingestion job hasn’t run against
+                this environment — the corresponding product views will say so too.
               </p>
             </div>
           </section>

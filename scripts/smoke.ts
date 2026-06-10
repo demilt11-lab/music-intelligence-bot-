@@ -83,6 +83,59 @@ async function main() {
     const cron = await getJson('/api/cron/send-daily-digest');
     check('GET /api/cron/send-daily-digest unauthenticated → 401', cron.status === 401,
       `status=${cron.status}`);
+
+    // ── 7. Talent scout daily — must answer 200 with provenance metadata ─────
+    const scout = await getJson('/api/talent-scout/daily?code2=GLOBAL&limit=5');
+    check('GET /api/talent-scout/daily → 200', scout.status === 200, `status=${scout.status}`);
+    check('  scout meta exposes dataSource provenance',
+      scout.body?.meta && 'dataSource' in scout.body.meta,
+      `meta=${JSON.stringify(scout.body?.meta ?? null)}`);
+    check('  scout response is an array', Array.isArray(scout.body?.obj));
+
+    // ── 8. Breaking artists leaderboard — 200, deduped shape ─────────────────
+    const breaking = await getJson('/api/artists/breaking?limit=10');
+    check('GET /api/artists/breaking → 200', breaking.status === 200, `status=${breaking.status}`);
+    if (breaking.status === 200) {
+      const ids = (breaking.body?.obj ?? []).map((r: any) => r.artistId);
+      check('  leaderboard has no duplicate artists', new Set(ids).size === ids.length,
+        `ids=${ids.join(',')}`);
+    }
+
+    // ── 9. First-party watchlist CRUD (no API key — server-side tenant) ──────
+    const add = await getJson('/api/ui/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityType: 'track', entityId: track.id }),
+    });
+    check('POST /api/ui/watchlist → 201', add.status === 201, `status=${add.status}`);
+
+    const list = await getJson('/api/ui/watchlist');
+    const entry = (list.body?.obj ?? []).find((i: any) => i.entityId === track.id);
+    check('GET /api/ui/watchlist contains the added track', !!entry);
+    check('  watchlist entry is enriched with the entity name',
+      entry?.entityName === 'Smoke Test Track', `entityName=${entry?.entityName}`);
+
+    const badAdd = await getJson('/api/ui/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entityType: 'playlist', entityId: 1 }),
+    });
+    check('POST /api/ui/watchlist rejects invalid entityType → 400', badAdd.status === 400,
+      `status=${badAdd.status}`);
+
+    const exportRes = await fetch(`${BASE_URL}/api/ui/watchlist/export`);
+    check('GET /api/ui/watchlist/export → 200 CSV', exportRes.status === 200 &&
+      (exportRes.headers.get('content-type') ?? '').includes('text/csv'),
+      `status=${exportRes.status} type=${exportRes.headers.get('content-type')}`);
+
+    if (entry?.id) {
+      const del = await getJson(`/api/ui/watchlist/${entry.id}`, { method: 'DELETE' });
+      check('DELETE /api/ui/watchlist/:id → 200', del.status === 200, `status=${del.status}`);
+
+      const after = await getJson('/api/ui/watchlist');
+      check('  removed item no longer listed',
+        !(after.body?.obj ?? []).some((i: any) => i.id === entry.id));
+    }
   } finally {
     // ── Cleanup ──────────────────────────────────────────────────────────────
     await db.track.delete({ where: { id: track.id } }).catch(() => {});

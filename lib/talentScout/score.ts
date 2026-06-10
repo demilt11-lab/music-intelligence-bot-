@@ -1,4 +1,5 @@
 import type { TalentScoutTrack } from './sources'
+import { SIGNAL_SOURCES } from './sources'
 
 export type { TalentScoutTrack }
 
@@ -20,6 +21,12 @@ export type TalentScoutRankedTrack = TalentScoutTrack & {
 
 export type TalentScoutMode = 'ugc_early' | 'general'
 
+/** Clamp a raw score into [0, 1] so UI percentages stay meaningful. */
+export function clampScore(score: number): number {
+  if (Number.isNaN(score)) return 0
+  return Math.max(0, Math.min(1, score))
+}
+
 export function rankTalentTracks(
   tracks: TalentScoutTrack[],
   mode: TalentScoutMode = 'ugc_early'
@@ -27,13 +34,18 @@ export function rankTalentTracks(
   const scored = tracks
     .filter((t) => filterPreBreak(t, mode))
     .map((t) => {
-      const totalScore =
+      const raw =
         mode === 'ugc_early' ? computeUgcEarlyScore(t) : computeGeneralScore(t)
+      const totalScore = clampScore(raw)
+      const isSignalBacked = SIGNAL_SOURCES.has(t.source)
 
       return {
         ...t,
         totalScore,
-        actions: buildActions(t, totalScore),
+        // Action recommendations imply conviction — only attach them when
+        // the underlying data is a real breakout signal, not catalog/sample
+        // fallback rows.
+        actions: isSignalBacked ? buildActions(t, totalScore) : [],
       }
     })
 

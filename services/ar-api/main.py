@@ -362,34 +362,17 @@ async def playlists_to_pitch(
     # 4. Filter by editorial vs indie, follower count, genre match
     # 5. Rank by match score * playlist reach
 
-    async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            text("SELECT id, name FROM artists WHERE id = :aid"),
-            {"aid": artist_id},
-        )
-        artist_row = result.fetchone()
-        if not artist_row:
-            raise HTTPException(status_code=404, detail=f"Artist {artist_id} not found")
-
-        # Return placeholder recommendations
-        return PlaylistPitchResponse(
-            artist_id=artist_id,
-            recommendations=[
-                PlaylistPitch(
-                    playlist_id=0,
-                    playlist_name="Placeholder — implement audio-feature matching",
-                    platform="spotify",
-                    follower_count=None,
-                    match_reason="TODO: real implementation required",
-                    confidence=0.0,
-                )
-            ],
-            note=(
-                "Placeholder recommendations. Real implementation requires "
-                "audio feature matching via track_audio_features table. "
-                "See TODO comments in services/ar-api/main.py."
-            ),
-        )
+    # Unimplemented: returning fabricated recommendations (even with
+    # confidence=0.0) risks downstream consumers treating them as real.
+    # Fail explicitly until audio-feature matching ships.
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "playlists_to_pitch is not implemented yet. It requires "
+            "audio-feature matching against track_audio_features; see the "
+            "TODO design notes in services/ar-api/main.py."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -5,24 +5,22 @@ import { WatchlistGrid, type WatchlistEntry } from '@/components/watchlist/Watch
 import { PageShell } from '@/components/ui/PageShell'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
 
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? ''
-
 export default function WatchlistPage() {
   const [items, setItems] = useState<WatchlistEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const res = await fetch('/api/v1/watchlist', {
-        headers: { 'x-api-key': API_KEY },
-      })
+      const res = await fetch('/api/ui/watchlist')
 
       if (!res.ok) {
-        throw new Error(await res.text())
+        const body = await res.json().catch(() => null)
+        throw new Error(body?.error ?? `Watchlist request failed (${res.status})`)
       }
 
       const { obj } = await res.json()
@@ -39,39 +37,46 @@ export default function WatchlistPage() {
   }, [load])
 
   async function handleRemove(id: number) {
-    await fetch(`/api/v1/watchlist/${id}`, {
-      method: 'DELETE',
-      headers: { 'x-api-key': API_KEY },
-    })
-
+    setActionError(null)
+    const previous = items
     setItems((prev) => prev.filter((i) => i.id !== id))
+
+    try {
+      const res = await fetch(`/api/ui/watchlist/${id}`, { method: 'DELETE' })
+      if (!res.ok && res.status !== 404) {
+        throw new Error(`Remove failed (${res.status})`)
+      }
+    } catch (e: any) {
+      setItems(previous)
+      setActionError(e.message ?? 'Could not remove the item — please retry.')
+    }
   }
 
   async function handleExport() {
-    const res = await fetch('/api/v1/watchlist/export?format=csv', {
-      headers: { 'x-api-key': API_KEY },
-    })
+    setActionError(null)
+    try {
+      const res = await fetch('/api/ui/watchlist/export')
+      if (!res.ok) {
+        throw new Error(`Export failed (${res.status})`)
+      }
 
-    if (!res.ok) return
-
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'watchlist-export.csv'
-    a.click()
-    URL.revokeObjectURL(url)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'watchlist-export.csv'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) {
+      setActionError(e.message ?? 'Export failed — please retry.')
+    }
   }
 
   const summary = useMemo(() => {
     return {
       total: items.length,
-      artists: items.filter(
-        (item: any) => item.artistName || item.artist || item.type === 'artist'
-      ).length,
-      tracks: items.filter(
-        (item: any) => item.trackName || item.track || item.type === 'track'
-      ).length,
+      artists: items.filter((item) => item.entityType === 'artist').length,
+      tracks: items.filter((item) => item.entityType === 'track').length,
     }
   }, [items])
 
@@ -189,6 +194,12 @@ export default function WatchlistPage() {
               {error && !loading && (
                 <div className="rounded-[22px] border border-rose-500/20 bg-rose-500/10 p-4">
                   <CompanionMessage type="warning" message={error} />
+                </div>
+              )}
+
+              {actionError && !loading && (
+                <div className="mb-4 rounded-[22px] border border-amber-500/20 bg-amber-500/10 p-4">
+                  <CompanionMessage type="warning" message={actionError} />
                 </div>
               )}
 

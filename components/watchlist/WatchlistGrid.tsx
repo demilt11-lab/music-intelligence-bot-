@@ -7,6 +7,8 @@ export interface WatchlistEntry {
   id: number
   entityType: string
   entityId: number
+  entityName: string | null
+  artistNames: string[]
   addedAt: string
   viralScore: number | null
   viralScoreDelta: number | null
@@ -128,6 +130,15 @@ export function WatchlistGrid({ items, onRemove }: WatchlistGridProps) {
                     #{item.entityId}
                   </span>
                 </div>
+
+                <p className="mt-2 truncate text-sm font-semibold text-white">
+                  {item.entityName || `Untitled ${item.entityType}`}
+                </p>
+                {item.artistNames.length > 0 && (
+                  <p className="truncate text-xs text-zinc-400">
+                    {item.artistNames.join(', ')}
+                  </p>
+                )}
 
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <div>

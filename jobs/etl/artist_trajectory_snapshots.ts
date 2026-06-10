@@ -1,5 +1,16 @@
 // jobs/etl/artist_trajectory_snapshots.ts
+//
+// Builds one ArtistTrajectorySnapshot per artist for a reference date from
+// ArtistDailyStats history. Deltas compare each rolling window against the
+// equivalent window immediately before it (7d vs prior 7d, 28d vs prior 28d,
+// 90d vs prior 90d) so the classification thresholds operate on real
+// period-over-period growth, not a one-day shift.
+//
+// Re-running for the same date replaces that date's snapshots (idempotent).
 import { db } from "@/lib/db";
+
+const HISTORY_DAYS = 200; // 90d window + 90d baseline + slack
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 type TrackTrendPred = {
   trackId: number;
@@ -10,84 +21,7 @@ type TrackTrendPred = {
   probPopular: number;
 };
 
-function inferBreakoutRegionAndGenre(
-  predictions: TrackTrendPred[],
-) {
-  // Aggregate probabilities by genre and region
-  const genreScores = new Map<string, number>();
-  const regionScores = new Map<string, number>();
-
-  for (const p of predictions) {
-    const viralWeight = p.probViral ?? 0;
-    const trendingWeight = p.probTrending ?? 0;
-    const popularWeight = p.probPopular ?? 0;
-    const totalWeight =
-      viralWeight * 1.5 +
-      trendingWeight * 1.0 +
-      popularWeight * 0.5;
-
-    if (p.genre) {
-      genreScores.set(
-        p.genre,
-        (genreScores.get(p.genre) ?? 0) + totalWeight,
-      );
-    }
-    if (p.code2) {
-      regionScores.set(
-        p.code2,
-        (regionScores.get(p.code2) ?? 0) + totalWeight,
-      );
-    }
-  }
-
-  let primaryGenre: string | null = null;
-  let primaryCode2: string | null = null;
-  let maxGenreScore = 0;
-  let maxRegionScore = 0;
-
-  for (const [g, score] of genreScores.entries()) {
-    if (score > maxGenreScore) {
-      maxGenreScore = score;
-      primaryGenre = g;
-    }
-  }
-
-  for (const [c, score] of regionScores.entries()) {
-    if (score > maxRegionScore) {
-      maxRegionScore = score;
-      primaryCode2 = c;
-    }
-  }
-
-  const breakoutRegions = Array.from(
-    regionScores.entries(),
-  )
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([code2, score]) => ({
-      code2,
-      score,
-    }));
-
-  const breakoutGenres = Array.from(
-    genreScores.entries(),
-  )
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([genre, score]) => ({
-      genre,
-      score,
-    }));
-
-  return {
-    primaryGenre,
-    primaryCode2,
-    breakoutRegions,
-    breakoutGenres,
-  };
-}
-
-type DailyRow = {
+export type DailyRow = {
   artistId: bigint;
   date: Date;
   totalStreams: bigint;
@@ -95,94 +29,179 @@ type DailyRow = {
   totalFollowers: bigint | null;
 };
 
-function toKey(artistId: bigint, date: Date) {
-  return `${artistId.toString()}-${date.toISOString().slice(0, 10)}`;
-}
+export function inferBreakoutRegionAndGenre(predictions: TrackTrendPred[]) {
+  const genreScores = new Map<string, number>();
+  const regionScores = new Map<string, number>();
 
-function rollingSum(values: number[], windowSize: number): number[] {
-  const out: number[] = [];
-  let sum = 0;
-  const q: number[] = [];
-  for (const v of values) {
-    sum += v;
-    q.push(v);
-    if (q.length > windowSize) {
-      sum -= q.shift()!;
+  for (const p of predictions) {
+    const totalWeight =
+      (p.probViral ?? 0) * 1.5 +
+      (p.probTrending ?? 0) * 1.0 +
+      (p.probPopular ?? 0) * 0.5;
+
+    if (p.genre) {
+      genreScores.set(p.genre, (genreScores.get(p.genre) ?? 0) + totalWeight);
     }
-    out.push(sum);
+    if (p.code2) {
+      regionScores.set(p.code2, (regionScores.get(p.code2) ?? 0) + totalWeight);
+    }
   }
-  return out;
+
+  const top = (m: Map<string, number>) =>
+    Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+
+  const genres = top(genreScores);
+  const regions = top(regionScores);
+
+  return {
+    primaryGenre: genres[0]?.[0] ?? null,
+    primaryCode2: regions[0]?.[0] ?? null,
+    breakoutRegions: regions.slice(0, 5).map(([code2, score]) => ({ code2, score })),
+    breakoutGenres: genres.slice(0, 5).map(([genre, score]) => ({ genre, score })),
+  };
 }
 
-function pctDelta(curr: number, prev: number | null): number {
+/** Sum of the last `windowSize` values ending at `endIdx` (inclusive). */
+export function windowSum(values: number[], endIdx: number, windowSize: number): number {
+  if (endIdx < 0) return 0;
+  const start = Math.max(0, endIdx - windowSize + 1);
+  let sum = 0;
+  for (let i = start; i <= endIdx; i++) sum += values[i];
+  return sum;
+}
+
+export function pctDelta(curr: number, prev: number | null): number {
   if (!prev || prev === 0) return 0;
   return (curr - prev) / prev;
 }
 
+export type WindowDeltas = {
+  streams7d: number;
+  streams28d: number;
+  streams90d: number;
+  streams7dDelta: number;
+  streams28dDelta: number;
+  streams90dDelta: number;
+  playlistsDelta28d: number;
+  followersDelta28d: number;
+};
+
+const MIN_BASELINE_DAYS = 7;
+
 /**
- * Basic rule-based classification:
- * - ABOUT_TO_BREAK: streams28dDelta > 1.0 and playlistsDelta28d > 0.5 and followersDelta28d > 0.2
- * - GROWING: streams28dDelta between 0.2 and 1.0
- * - DECLINING: streams28dDelta < -0.2 and playlistsDelta28d < -0.1
- * - STABLE: else
+ * Window sums + period-over-period deltas at the latest index of each series.
+ * Each delta compares the current window's DAILY RATE against the daily rate
+ * of the window immediately preceding it, so a partially-populated baseline
+ * (short history) cannot inflate growth. Baselines covering fewer than
+ * MIN_BASELINE_DAYS days produce a delta of 0 (no claim) rather than a guess.
  */
-function classifyStatus(args: {
+export function computeWindowDeltas(
+  streams: number[],
+  playlists: number[],
+  followers: number[],
+): WindowDeltas {
+  const latestIdx = streams.length - 1;
+
+  const sumAt = (w: number, end: number) => windowSum(streams, end, w);
+
+  // Rate-normalized delta: current window rate vs prior window rate.
+  const rateDelta = (w: number): number => {
+    const baselineEnd = latestIdx - w;
+    if (baselineEnd < 0) return 0;
+    const baselineStart = Math.max(0, baselineEnd - w + 1);
+    const baselineDays = baselineEnd - baselineStart + 1;
+    if (baselineDays < Math.min(w, MIN_BASELINE_DAYS)) return 0;
+
+    const currentDays = Math.min(w, latestIdx + 1);
+    const currentRate = sumAt(w, latestIdx) / currentDays;
+    const baselineRate = windowSum(streams, baselineEnd, baselineDays) / baselineDays;
+    return pctDelta(currentRate, baselineRate || null);
+  };
+
+  const streams7d = sumAt(7, latestIdx);
+  const streams28d = sumAt(28, latestIdx);
+  const streams90d = sumAt(90, latestIdx);
+
+  const latestPlaylists = playlists[latestIdx] ?? 0;
+  const prevPlaylists =
+    latestIdx - 28 >= 0 ? playlists[latestIdx - 28] : null;
+
+  const latestFollowers = followers[latestIdx] ?? 0;
+  const prevFollowers =
+    latestIdx - 28 >= 0 ? followers[latestIdx - 28] : null;
+
+  return {
+    streams7d,
+    streams28d,
+    streams90d,
+    streams7dDelta: rateDelta(7),
+    streams28dDelta: rateDelta(28),
+    streams90dDelta: rateDelta(90),
+    playlistsDelta28d: pctDelta(latestPlaylists, prevPlaylists),
+    followersDelta28d: pctDelta(latestFollowers, prevFollowers),
+  };
+}
+
+/**
+ * Rule-based trajectory classification. `breakProbability` here is a
+ * heuristic tier value, not a calibrated model output — the API/UI must
+ * label it as such (see ArtistTrajectorySnapshot.spotifyBreakProb for the
+ * model-backed probability when available).
+ */
+export function classifyStatus(args: {
   streams28dDelta: number;
   playlistsDelta28d: number;
   followersDelta28d: number;
+  tiktokVelocityScore?: number | null;
+  airplayVelocityScore?: number | null;
 }) {
-  const { streams28dDelta, playlistsDelta28d, followersDelta28d } = args;
+  const {
+    streams28dDelta,
+    playlistsDelta28d,
+    followersDelta28d,
+    tiktokVelocityScore,
+    airplayVelocityScore,
+  } = args;
 
-  if (
-    streams28dDelta > 1.0 &&
-    playlistsDelta28d > 0.5 &&
-    followersDelta28d > 0.2
-  ) {
+  const viralBoost =
+    (tiktokVelocityScore ?? 0) * 0.3 + (airplayVelocityScore ?? 0) * 0.2;
+  const momentum = streams28dDelta + viralBoost;
+
+  if (momentum > 1.0 && playlistsDelta28d > 0.5 && followersDelta28d > 0.2) {
     return {
       status: "ABOUT_TO_BREAK",
-      statusScore: 0.9,
-      breakProbability: 0.85,
+      statusScore: Math.min(1, 0.9 + viralBoost * 0.1),
+      breakProbability: Math.min(1, 0.8 + viralBoost * 0.1),
     };
   }
 
-  if (streams28dDelta > 0.2) {
+  if (momentum > 0.2) {
     return {
       status: "GROWING",
-      statusScore: 0.7,
-      breakProbability:
-        0.4 + Math.min(streams28dDelta, 1.0) * 0.3,
+      statusScore: 0.6 + Math.min(momentum, 1.0) * 0.2,
+      breakProbability: 0.4 + Math.min(momentum, 1.0) * 0.3,
     };
   }
 
   if (streams28dDelta < -0.2 && playlistsDelta28d < -0.1) {
-    return {
-      status: "DECLINING",
-      statusScore: 0.7,
-      breakProbability: 0.1,
-    };
+    return { status: "DECLINING", statusScore: 0.7, breakProbability: 0.1 };
   }
 
-  return {
-    status: "STABLE",
-    statusScore: 0.5,
-    breakProbability: 0.2,
-  };
+  return { status: "STABLE", statusScore: 0.5, breakProbability: 0.2 };
 }
 
 export async function buildArtistTrajectorySnapshots(dateStr: string) {
   const untilDate = new Date(dateStr);
+  if (Number.isNaN(untilDate.getTime())) {
+    throw new Error(`Invalid date: ${dateStr}`);
+  }
+  const sinceDate = new Date(untilDate.getTime() - HISTORY_DAYS * MS_PER_DAY);
 
-  // Pull last 120 days of ArtistDailyStats
   const rows = await db.artistDailyStats.findMany({
-    where: {
-      date: {
-        lte: untilDate,
-      },
-    },
+    where: { date: { gte: sinceDate, lte: untilDate } },
     orderBy: [{ artistId: "asc" }, { date: "asc" }],
   });
 
-  // Group by artist
   const byArtist = new Map<bigint, DailyRow[]>();
   for (const r of rows) {
     const list = byArtist.get(r.artistId) ?? [];
@@ -196,112 +215,86 @@ export async function buildArtistTrajectorySnapshots(dateStr: string) {
     byArtist.set(r.artistId, list);
   }
 
-  for (const [artistId, history] of byArtist.entries()) {
+  let written = 0;
+  let failed = 0;
+
+  for (const [artistIdBig, history] of byArtist.entries()) {
     if (!history.length) continue;
+    const artistId = Number(artistIdBig);
 
-    const streams = history.map((h) =>
-      Number(h.totalStreams),
-    );
-    const playlists = history.map(
-      (h) => (h.playlistCount ?? 0) as number,
-    );
-    const followers = history.map((h) =>
-      h.totalFollowers ? Number(h.totalFollowers) : 0,
-    );
-  for (const [artistId, history] of byArtist.entries()) {
-    if (!history.length) continue;
-
-    // ... your existing rolling sums + deltas ...
-
-    // Core classification from growth metrics
-    const {
-      status,
-      statusScore,
-      breakProbability,
-    } = classifyStatus({
-      streams28dDelta,
-      playlistsDelta28d,
-      followersDelta28d,
-    });
-
-    // Get recent tracks for this artist
-    const recentTracks = await db.track.findMany({
-      where: {
-        trackArtists: {
-          some: { artistId },
-        },
-      },
-      orderBy: {
-        releaseDate: "desc",
-      },
-      take: 10, // last N releases
-    });
-
-    const trackIds = recentTracks.map((t) => t.id);
-    let breakoutRegionsJson: any = null;
-    let breakoutGenresJson: any = null;
-    let primaryGenre: string | null = null;
-    let primaryCode2: string | null = null;
-
-    if (trackIds.length > 0) {
-      const preds =
-        await db.trackTrendPrediction.findMany({
-          where: {
-            trackId: { in: trackIds },
-          },
-        });
-
-      const breakout = inferBreakoutRegionAndGenre(
-        preds.map((p) => ({
-          trackId: p.trackId,
-          genre: p.genre,
-          code2: p.code2,
-          probViral: p.probViral,
-          probTrending: p.probTrending,
-          probPopular: p.probPopular,
-        })),
+    try {
+      const streams = history.map((h) => Number(h.totalStreams));
+      const playlists = history.map((h) => h.playlistCount ?? 0);
+      const followers = history.map((h) =>
+        h.totalFollowers != null ? Number(h.totalFollowers) : 0,
       );
 
-      primaryGenre = breakout.primaryGenre;
-      primaryCode2 = breakout.primaryCode2;
-      breakoutRegionsJson = {
-        regions: breakout.breakoutRegions,
-        genres: breakout.breakoutGenres,
-      };
-    }
+      const latest = history[history.length - 1];
+      const deltas = computeWindowDeltas(streams, playlists, followers);
 
-    // Fallback to latestDaily if ML predictions absent
-    const latestDaily =
-      await db.artistDailyStats.findFirst({
-        where: {
-          artistId,
-          date: latest.date,
-        },
+      const { status, statusScore, breakProbability } = classifyStatus({
+        streams28dDelta: deltas.streams28dDelta,
+        playlistsDelta28d: deltas.playlistsDelta28d,
+        followersDelta28d: deltas.followersDelta28d,
       });
 
-    if (!primaryGenre) {
-      primaryGenre =
-        latestDaily?.genres?.[0] ?? null;
-    }
-    if (!primaryCode2) {
-      primaryCode2 =
-        latestDaily?.primaryCode2 ?? null;
-    }
+      // ML enrichment: trend predictions on the artist's recent releases
+      // drive primary genre/region and the max viral probability signal.
+      const recentTracks = await db.track.findMany({
+        where: { trackArtists: { some: { artistId } } },
+        orderBy: { releaseDate: "desc" },
+        take: 10,
+        select: { id: true },
+      });
 
-    await db.artistTrajectorySnapshot.create({
-      data: {
-        artistId,
-        date: latest.date,
-        streams7d,
-        streams28d,
-        streams90d,
-        streams7dDelta,
-        streams28dDelta,
-        streams90dDelta,
+      let primaryGenre: string | null = null;
+      let primaryCode2: string | null = null;
+      let breakoutJson:
+        | { regions: { code2: string; score: number }[]; genres: { genre: string; score: number }[] }
+        | undefined;
+      let maxTrackProbViral: number | null = null;
+
+      if (recentTracks.length) {
+        const preds = await db.trackTrendPrediction.findMany({
+          where: { trackId: { in: recentTracks.map((t) => t.id) } },
+        });
+
+        if (preds.length) {
+          const breakout = inferBreakoutRegionAndGenre(preds);
+          primaryGenre = breakout.primaryGenre;
+          primaryCode2 = breakout.primaryCode2;
+          breakoutJson = {
+            regions: breakout.breakoutRegions,
+            genres: breakout.breakoutGenres,
+          };
+          maxTrackProbViral = preds.reduce(
+            (max, p) => Math.max(max, p.probViral ?? 0),
+            0,
+          );
+        }
+      }
+
+      if (!primaryGenre) primaryGenre = latest ? await firstGenre(artistIdBig, latest.date) : null;
+      if (!primaryCode2) {
+        const latestDaily = await db.artistDailyStats.findFirst({
+          where: { artistId: artistIdBig, date: latest.date },
+          select: { primaryCode2: true },
+        });
+        primaryCode2 = latestDaily?.primaryCode2 ?? null;
+      }
+
+      // Idempotent write: one snapshot per (artistId, date).
+      const snapshotData = {
+        streams7d: BigInt(Math.round(deltas.streams7d)),
+        streams28d: BigInt(Math.round(deltas.streams28d)),
+        streams90d: BigInt(Math.round(deltas.streams90d)),
+        streams7dDelta: deltas.streams7dDelta,
+        streams28dDelta: deltas.streams28dDelta,
+        streams90dDelta: deltas.streams90dDelta,
         listeners28d: null,
         listenersDelta28d: null,
-        followersDelta28d,
-        playlistsDelta28d,
+        followersDelta28d: deltas.followersDelta28d,
+        playlistsDelta28d: deltas.playlistsDelta28d,
         editorialAdds28d: null,
         removals28d: null,
         tiktokVelocityScore: null,
@@ -309,195 +302,52 @@ export async function buildArtistTrajectorySnapshots(dateStr: string) {
         airplayVelocityScore: null,
         primaryGenre,
         primaryCode2,
-        breakoutCities: breakoutRegionsJson,
+        breakoutCities: breakoutJson,
         status,
         statusScore,
         breakProbability,
-      },
-    });
-  }
-    const streams7dSeries = rollingSum(streams, 7);
-    const streams28dSeries = rollingSum(streams, 28);
-    const streams90dSeries = rollingSum(streams, 90);
+        maxTrackProbViral,
+      };
 
-    const latestIdx = history.length - 1;
-    const latest = history[latestIdx];
-
-    const streams7d = streams7dSeries[latestIdx] ?? 0;
-    const streams28d = streams28dSeries[latestIdx] ?? 0;
-    const streams90d = streams90dSeries[latestIdx] ?? 0;
-
-    const prev7d = streams7dSeries[latestIdx - 1] ?? null;
-    const prev28d = streams28dSeries[latestIdx - 1] ?? null;
-    const prev90d = streams90dSeries[latestIdx - 1] ?? null;
-
-    const streams7dDelta = pctDelta(streams7d, prev7d);
-    const streams28dDelta = pctDelta(streams28d, prev28d);
-    const streams90dDelta = pctDelta(streams90d, prev90d);
-
-    const latestPlaylists = playlists[latestIdx] ?? 0;
-    const prevPlaylists = playlists[latestIdx - 28] ?? playlists[0];
-    const playlistsDelta28d = pctDelta(
-      latestPlaylists,
-      prevPlaylists,
-    );
-
-    const latestFollowers = followers[latestIdx] ?? 0;
-    const prevFollowers = followers[latestIdx - 28] ?? followers[0];
-    const followersDelta28d = pctDelta(
-      latestFollowers,
-      prevFollowers,
-    );
-
-    const { status, statusScore, breakProbability } =
-      classifyStatus({
-        streams28dDelta,
-        playlistsDelta28d,
-        followersDelta28d,
+      await db.artistTrajectorySnapshot.upsert({
+        where: { artistId_date: { artistId, date: latest.date } },
+        update: snapshotData,
+        create: { artistId, date: latest.date, ...snapshotData },
       });
 
-    // naive primaryGenre / primaryCode2 from latest ArtistDailyStats row
-    const latestDaily = await db.artistDailyStats.findFirst({
-      where: { artistId, date: latest.date },
-    });
-
-    await db.artistTrajectorySnapshot.create({
-      data: {
-        artistId,
-        date: latest.date,
-        streams7d,
-        streams28d,
-        streams90d,
-        streams7dDelta,
-        streams28dDelta,
-        streams90dDelta,
-        listeners28d: null,
-        listenersDelta28d: null,
-        followersDelta28d,
-        playlistsDelta28d,
-        editorialAdds28d: null,
-        removals28d: null,
-        tiktokVelocityScore: null,
-        chartVelocityScore: null,
-        airplayVelocityScore: null,
-        primaryGenre:
-          latestDaily?.genres?.[0] ?? null,
-        primaryCode2: latestDaily?.primaryCode2 ?? null,
-        breakoutCities: null,
-        status,
-        statusScore,
-        breakProbability,
-      },
-    });
+      written++;
+    } catch (err) {
+      failed++;
+      console.error(
+        `[artist-trajectory] artist=${artistIdBig} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
+
+  console.log(
+    `[artist-trajectory] date=${dateStr} artists=${byArtist.size} written=${written} failed=${failed}`,
+  );
+  return { artists: byArtist.size, written, failed };
+}
+
+async function firstGenre(artistId: bigint, date: Date): Promise<string | null> {
+  const daily = await db.artistDailyStats.findFirst({
+    where: { artistId, date },
+    select: { genres: true },
+  });
+  return daily?.genres?.[0] ?? null;
 }
 
 if (require.main === module) {
-  const dateArg = process.argv[2];
-  if (!dateArg) {
-    console.error(
-      "Usage: ts-node jobs/etl/artist_trajectory_snapshots.ts YYYY-MM-DD",
-    );
-    process.exit(1);
-  }
+  const dateArg = process.argv[2] ?? new Date().toISOString().slice(0, 10);
   buildArtistTrajectorySnapshots(dateArg)
-    .then(() => {
-      console.log(
-        "ArtistTrajectorySnapshot built for",
-        dateArg,
-      );
-      process.exit(0);
+    .then(({ written, failed }) => {
+      console.log(`ArtistTrajectorySnapshot built for ${dateArg} (written=${written}, failed=${failed})`);
+      process.exit(failed > 0 && written === 0 ? 1 : 0);
     })
     .catch((err) => {
       console.error(err);
       process.exit(1);
     });
-  function classifyStatus(args: {
-  streams28dDelta: number;
-  playlistsDelta28d: number;
-  followersDelta28d: number;
-  tiktokVelocityScore?: number;
-  airplayVelocityScore?: number;
-}) {
-  const {
-    streams28dDelta,
-    playlistsDelta28d,
-    followersDelta28d,
-    tiktokVelocityScore = 0,
-    airplayVelocityScore = 0,
-  } = args;
-
-  const viralBoost =
-    tiktokVelocityScore * 0.3 + airplayVelocityScore * 0.2;
-
-  if (
-    streams28dDelta + viralBoost > 1.0 &&
-    playlistsDelta28d > 0.5 &&
-    followersDelta28d > 0.2
-  ) {
-    return {
-      status: "ABOUT_TO_BREAK",
-      statusScore: 0.9 + viralBoost * 0.1,
-      breakProbability: 0.8 + viralBoost * 0.1,
-    };
-  }
-
-  if (streams28dDelta + viralBoost > 0.2) {
-    return {
-      status: "GROWING",
-      statusScore:
-        0.6 + Math.min(streams28dDelta + viralBoost, 1.0) * 0.2,
-      breakProbability:
-        0.4 + Math.min(streams28dDelta + viralBoost, 1.0) * 0.3,
-    };
-  }
-
-  if (streams28dDelta < -0.2 && playlistsDelta28d < -0.1) {
-    return {
-      status: "DECLINING",
-      statusScore: 0.7,
-      breakProbability: 0.1,
-    };
-  }
-
-  return {
-    status: "STABLE",
-    statusScore: 0.5,
-    breakProbability: 0.2,
-  };
-}
-  // After computing streams/playlist/follower deltas
-const recentTracks = await db.track.findMany({
-  where: {
-    trackArtists: {
-      some: { artistId },
-    },
-  },
-  take: 10, // latest few tracks
-  orderBy: { releaseDate: "desc" },
-});
-
-const predictions =
-  await db.trackTrendPrediction.findMany({
-    where: {
-      trackId: {
-        in: recentTracks.map((t) => t.id),
-      },
-    },
-  });
-
-let maxProbViral = 0;
-let breakGenre: string | null = null;
-let breakCode2: string | null = null;
-
-for (const p of predictions) {
-  if (p.probViral > maxProbViral) {
-    maxProbViral = p.probViral;
-    breakGenre = p.genre;
-    breakCode2 = p.code2;
-  }
-}
-
-// You can inject this into classifyStatus as an extra signal
-// and store breakGenre/breakCode2 in snapshot
 }

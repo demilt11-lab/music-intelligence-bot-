@@ -12,12 +12,23 @@ type ApiResponse = {
     date?: string
     code2: string
     mode: string
-    tier4Error?: string
+    dataSource?: string | null
+    isSignalBacked?: boolean
+    sourceError?: string
   }
 }
 
 function formatModeLabel(mode: 'ugc_early' | 'general') {
   return mode === 'ugc_early' ? 'Early UGC Breakouts' : 'General Momentum'
+}
+
+const SOURCE_NOTES: Record<string, string> = {
+  charts:
+    'Live UGC breakout signals are not available for this market yet, so Buddy is showing recent chart activity instead. Treat these as established popularity, not breakout discoveries.',
+  spotify_popular:
+    'Live breakout signals are unavailable — showing popular catalog tracks for context only.',
+  sample:
+    'These are labeled sample rows for layout preview. No real scouting data is loaded.',
 }
 
 export function DailyTalentScout() {
@@ -26,6 +37,8 @@ export function DailyTalentScout() {
   const [error, setError] = React.useState<string | null>(null)
   const [mode, setMode] = React.useState<'ugc_early' | 'general'>('ugc_early')
   const [code2, setCode2] = React.useState('US')
+  const [dataSource, setDataSource] = React.useState<string | null>(null)
+  const [isSignalBacked, setIsSignalBacked] = React.useState(true)
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true)
@@ -47,10 +60,13 @@ export function DailyTalentScout() {
 
       const json: ApiResponse = await res.json()
       setData(json.obj.map((t, i) => ({ ...t, rank: i + 1 })))
+      setDataSource(json.meta.dataSource ?? null)
+      setIsSignalBacked(json.meta.isSignalBacked ?? false)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load data.'
       setError(message)
       setData([])
+      setDataSource(null)
     } finally {
       setIsLoading(false)
     }
@@ -60,10 +76,16 @@ export function DailyTalentScout() {
     void fetchData()
   }, [fetchData])
 
-  const hotCount = data.filter((t) => t.totalScore >= 0.5).length
+  // Conviction tiers only mean something when the batch is signal-backed.
+  const hotCount = isSignalBacked
+    ? data.filter((t) => t.totalScore >= 0.5).length
+    : null
   const watchCount = data.length
-  const highConvictionCount = data.filter((t) => t.totalScore >= 0.7).length
+  const highConvictionCount = isSignalBacked
+    ? data.filter((t) => t.totalScore >= 0.7).length
+    : null
   const topTrack = data[0]
+  const sourceNote = dataSource ? SOURCE_NOTES[dataSource] : undefined
 
   return (
     <section
@@ -72,7 +94,7 @@ export function DailyTalentScout() {
     >
       <CompanionHeader
         trackCount={data.length}
-        hotCount={hotCount}
+        hotCount={hotCount ?? 0}
         mode={mode}
         code2={code2}
         onModeChange={setMode}
@@ -118,7 +140,9 @@ export function DailyTalentScout() {
                     <p className="text-[10px] uppercase tracking-[0.22em] text-emerald-200/70">
                       Hot
                     </p>
-                    <p className="mt-1 text-lg font-semibold text-emerald-300">{hotCount}</p>
+                    <p className="mt-1 text-lg font-semibold text-emerald-300">
+                      {hotCount ?? '—'}
+                    </p>
                   </div>
 
                   <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 backdrop-blur-sm">
@@ -126,7 +150,7 @@ export function DailyTalentScout() {
                       High Conviction
                     </p>
                     <p className="mt-1 text-lg font-semibold text-cyan-300">
-                      {highConvictionCount}
+                      {highConvictionCount ?? '—'}
                     </p>
                   </div>
 
@@ -144,44 +168,51 @@ export function DailyTalentScout() {
                   <CompanionMessage
                     type="info"
                     message={
-                      topTrack
+                      topTrack && isSignalBacked
                         ? `Top priority right now is ${topTrack.name} by ${topTrack.artists.join(', ')}. It is leading this scan based on combined momentum signals and should be reviewed first for A&R follow-up.`
-                        : `I’m standing by with the latest scout pass. Once signals load in, I’ll highlight the best breakout opportunities for immediate review.`
+                        : topTrack
+                          ? `I’m showing ${topTrack.name} and other tracks from fallback data while live breakout signals are unavailable for this market.`
+                          : `I’m standing by with the latest scout pass. Once signals load in, I’ll highlight the best breakout opportunities for immediate review.`
                     }
                   />
                 </div>
 
                 <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                    Suggested actions
+                    Data status
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {[
-                      'Review top 10 signals',
-                      'Prioritize playlist-ready tracks',
-                      'Compare hot artists',
-                      'Flag breakout candidates',
-                    ].map((action) => (
-                      <button
-                        key={action}
-                        type="button"
-                        className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-zinc-200 transition hover:border-emerald-400/30 hover:bg-emerald-500/10 hover:text-emerald-200"
-                      >
-                        {action}
-                      </button>
-                    ))}
-                  </div>
+                  <p className="mt-3 text-sm leading-6 text-zinc-300">
+                    {isSignalBacked
+                      ? 'This scan is backed by live UGC and ML signals. Conviction scores and recommended moves are active.'
+                      : sourceNote ??
+                        'Waiting on live scouting signals for this market. Conviction scoring is paused until real data arrives.'}
+                  </p>
                 </div>
               </div>
+
+              {!isSignalBacked && data.length > 0 && sourceNote ? (
+                <div
+                  role="status"
+                  className="rounded-[18px] border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm leading-6 text-amber-200"
+                >
+                  {sourceNote}
+                </div>
+              ) : null}
             </div>
           </section>
 
           {error && !isLoading ? (
             <div role="alert" className="rounded-[22px] border border-rose-500/20 bg-rose-500/10 p-4">
               <CompanionMessage
-                message={`Something went wrong: ${error} — I’ll keep trying.`}
+                message={`The scout feed failed to load: ${error}`}
                 type="warning"
               />
+              <button
+                onClick={fetchData}
+                className="mt-3 rounded-full border border-rose-400/20 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 transition hover:bg-rose-500/20"
+              >
+                Retry now
+              </button>
             </div>
           ) : null}
 

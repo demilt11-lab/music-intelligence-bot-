@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Routes that bypass API key checks (public health + OPTIONS preflight)
+// Routes that bypass API key checks: public health, public API, and
+// first-party UI routes (tenant resolved server-side, no key in browser).
 const PUBLIC_PATTERNS = [
   /^\/api\/health(\/.*)?$/,
   /^\/api\/public\//,
+  /^\/api\/ui\//,
 ];
 
 export function middleware(req: NextRequest) {
