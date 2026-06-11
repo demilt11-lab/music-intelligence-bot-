@@ -42,5 +42,6 @@ jobs:
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
           SEARCHAPI_KEY: ${{ secrets.SEARCHAPI_KEY }}
           META_APP_ID: ${{ secrets.META_APP_ID }}
-          META_APP_SECRET: ${{ secrets.META_APP_SECRET }}
+          # Repo secret is named META_SECRET; accept either name.
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET || secrets.META_SECRET }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
