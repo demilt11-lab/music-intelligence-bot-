@@ -4,7 +4,7 @@
 // server-side (see lib/platform/ui-tenant) so no API key ever reaches the
 // browser. External integrations should use /api/v1/watchlist instead.
 import { NextRequest, NextResponse } from 'next/server';
-import { getUiTenantId } from '@/lib/platform/ui-tenant';
+import { requireSession, assertSameOrigin, AuthError } from '@/lib/auth/guard';
 import {
   listWatchlist,
   addWatchlistItem,
@@ -13,22 +13,29 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+function errorResponse(err: unknown, fallback: string) {
+  if (err instanceof AuthError) {
+    return NextResponse.json({ error: err.message }, { status: err.status });
+  }
+  console.error(`[ui/watchlist] ${fallback}:`, err);
+  return NextResponse.json({ error: fallback }, { status: 500 });
+}
+
+export async function GET(req: NextRequest) {
   try {
-    const tenantId = await getUiTenantId();
-    const items = await listWatchlist(tenantId);
+    const user = await requireSession(req);
+    const items = await listWatchlist(user.tenantId);
     return NextResponse.json({ obj: items, meta: { count: items.length } });
   } catch (err) {
-    console.error('[ui/watchlist] GET failed:', err);
-    return NextResponse.json(
-      { error: 'Failed to load watchlist' },
-      { status: 500 },
-    );
+    return errorResponse(err, 'Failed to load watchlist');
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
+    assertSameOrigin(req);
+    const user = await requireSession(req);
+
     const body = (await req.json().catch(() => ({}))) as {
       entityType?: string;
       entityId?: unknown;
@@ -45,21 +52,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const tenantId = await getUiTenantId();
-    const item = await addWatchlistItem(tenantId, entityType, entityId as number);
+    const item = await addWatchlistItem(user.tenantId, entityType, entityId as number);
     return NextResponse.json({ obj: item }, { status: 201 });
   } catch (err) {
-    console.error('[ui/watchlist] POST failed:', err);
-    return NextResponse.json(
-      { error: 'Failed to add watchlist item' },
-      { status: 500 },
-    );
+    return errorResponse(err, 'Failed to add watchlist item');
   }
 }
 
 /** Toggle-style removal by entity reference: DELETE ?entityType=track&entityId=42 */
 export async function DELETE(req: NextRequest) {
   try {
+    assertSameOrigin(req);
+    const user = await requireSession(req);
+
     const { searchParams } = new URL(req.url);
     const entityType = searchParams.get('entityType') ?? '';
     const entityId = Number(searchParams.get('entityId'));
@@ -71,14 +76,9 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    const tenantId = await getUiTenantId();
-    const removed = await removeWatchlistItemByEntity(tenantId, entityType, entityId);
+    const removed = await removeWatchlistItemByEntity(user.tenantId, entityType, entityId);
     return NextResponse.json({ obj: { removed } });
   } catch (err) {
-    console.error('[ui/watchlist] DELETE failed:', err);
-    return NextResponse.json(
-      { error: 'Failed to remove watchlist item' },
-      { status: 500 },
-    );
+    return errorResponse(err, 'Failed to remove watchlist item');
   }
 }

@@ -15,6 +15,7 @@ import {
   getHashtagRecentMedia,
 } from '@/lib/instagram/client';
 import { resolveInstagramAudio } from '@/lib/instagram/resolver';
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
@@ -278,7 +279,7 @@ async function main(): Promise<void> {
   await db.$disconnect();
 }
 
-main().catch((err) => {
+runTrackedJob('ingest:instagram', main).catch((err) => {
   console.error('[instagram] Fatal error:', err);
   process.exit(1);
 });

@@ -1,6 +1,7 @@
 // lib/luminate/client.ts
 
 import { LuminateMetricsResponse } from './types';
+import { fetchWithRetry } from '@/lib/http/retry';
 
 const LUMINATE_BASE_URL = process.env.LUMINATE_BASE_URL ?? '';
 const LUMINATE_API_KEY = process.env.LUMINATE_API_KEY ?? '';
@@ -24,13 +25,13 @@ async function fetchJson<T>(path: string, params: LuminateQueryParams): Promise<
 
   const url = `${LUMINATE_BASE_URL}${path}${buildQuery(params)}`;
 
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     headers: {
       Authorization: `Bearer ${LUMINATE_API_KEY}`,
       'Content-Type': 'application/json',
     },
     cache: 'no-store',
-  });
+  }, { label: 'luminate' });
 
   if (!res.ok) {
     const text = await res.text();

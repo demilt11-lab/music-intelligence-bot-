@@ -17,6 +17,7 @@ import {
   SpotifyTrack,
 } from '@/lib/spotify/client';
 import { resolveSpotifyTrack } from '@/lib/spotify/resolver';
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 const db = new PrismaClient();
 
@@ -364,7 +365,7 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
+runTrackedJob('ingest:spotify', main).catch((err) => {
   console.error('Fatal error:', err);
   process.exit(1);
 });

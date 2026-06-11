@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { Cache, TTL } from "@/lib/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,12 @@ export async function GET(req: NextRequest) {
       parseInt(searchParams.get("offset") || "0", 10) || 0,
       0,
     );
+
+    const cacheKey = `breaking:${status ?? "all"}:${genre ?? ""}:${code2 ?? ""}:${limit}:${offset}`;
+    const cached = Cache.get<object>(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached, { headers: { "x-cache": "hit" } });
+    }
 
     const filters: Prisma.Sql[] = [];
     if (status) filters.push(Prisma.sql`latest.status = ${status}`);
@@ -116,7 +123,9 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    return NextResponse.json({ obj, offset, total });
+    const payload = { obj, offset, total };
+    Cache.set(cacheKey, payload, TTL.SHORT);
+    return NextResponse.json(payload, { headers: { "x-cache": "miss" } });
   } catch (err) {
     console.error("[api/artists/breaking]", err);
     return NextResponse.json(

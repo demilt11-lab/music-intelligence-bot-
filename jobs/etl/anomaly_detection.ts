@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 const LOOKBACK_DAYS = 30;
 const Z_THRESHOLD_LOW = 2.0;
@@ -172,4 +173,4 @@ async function main() {
   console.log('[anomaly] Detection complete');
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+runTrackedJob('etl:anomaly', main).catch((e) => { console.error(e); process.exit(1); });

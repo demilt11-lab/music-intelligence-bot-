@@ -271,6 +271,45 @@ async function seedScoutDemoData() {
 
   console.log(`  ✓  ${seedArtists.length} demo artists with stats, UGC, and scores`);
   console.log('  ↪  run `npx tsx jobs/etl/artist_trajectory_snapshots.ts` to build trajectories');
+
+  await seedAdminUser();
+}
+
+// Provision the workspace admin so a clean database is immediately usable
+// behind auth. Password comes from SEED_ADMIN_PASSWORD; without it, no user
+// is created (and a note is printed) so no known-default credential ever
+// ships to production.
+async function seedAdminUser() {
+  const email = (process.env.SEED_ADMIN_EMAIL ?? 'admin@workspace.local').toLowerCase();
+  const password = process.env.SEED_ADMIN_PASSWORD;
+
+  if (!password) {
+    console.log('  ⚠  SEED_ADMIN_PASSWORD not set — skipping admin user. Create one with:');
+    console.log('     npx tsx scripts/create-user.ts you@company.com <password> ADMIN');
+    return;
+  }
+
+  const { hashPassword } = await import('@/lib/auth/password');
+  const slug = process.env.UI_TENANT_SLUG ?? 'workspace';
+
+  const tenant = await db.tenant.upsert({
+    where: { slug },
+    update: {},
+    create: { name: 'Workspace', slug, environment: 'PROD' },
+  });
+
+  await db.tenantUser.upsert({
+    where: { tenantId_email: { tenantId: tenant.id, email } },
+    update: { passwordHash: hashPassword(password), role: 'ADMIN' },
+    create: {
+      tenantId: tenant.id,
+      email,
+      role: 'ADMIN',
+      passwordHash: hashPassword(password),
+    },
+  });
+
+  console.log(`  ✓  Admin user ready: ${email}`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

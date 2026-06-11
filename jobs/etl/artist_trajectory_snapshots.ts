@@ -8,6 +8,7 @@
 //
 // Re-running for the same date replaces that date's snapshots (idempotent).
 import { db } from "@/lib/db";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 const HISTORY_DAYS = 200; // 90d window + 90d baseline + slack
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -341,7 +342,7 @@ async function firstGenre(artistId: bigint, date: Date): Promise<string | null> 
 
 if (require.main === module) {
   const dateArg = process.argv[2] ?? new Date().toISOString().slice(0, 10);
-  buildArtistTrajectorySnapshots(dateArg)
+  runTrackedJob('etl:artist-trajectory', () => buildArtistTrajectorySnapshots(dateArg))
     .then(({ written, failed }) => {
       console.log(`ArtistTrajectorySnapshot built for ${dateArg} (written=${written}, failed=${failed})`);
       process.exit(failed > 0 && written === 0 ? 1 : 0);

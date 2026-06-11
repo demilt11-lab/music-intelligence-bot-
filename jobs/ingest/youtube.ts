@@ -20,6 +20,7 @@ import {
   YtSearchItem,
 } from '@/lib/youtube/client';
 import { resolveYoutubeVideo } from '@/lib/youtube/resolver';
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -269,7 +270,7 @@ async function main(): Promise<void> {
   await db.$disconnect();
 }
 
-main().catch((err) => {
+runTrackedJob('ingest:youtube', main).catch((err) => {
   console.error('[youtube] Fatal error:', err);
   process.exit(1);
 });

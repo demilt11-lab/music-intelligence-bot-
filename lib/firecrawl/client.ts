@@ -1,4 +1,5 @@
 // lib/firecrawl/client.ts
+import { fetchWithRetry } from '@/lib/http/retry';
 // Firecrawl API client for web scraping
 
 const FIRECRAWL_BASE = 'https://api.firecrawl.dev/v1';
@@ -39,7 +40,7 @@ export async function scrapeUrl(
   url: string,
   options: FirecrawlScrapeOptions = {},
 ): Promise<FirecrawlScrapeResult> {
-  const res = await fetch(`${FIRECRAWL_BASE}/scrape`, {
+  const res = await fetchWithRetry(`${FIRECRAWL_BASE}/scrape`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${getApiKey()}`,
@@ -53,7 +54,7 @@ export async function scrapeUrl(
       ...(options.excludeTags ? { excludeTags: options.excludeTags } : {}),
       ...(options.waitFor ? { waitFor: options.waitFor } : {}),
     }),
-  });
+  }, { label: 'firecrawl' });
 
   if (!res.ok) {
     const body = await res.text();

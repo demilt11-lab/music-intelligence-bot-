@@ -13,6 +13,7 @@
 import { db } from "@/lib/db";
 import { queryVideos, queryCreators, searchSounds } from "@/lib/tiktok/client";
 import { resolveTiktokSound } from "@/lib/tiktok/resolver";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -578,7 +579,7 @@ async function main(): Promise<void> {
   await db.$disconnect();
 }
 
-main().catch((err) => {
+runTrackedJob('ingest:tiktok', main).catch((err) => {
   console.error("[tiktok] Fatal error:", err);
   process.exit(1);
 });

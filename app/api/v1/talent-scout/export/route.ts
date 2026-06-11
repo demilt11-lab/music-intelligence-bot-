@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
 import { logRequest } from '@/lib/platform/logging';
-import { ScoutScore, ScoutSources } from '@/lib/engine';
+import { ScoutSources } from '@/lib/engine';
 import { toCsvResponse } from '@/lib/export/csv';
 import type { TalentScoutTrack } from '@/lib/talentScout/score';
 

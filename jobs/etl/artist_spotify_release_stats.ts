@@ -1,5 +1,6 @@
 // jobs/etl/artist_spotify_release_stats.ts
 import { db } from "@/lib/db";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 type ArtistTrackRow = {
   trackId: number;
@@ -199,7 +200,7 @@ if (require.main === module) {
     );
     process.exit(1);
   }
-  buildArtistSpotifyReleaseStats(dateArg)
+  runTrackedJob('etl:release-stats', () => buildArtistSpotifyReleaseStats(dateArg))
     .then(() => {
       console.log(
         "ArtistSpotifyReleaseStats built for",

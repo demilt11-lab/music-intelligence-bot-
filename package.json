@@ -64,7 +64,11 @@
     "ingest:shazam": "npx tsx jobs/ingest/shazam.ts",
     "etl:anomaly": "npx tsx jobs/etl/anomaly_detection.ts",
     "etl:log-predictions": "npx tsx jobs/etl/log_predictions.ts",
-    "etl:evaluate-predictions": "npx tsx jobs/etl/evaluate_predictions.ts"
+    "etl:evaluate-predictions": "npx tsx jobs/etl/evaluate_predictions.ts",
+    "etl:reconcile": "npx tsx jobs/etl/reconcile.ts",
+    "ml:backtest": "python -m ml.backtest_rankings",
+    "create-user": "tsx scripts/create-user.ts",
+    "loadtest": "tsx scripts/loadtest.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
@@ -82,6 +86,7 @@
     "@types/react-dom": "^18",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "autoprefixer": "^10.5.0",
+    "dotenv": "^17.4.2",
     "eslint": "^8",
     "eslint-config-next": "^14.2.35",
     "google-trends-api": "^4.9.2",

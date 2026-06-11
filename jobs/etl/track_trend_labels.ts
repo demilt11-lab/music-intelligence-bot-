@@ -10,6 +10,7 @@
 // Labels are stored on TrackTrendLabel and used downstream as ML training
 // targets, so growth windows only ever look backward from the snapshot date.
 import { db } from "@/lib/db";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 function pctDelta(curr: number, prev: number): number {
   if (!prev || prev === 0) return 0;
@@ -253,7 +254,7 @@ if (require.main === module) {
     console.error("Usage: tsx jobs/etl/track_trend_labels.ts YYYY-MM-DD");
     process.exit(1);
   }
-  buildTrackTrendLabels(dateArg)
+  runTrackedJob('etl:track-trend-labels', () => buildTrackTrendLabels(dateArg))
     .then(({ labeled }) => {
       console.log(`TrackTrendLabels built for ${dateArg} (${labeled} labels)`);
       process.exit(0);

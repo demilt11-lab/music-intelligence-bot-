@@ -9,6 +9,7 @@
 // first, then TrackTrendLabel.genre. Tracks without either are grouped under
 // 'Unknown' so totals remain traceable instead of silently dropped.
 import { db } from '@/lib/db';
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 const GLOBAL = 'GLOBAL';
 const ALL_FORMATS = 'ALL';
@@ -269,7 +270,7 @@ async function aggregateAirplayGenre(
 }
 
 if (require.main === module) {
-  runGenreEtl(process.argv[2])
+  runTrackedJob('etl:genres', () => runGenreEtl(process.argv[2]))
     .then(() => {
       console.log('Genre ETL complete');
       process.exit(0);

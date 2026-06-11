@@ -80,7 +80,7 @@ function TrackCardSkeleton({ compact }: { compact?: boolean }) {
 
 // ─── Error state ──────────────────────────────────────────────────────────────
 
-function TrackCardError() {
+export function TrackCardError() {
   return (
     <Card variant="default" className="p-4 flex items-center gap-3 text-slate-500">
       <svg

@@ -40,7 +40,7 @@ export function SignalsSection({ breakingArtistCount, viralTrackCount, rightsCom
   return (
     <section aria-labelledby="signals-heading" className="mb-6">
       <h2 id="signals-heading" className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">
-        Signals You Can't Get Anywhere Else
+        Signals You Can&apos;t Get Anywhere Else
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <SignalCard

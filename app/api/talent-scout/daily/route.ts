@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ScoutSources, ScoutScore } from '@/lib/engine'
+import { Cache, TTL } from '@/lib/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,6 +20,18 @@ export async function GET(req: NextRequest) {
       | 'ugc_early'
       | 'general'
     const debug = searchParams.get('debug') === '1'
+
+    // Scout scans are identical for every viewer of the same lens — cache
+    // the assembled response briefly to keep repeat loads instant.
+    const cacheKey = `scout:daily:${date ?? 'latest'}:${code2}:${mode}:${limit}`
+    if (!debug) {
+      const cached = Cache.get<object>(cacheKey)
+      if (cached) {
+        return NextResponse.json(cached, {
+          headers: { 'x-cache': 'hit' },
+        })
+      }
+    }
 
     let tracks: ScoutSources.TalentScoutTrack[] = []
     let sourceError: string | undefined
@@ -59,7 +72,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const payload = {
       obj: ranked,
       meta: {
         date,
@@ -74,7 +87,14 @@ export async function GET(req: NextRequest) {
         description:
           'Daily UGC trend-spotting list combining internal ML, UGC, streaming, and Luminate metrics.',
       },
-    })
+    }
+
+    // Don't cache transient failures or empty fallback states.
+    if (!debug && !sourceError && ranked.length > 0) {
+      Cache.set(cacheKey, payload, TTL.SHORT)
+    }
+
+    return NextResponse.json(payload, { headers: { 'x-cache': 'miss' } })
   } catch (err) {
     console.error('[talent-scout-daily]', err)
     const message = err instanceof Error ? err.message : 'Internal error'

@@ -1,4 +1,5 @@
 // lib/searchapi/client.ts
+import { fetchWithRetry } from '@/lib/http/retry';
 // SearchAPI.io client for Google Search, YouTube Search, and Google Trends
 
 const SEARCHAPI_BASE = 'https://www.searchapi.io/api/v1';
@@ -20,7 +21,7 @@ async function searchApiGet<T>(
     if (v !== undefined) url.searchParams.set(k, String(v));
   }
 
-  const res = await fetch(url.toString());
+  const res = await fetchWithRetry(url.toString(), {}, { label: 'searchapi' });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`SearchAPI error (${res.status}) for engine=${engine}: ${body}`);

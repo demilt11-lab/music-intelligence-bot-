@@ -14,6 +14,7 @@
 import { PrismaClient } from "@prisma/client";
 import { getInterestOverTime, getRisingQueries } from "@/lib/googletrends/client";
 import { googleTrends as searchApiTrends } from "@/lib/searchapi/client";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 const db = new PrismaClient();
 
@@ -214,7 +215,7 @@ async function main(): Promise<void> {
   await db.$disconnect();
 }
 
-main().catch((err) => {
+runTrackedJob('ingest:googletrends', main).catch((err) => {
   console.error("[googletrends] Fatal error:", err);
   process.exit(1);
 });

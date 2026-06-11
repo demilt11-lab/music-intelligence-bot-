@@ -1,5 +1,6 @@
 // jobs/etl/log_predictions.ts
 import { db } from "@/lib/db";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 /**
  * Log today's model predictions to prediction_outcomes for later evaluation.
@@ -142,7 +143,7 @@ export async function logPredictions(dateStr: string): Promise<void> {
 
 if (require.main === module) {
   const dateArg = process.argv[2] ?? new Date().toISOString().slice(0, 10);
-  logPredictions(dateArg)
+  runTrackedJob('etl:log-predictions', () => logPredictions(dateArg))
     .then(() => {
       console.log(`[log_predictions] Done for ${dateArg}.`);
       process.exit(0);

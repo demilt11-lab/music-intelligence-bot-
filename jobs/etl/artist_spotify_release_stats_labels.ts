@@ -5,6 +5,7 @@
 // after the snapshot? Used as the training target for the Spotify trend model,
 // so it must only look FORWARD from the snapshot date (no feature leakage).
 import { db } from "@/lib/db";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 const LABEL_WINDOW_DAYS = 180;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -73,7 +74,7 @@ if (require.main === module) {
     );
     process.exit(1);
   }
-  labelArtistSpotifyReleaseStats(sinceArg, untilArg)
+  runTrackedJob('etl:release-stats-labels', () => labelArtistSpotifyReleaseStats(sinceArg, untilArg))
     .then(({ snapshots, labeled }) => {
       console.log(`Labeled ${labeled}/${snapshots} ArtistSpotifyReleaseStats`);
       process.exit(0);

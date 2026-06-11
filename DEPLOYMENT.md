@@ -45,6 +45,7 @@ Copy `.env.example` → `.env.local` for local dev. In production set them in
 | `DATABASE_URL` | Postgres connection (transaction pooler, `?pgbouncer=true`). Prisma Client is created at import time, so this **must** be present or the build/runtime fails. |
 | `DIRECT_URL` | Direct/session-pooler connection used for schema migrations. |
 | `CRON_SECRET` | Authenticates Vercel Cron → `/api/cron/*`. **The app fails closed** — if unset, every `/api/cron/*` call returns 401. Generate with `openssl rand -base64 32`. |
+| `AUTH_SECRET` | Signs UI session cookies. **Required in production — the app fails closed (503) without it.** Generate with `openssl rand -base64 32`. Provision users with `npm run create-user -- you@co.com <password> ADMIN`. |
 
 ### Required for specific features
 | Variable | Needed by |
@@ -68,23 +69,28 @@ See `.env.example` for the complete, annotated list (kept in sync with the code)
 
 ## 4. Database setup
 
-> ⚠️ **Migration model:** this project deploys its schema with `prisma db push`,
-> **not** `prisma migrate deploy`. The `prisma/migrations/` folder is **not a
-> complete history** — it only contains incremental add-ons (indexes, watchlist/
-> digest/alert tables, prediction outcomes) layered on top of a base schema that
-> was originally created via `db push`. There is no baseline migration, so
-> `migrate deploy` on a fresh DB will fail. See "Deployment debt" below.
+> ✅ **Migration model:** as of 2026-06-11 the schema deploys with
+> `npx prisma migrate deploy` from a squashed baseline
+> (`prisma/migrations/20260611000000_baseline`). Fresh databases work
+> directly; databases previously managed via `db push` must run
+> `npx prisma migrate resolve --applied 20260611000000_baseline` once first
+> (see prisma/migrations/README.md).
 
 **First deploy (fresh database):**
 ```bash
-DATABASE_URL=<direct-5432-url> DIRECT_URL=<direct-5432-url> npx prisma db push
+DATABASE_URL=<direct-5432-url> DIRECT_URL=<direct-5432-url> npx prisma migrate deploy
 ```
 
-**Subsequent schema changes:** trigger the **Database Migrations** GitHub Action
-(`.github/workflows/db_migrate.yml`, `workflow_dispatch`). It runs `prisma db push`
-against the session pooler. Note: `--accept-data-loss` was intentionally removed —
-the push **aborts** on any destructive change so a human can review it. Never
-re-add that flag to an automated workflow.
+**Existing database previously managed by `db push`:** mark the baseline applied once:
+```bash
+npx prisma migrate resolve --applied 20260611000000_baseline
+npx prisma migrate deploy
+```
+
+**Subsequent schema changes:** create a migration locally with
+`npx prisma migrate dev --name <change>`, commit it, and run
+`npx prisma migrate deploy` against production (or trigger the Database
+Migrations workflow).
 
 ---
 
@@ -128,10 +134,13 @@ on schedules / manual dispatch. They require these repo secrets:
 `FIRECRAWL_API_KEY`, `SEARCHAPI_KEY`, `META_*`, `LUMINATE_*`, `SOUNDCHARTS_*`,
 `SONGSTATS_*`).
 
-> The **artist-trajectory ETL** runs via the `artist_etl.yml` workflow
-> (`npm run etl:artist-all`), **not** via the `/api/cron/etl-artist-trajectory`
-> route — that route targets an internal ETL endpoint that does not exist in
-> this codebase and is therefore left out of the Vercel cron schedule.
+> The **artist-trajectory ETL** runs via the `artist_etl.yml` workflow daily
+> at 8:30 UTC (after ingestion). The `/api/cron/etl-artist-trajectory` route
+> also runs the same ETL inline (idempotent) and can be scheduled on Vercel
+> Pro for an intraday refresh. A daily **Data Reconciliation** workflow (9:30
+> UTC) verifies cross-table invariants and signal freshness, and
+> **Pipeline Alerts** posts any workflow failure to Slack when
+> `SLACK_WEBHOOK_URL` is configured.
 
 ---
 
@@ -163,13 +172,15 @@ deployed, only the artist-trajectory prediction endpoints are affected.
 
 ## 9. Deployment debt (tracked, not yet resolved)
 
-- **No baseline Prisma migration.** Schema is managed by `db push`. To move to a
-  proper migration history, generate a baseline with
-  `prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma`
-  against a checkpoint, add a `migration_lock.toml`, then switch deploys to
-  `prisma migrate deploy`. Requires validation against a copy of prod.
-- **Residual npm advisories.** `npm audit` reports 2 low-impact transitive
-  advisories whose only fix is a Next.js **major** (preview) upgrade — deferred.
-  The critical/high Next.js CVEs were resolved by upgrading to 14.2.x.
-- **`/api/cron/etl-artist-trajectory`** is a dead route (its target endpoint
-  doesn't exist); ETL runs via GitHub Actions instead.
+- **Next.js 14 framework advisories.** `npm audit` reports high-severity
+  advisories on the Next 14 line (largely DoS/cache-poisoning classes; several
+  are mitigated by Vercel's platform when not self-hosting) whose only fix is
+  the Next 15/16 **major** migration. That migration is the next scheduled
+  infrastructure task — do it before self-hosting or handling untrusted
+  multi-tenant traffic. CI runs a report-only `npm audit` on every PR so new
+  advisories stay visible.
+
+Resolved in the 2026-06 hardening passes: baseline Prisma migration (squashed,
+`migrate deploy` proven in CI), the dead `/api/cron/etl-artist-trajectory`
+route (now runs the ETL inline), browser-exposed API keys (session auth), and
+ETL typecheck coverage.

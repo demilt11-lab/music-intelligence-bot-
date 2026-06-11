@@ -1,4 +1,5 @@
-import { getUiTenantId } from '@/lib/platform/ui-tenant';
+import { NextRequest } from 'next/server';
+import { requireSession, AuthError } from '@/lib/auth/guard';
 import { listWatchlist } from '@/lib/watchlist/service';
 import { toCsvResponse } from '@/lib/export/csv';
 
@@ -15,10 +16,10 @@ const CSV_COLUMNS = [
   'trendLabel',
 ];
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const tenantId = await getUiTenantId();
-    const items = await listWatchlist(tenantId);
+    const user = await requireSession(req);
+    const items = await listWatchlist(user.tenantId);
 
     const rows = items.map((item) => ({
       entityType: item.entityType,
@@ -34,6 +35,9 @@ export async function GET() {
 
     return toCsvResponse(rows, CSV_COLUMNS, 'watchlist-export.csv');
   } catch (err) {
+    if (err instanceof AuthError) {
+      return Response.json({ error: err.message }, { status: err.status });
+    }
     console.error('[ui/watchlist/export] failed:', err);
     return Response.json({ error: 'Failed to export watchlist' }, { status: 500 });
   }

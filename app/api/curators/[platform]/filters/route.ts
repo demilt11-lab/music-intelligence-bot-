@@ -15,7 +15,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  CURATOR_PLATFORM_CONFIGS,
   getCuratorPlatformConfig,
 } from '@/lib/curators/list/platform-config';
 import { CURATOR_PLATFORMS, type CuratorPlatform } from '@/lib/curators/list/types';

@@ -10,6 +10,7 @@
 // query failures are fatal (no silent empty results) — a missing day of
 // data must surface in job logs, not masquerade as "no streams".
 import { db } from "@/lib/db";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 type StreamRow = {
   artist_id: bigint;
@@ -195,7 +196,7 @@ export async function buildArtistDailyStats(dateStr: string) {
 
 if (require.main === module) {
   const dateArg = process.argv[2] || new Date().toISOString().slice(0, 10);
-  buildArtistDailyStats(dateArg)
+  runTrackedJob('etl:artist-daily', () => buildArtistDailyStats(dateArg))
     .then(({ artists }) => {
       console.log(`ArtistDailyStats built for ${dateArg} (${artists} artists)`);
       process.exit(0);

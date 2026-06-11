@@ -1,0 +1,40 @@
+name: Pipeline Alerts
+
+# Fires after any data-pipeline workflow finishes; posts to Slack on failure.
+# No-op when SLACK_WEBHOOK_URL isn't configured.
+on:
+  workflow_run:
+    workflows:
+      - "Ingest Spotify"
+      - "Ingest TikTok"
+      - "Ingest YouTube"
+      - "Ingest Instagram Reels"
+      - "Ingest Billboard Charts"
+      - "Ingest Shazam"
+      - "Ingest Google Trends"
+      - "Artist ETL"
+      - "ETL — Compute Signals"
+      - "Data Reconciliation"
+      - "ML Pipeline — Predictive A&R"
+      - "Evaluate Predictions"
+      - "anomaly-detection"
+    types: [completed]
+
+jobs:
+  notify:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post failure to Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          WF_NAME: ${{ github.event.workflow_run.name }}
+          WF_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL not configured — skipping notification"
+            exit 0
+          fi
+          curl -sf -X POST -H 'Content-Type: application/json' \
+            -d "{\"text\":\"🔴 Pipeline failure: ${WF_NAME} — ${WF_URL}\"}" \
+            "$SLACK_WEBHOOK_URL"

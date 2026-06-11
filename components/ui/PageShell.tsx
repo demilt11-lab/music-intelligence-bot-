@@ -1,12 +1,49 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 type PageShellProps = {
   title: string
   description?: string
   actions?: React.ReactNode
   children: React.ReactNode
+}
+
+function SessionChip() {
+  const router = useRouter()
+  const [user, setUser] = React.useState<{ email: string; authEnabled: boolean } | null>(null)
+
+  React.useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (body?.obj) setUser({ email: body.obj.email, authEnabled: body.obj.authEnabled })
+      })
+      .catch(() => {})
+  }, [])
+
+  async function handleSignOut() {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {})
+    router.push('/login')
+    router.refresh()
+  }
+
+  if (!user?.authEnabled) return null
+
+  return (
+    <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 backdrop-blur-sm">
+      <span className="max-w-[180px] truncate text-xs text-zinc-400">{user.email}</span>
+      <button
+        type="button"
+        onClick={handleSignOut}
+        className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-zinc-300 transition hover:border-rose-400/20 hover:bg-rose-500/10 hover:text-rose-300"
+      >
+        Sign out
+      </button>
+    </div>
+  )
 }
 
 export function PageShell({
@@ -44,23 +81,14 @@ export function PageShell({
               </div>
 
               <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center xl:justify-end">
-                <div className="grid grid-cols-2 gap-3 sm:min-w-[260px]">
-                  <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-sm">
-                    <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
-                      Watchlist
-                    </p>
-                    <p className="mt-1 text-lg font-semibold text-white">128</p>
-                  </div>
-
-                  <div className="rounded-2xl border border-emerald-400/15 bg-emerald-500/10 px-4 py-3 backdrop-blur-sm">
-                    <p className="text-[10px] uppercase tracking-[0.22em] text-emerald-200/70">
-                      Breakout Signals
-                    </p>
-                    <p className="mt-1 text-lg font-semibold text-emerald-300">17</p>
-                  </div>
-                </div>
-
+                <Link
+                  href="/"
+                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-zinc-300 transition hover:bg-white/10"
+                >
+                  Home
+                </Link>
                 {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+                <SessionChip />
               </div>
             </div>
           </div>

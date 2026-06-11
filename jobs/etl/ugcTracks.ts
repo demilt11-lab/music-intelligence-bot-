@@ -9,6 +9,7 @@
 // Country granularity: TrackPlatformStatsDaily is not segmented by country,
 // so rows produced here use code2 = 'GLOBAL'.
 import { db } from '@/lib/db';
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 const GLOBAL = 'GLOBAL';
 
@@ -111,7 +112,7 @@ export async function runUgcTrackEtl(referenceDate?: string) {
 }
 
 if (require.main === module) {
-  runUgcTrackEtl(process.argv[2])
+  runTrackedJob('etl:ugc', () => runUgcTrackEtl(process.argv[2]))
     .then(({ written }) => {
       console.log(`UgcTrackMetrics ETL complete (${written} rows)`);
       process.exit(0);

@@ -20,6 +20,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { getShazamCharts, ShazamChartTrack } from "@/lib/shazam/client";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 const db = new PrismaClient();
 
@@ -376,7 +377,7 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
+runTrackedJob('ingest:shazam', main).catch((err) => {
   console.error("[shazam] Fatal error:", err);
   process.exit(1);
 });
