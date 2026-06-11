@@ -171,13 +171,12 @@ jobs:
         run: npx tsx jobs/etl/reconcile.ts
 
   # ── Dependency security audit (production deps, high+) ──────────────────────
-  # Report-only until the Next.js 15/16 migration lands: the remaining high
-  # advisories are framework-level and only fixable via that major upgrade
-  # (tracked in DEPLOYMENT.md §9). New advisories still surface here on every PR.
+  # Blocking: the Next 16 migration cleared the framework advisories. The one
+  # remaining moderate finding (postcss pinned inside next's own bundle) is
+  # below this gate's threshold and only fixable upstream by Next.
   security-audit:
-    name: npm audit (prod deps, high+) — report
+    name: npm audit (prod deps, high+)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -29,8 +29,9 @@ import { successResponse, handleApiError } from '@/lib/shared/response';
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { type: string; id: string; entity: string } },
+  props: { params: Promise<{ type: string; id: string; entity: string }> }
 ) {
+  const params = await props.params;
   try {
     const validated = validateAirplayByEntityParams(
       params.type,

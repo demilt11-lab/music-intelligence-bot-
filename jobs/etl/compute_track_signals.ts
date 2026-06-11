@@ -714,7 +714,7 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
 
   const results: TrackSignals[] = [];
 
-  for (const [key, s] of platformSignals.entries()) {
+  for (const s of platformSignals.values()) {
     const accel = accelerationMap.get(s.trackId);
     const diffusion = diffusionMap.get(s.trackId);
     const organic = organicMap.get(s.trackId);

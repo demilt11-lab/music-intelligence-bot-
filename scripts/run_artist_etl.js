@@ -1,5 +1,5 @@
 // scripts/run_artist_etl.js
-/* eslint-disable @typescript-eslint/no-var-requires */
+ 
 const { spawnSync } = require("node:child_process");
 
 function run(cmd) {

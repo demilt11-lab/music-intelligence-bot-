@@ -37,7 +37,7 @@ export interface IgHashtagMediaResponse {
   };
 }
 
-export interface IgMediaDetailsResponse extends IgMediaItem {}
+export type IgMediaDetailsResponse = IgMediaItem;
 
 // ─── Token cache ──────────────────────────────────────────────────────────────
 

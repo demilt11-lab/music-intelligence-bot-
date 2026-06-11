@@ -83,7 +83,7 @@ async function ingestTrack(track: TrackRow, snapshotDate: Date): Promise<boolean
   let result;
   try {
     result = await getInterestOverTime(query, "", 7);
-  } catch (err) {
+  } catch {
     console.warn(`[googletrends] Unofficial API failed for "${query}", trying SearchAPI fallback…`);
     try {
       if (!process.env.SEARCHAPI_KEY) throw new Error('no SEARCHAPI_KEY');

@@ -32,10 +32,8 @@ import { successResponse } from '@/lib/shared/response';
  * @param context - Route context containing the `chartType` path segment.
  * @returns JSON success or error response.
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { chartType: string } },
-): Promise<NextResponse> {
+export async function GET(request: NextRequest, props: { params: Promise<{ chartType: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   try {
     const chartParams = validateYouTubeShortsChartParams(
       request.nextUrl.searchParams,

@@ -116,7 +116,7 @@ function ChartSkeleton({ className, animated = true }: SkeletonProps) {
           <SkeletonBox
             key={i}
             className="flex-1 rounded-sm"
-            height={`${30 + Math.sin(i * 1.2) * 20 + Math.random() * 40}%`}
+            height={`${30 + Math.sin(i * 1.2) * 20 + ((i * 37) % 40)}%`}
             animated={animated}
           />
         ))}

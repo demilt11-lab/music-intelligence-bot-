@@ -33,10 +33,8 @@ import { successResponse, handleApiError } from '@/lib/shared/response';
  * @param req    - Incoming Next.js request.
  * @param params - Destructured path parameters from the dynamic route.
  */
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { type: string; id: string } },
-) {
+export async function GET(req: NextRequest, props: { params: Promise<{ type: string; id: string }> }) {
+  const params = await props.params;
   try {
     const validated = validateAirplayTotalsParams(
       params.type,

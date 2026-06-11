@@ -9,9 +9,10 @@ function generateApiKey(): { raw: string; hash: string } {
   return { raw, hash };
 }
 
-type RouteParams = { params: { tenantId: string } };
+type RouteParams = { params: Promise<{ tenantId: string }> };
 
-export async function POST(req: NextRequest, { params }: RouteParams) {
+export async function POST(req: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const tenantId = Number(params.tenantId);
   if (!Number.isFinite(tenantId)) {
     return NextResponse.json(

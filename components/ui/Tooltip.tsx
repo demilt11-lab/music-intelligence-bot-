@@ -66,7 +66,7 @@ export function Tooltip({
   const uid = useId();
   const [visible, setVisible] = useState(false);
   const [actualPos, setActualPos] = useState<TooltipPosition>(position);
-  const showTimer = useRef<ReturnType<typeof setTimeout>>();
+  const showTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const triggerRef = useRef<HTMLElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 

@@ -75,8 +75,8 @@ export function ViralScoreGauge({
 
   // Animated stroke offset
   const [displayOffset, setDisplayOffset] = useState(animated ? circumference : offset);
-  const animRef = useRef<ReturnType<typeof requestAnimationFrame>>();
-  const startTimeRef = useRef<number>();
+  const animRef = useRef<ReturnType<typeof requestAnimationFrame> | undefined>(undefined);
+  const startTimeRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!animated) {

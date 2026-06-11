@@ -219,7 +219,7 @@ export async function queryCities(
   triggerOnly: boolean,
 ): Promise<unknown[]> {
   const term = likePattern(q);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const where: Record<string, any> = {
     name: { contains: term, mode: 'insensitive' },
   };

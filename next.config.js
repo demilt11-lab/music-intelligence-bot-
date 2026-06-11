@@ -62,10 +62,9 @@ const nextConfig = {
   reactStrictMode: true,
   productionBrowserSourceMaps: false,
 
-  experimental: {
-    // Keep Prisma out of the edge bundle
-    serverComponentsExternalPackages: ['@prisma/client', 'prisma'],
-  },
+  // Keep Prisma out of the bundle (stable replacement for the former
+  // experimental.serverComponentsExternalPackages)
+  serverExternalPackages: ['@prisma/client', 'prisma'],
 };
 
 module.exports = nextConfig;

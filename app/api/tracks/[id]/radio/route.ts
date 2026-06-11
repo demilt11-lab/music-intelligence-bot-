@@ -4,13 +4,11 @@ import { handleApiError } from '@/lib/shared/errors'
 import { successResponse } from '@/lib/shared/response'
 
 type RouteParams = {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
-export async function GET(
-  _req: Request,
-  { params }: RouteParams,
-): Promise<NextResponse> {
+export async function GET(_req: Request, props: RouteParams): Promise<NextResponse> {
+  const params = await props.params;
   try {
     const id = Number(params.id)
     if (!id || Number.isNaN(id)) {

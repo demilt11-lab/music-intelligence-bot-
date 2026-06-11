@@ -49,7 +49,7 @@ export interface RawCuratorPlaylistRow {
 export async function queryCuratorPlaylists(
   params: CuratorPlaylistsParams,
 ): Promise<{ data: RawCuratorPlaylistRow[]; total: number }> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const where: Record<string, any> = {
     platform: params.platform,
     curatorPlaylists: {
@@ -87,7 +87,7 @@ export async function queryCuratorPlaylists(
 
   // Flatten metrics and tags into the raw row shape
   const data: RawCuratorPlaylistRow[] = rows.map((row) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const r = row as any;
     const metrics = r.playlistMetricsLatest ?? null;
     const tags = Array.isArray(r.playlistTags)

@@ -9,10 +9,8 @@ import { db } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: { artistId: string } }
-) {
+export async function GET(_request: NextRequest, props: { params: Promise<{ artistId: string }> }) {
+  const params = await props.params;
   const artistId = Number(params.artistId)
   if (!Number.isInteger(artistId) || artistId <= 0) {
     return NextResponse.json({ error: 'Invalid artist id' }, { status: 400 })

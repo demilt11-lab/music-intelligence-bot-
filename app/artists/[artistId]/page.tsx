@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, use } from 'react';
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
 import { SkeletonBox } from '@/components/ui/Skeleton'
 import { TrendSparkline } from '@/components/ui/TrendSparkline'
@@ -136,11 +136,12 @@ function summarize(snapshot: ArtistTrajectorySnapshot | null) {
   return 'This artist currently reads more like a watch candidate than an immediate move, but the profile is still worth keeping in the system.'
 }
 
-export default function ArtistPage({
-  params,
-}: {
-  params: { artistId: string }
-}) {
+export default function ArtistPage(
+  props: {
+    params: Promise<{ artistId: string }>
+  }
+) {
+  const params = use(props.params);
   const [data, setData] = useState<TrajectoryResponse['obj'] | null>(null)
   const [loading, setLoading] = useState(true)
 

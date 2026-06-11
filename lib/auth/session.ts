@@ -122,7 +122,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     // Dev open mode: act as the workspace admin without a cookie.
     return null;
   }
-  const token = cookies().get(SESSION_COOKIE)?.value;
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
   return validateSessionToken(token);
 }
 

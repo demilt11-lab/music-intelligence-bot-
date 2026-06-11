@@ -22,6 +22,8 @@ function authEnabled(): boolean {
  * Edge-side session pre-check: verify the cookie token's HMAC + expiry with
  * Web Crypto (no DB on the edge). Revocation is enforced by the route layer,
  * which re-validates against the sessions table.
+ *
+ * Next 16 renamed the middleware convention to proxy (proxy.ts / proxy()).
  */
 async function hasPlausibleSession(req: NextRequest): Promise<boolean> {
   const secret = process.env.AUTH_SECRET;
@@ -49,7 +51,7 @@ async function hasPlausibleSession(req: NextRequest): Promise<boolean> {
   return expected === mac;
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // CORS preflight

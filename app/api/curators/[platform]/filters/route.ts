@@ -29,10 +29,8 @@ import { successResponse } from '@/lib/shared/response';
  * @param context - Route context containing the `platform` path segment.
  * @returns JSON response with available sorts and supported filters for the platform.
  */
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: { platform: string } },
-): Promise<NextResponse> {
+export async function GET(_request: NextRequest, props: { params: Promise<{ platform: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   try {
     if (!CURATOR_PLATFORMS.includes(params.platform as CuratorPlatform)) {
       throw badRequest(

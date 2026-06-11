@@ -106,10 +106,8 @@ function buildExplanation(snapshot: {
   return factors
 }
 
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: { artistId: string } }
-) {
+export async function GET(_req: NextRequest, props: { params: Promise<{ artistId: string }> }) {
+  const params = await props.params;
   const artistId = Number(params.artistId)
 
   if (!Number.isInteger(artistId) || artistId <= 0) {

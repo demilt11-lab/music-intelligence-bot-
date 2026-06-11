@@ -18,12 +18,11 @@ async function getCurator(curatorId: string) {
 }
 
 type CuratorPageProps = {
-  params: { curatorId: string };
+  params: Promise<{ curatorId: string }>;
 };
 
-export default async function CuratorPage({
-  params,
-}: CuratorPageProps) {
+export default async function CuratorPage(props: CuratorPageProps) {
+  const params = await props.params;
   const curator = await getCurator(params.curatorId);
 
   return (

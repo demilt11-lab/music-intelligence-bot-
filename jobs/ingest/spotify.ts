@@ -11,7 +11,6 @@ import {
   getTrackDetails,
   getPlaylistTracks,
   getPopularTracks,
-  searchTracks,
   delay,
   SpotifyPlaylistItem,
   SpotifyTrack,
@@ -37,8 +36,6 @@ const EDITORIAL_PLAYLISTS: Array<{ id: string; name: string }> = [
 ];
 
 // ─── Top 50 chart markets ─────────────────────────────────────────────────────
-
-const TOP_CHART_MARKETS = ['global', 'US', 'GB', 'AU', 'CA', 'BR', 'DE', 'FR', 'MX'];
 
 const TOP_CHART_PLAYLIST_IDS: Record<string, string> = {
   global: '37i9dQZEVXbMDoHDwVN2tF',

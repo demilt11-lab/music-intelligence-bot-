@@ -7,7 +7,7 @@
  * insert adequate delays between calls (2000ms recommended).
  */
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+ 
 const googleTrends = require('google-trends-api') as {
   interestOverTime: (opts: GoogleTrendsOptions) => Promise<string>;
   relatedQueries: (opts: GoogleTrendsOptions) => Promise<string>;

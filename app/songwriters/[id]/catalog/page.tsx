@@ -21,12 +21,11 @@ async function getSongwriterCatalog(id: string) {
 }
 
 type SongwriterCatalogPageProps = {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 };
 
-export default async function SongwriterCatalogPage({
-  params,
-}: SongwriterCatalogPageProps) {
+export default async function SongwriterCatalogPage(props: SongwriterCatalogPageProps) {
+  const params = await props.params;
   const catalog = await getSongwriterCatalog(params.id);
 
   return (

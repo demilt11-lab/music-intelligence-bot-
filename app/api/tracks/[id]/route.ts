@@ -3,10 +3,11 @@ import { db } from '@/lib/db'
 import { successResponse } from '@/lib/shared/response'
 
 type RouteParams = {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
-export async function GET(_req: Request, { params }: RouteParams) {
+export async function GET(_req: Request, props: RouteParams) {
+  const params = await props.params;
   const id = Number(params.id)
   if (!id || Number.isNaN(id)) {
     return NextResponse.json(

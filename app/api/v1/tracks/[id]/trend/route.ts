@@ -4,11 +4,12 @@ import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { logRequest } from '@/lib/platform/logging';
 import { db } from '@/lib/db';
 
-type RouteParams = { params: { id: string } };
+type RouteParams = { params: Promise<{ id: string }> };
 
 const endpoint = '/api/v1/tracks/[id]/trend';
 
-export async function GET(req: NextRequest, { params }: RouteParams) {
+export async function GET(req: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const startedAt = Date.now();
   let ctx;
 

@@ -4,13 +4,14 @@ import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { logRequest } from '@/lib/platform/logging';
 import { db } from '@/lib/db';
 
-type RouteParams = { params: { id: string } };
+type RouteParams = { params: Promise<{ id: string }> };
 
 const ML_URL =
   process.env.ML_ARTIST_TRAJECTORY_URL ||
   'http://localhost:8000/v1/artist/trajectory/predict';
 
-export async function GET(req: NextRequest, { params }: RouteParams) {
+export async function GET(req: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const startedAt = Date.now();
   let ctx;
   const endpoint = '/api/v1/artists/[id]/trajectory';

@@ -58,7 +58,6 @@ async function fetchTrendingVideos(): Promise<VideoRecord[]> {
 
   const all: VideoRecord[] = [];
   let rank = 1;
-  let researchApiWorking = false;
 
   for (const hashtag of MUSIC_HASHTAGS) {
     console.log(`[tiktok] Fetching videos for #${hashtag}…`);
@@ -84,7 +83,6 @@ async function fetchTrendingVideos(): Promise<VideoRecord[]> {
       }
 
       for (const v of resp.data?.videos ?? []) {
-        researchApiWorking = true;
         all.push({
           videoId: v.id,
           soundId: v.music_id ?? v.music?.id ?? "",

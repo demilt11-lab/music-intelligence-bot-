@@ -1,6 +1,6 @@
 # Deployment Guide
 
-Production deployment runbook for the Music Intelligence API (Next.js 14 on
+Production deployment runbook for the Music Intelligence API (Next.js 16 on
 Vercel + Postgres + an optional Python ML sidecar).
 
 ---
@@ -9,7 +9,7 @@ Vercel + Postgres + an optional Python ML sidecar).
 
 | Component | Tech | Hosting |
 |-----------|------|---------|
-| Web app + REST API | Next.js 14 (App Router) | Vercel |
+| Web app + REST API | Next.js 16 (App Router, Turbopack) | Vercel |
 | Database | PostgreSQL (Prisma ORM) | Supabase (or any managed Postgres) |
 | Rate limiting | Upstash Redis (optional) | Upstash |
 | Scheduled jobs | Vercel Cron + GitHub Actions | Vercel / GitHub |
@@ -172,13 +172,16 @@ deployed, only the artist-trajectory prediction endpoints are affected.
 
 ## 9. Deployment debt (tracked, not yet resolved)
 
-- **Next.js 14 framework advisories.** `npm audit` reports high-severity
-  advisories on the Next 14 line (largely DoS/cache-poisoning classes; several
-  are mitigated by Vercel's platform when not self-hosting) whose only fix is
-  the Next 15/16 **major** migration. That migration is the next scheduled
-  infrastructure task — do it before self-hosting or handling untrusted
-  multi-tenant traffic. CI runs a report-only `npm audit` on every PR so new
-  advisories stay visible.
+- **One moderate npm advisory.** postcss <8.5.10 pinned *inside Next's own
+  bundle* (`node_modules/next/node_modules/postcss`) — present in every Next
+  release through 16.x and only fixable upstream by Next. Our top-level
+  postcss is patched. CI's blocking `npm audit --audit-level=high` gate is
+  unaffected.
+
+Resolved 2026-06-11: **Next.js 16.2.9 + React 19 migration** — clears all
+high-severity framework advisories. Includes async request APIs (codemod),
+`middleware.ts` → `proxy.ts`, `serverExternalPackages`, ESLint 9 flat config
+(`next lint` was removed), Turbopack builds, and React 19 type updates.
 
 Resolved in the 2026-06 hardening passes: baseline Prisma migration (squashed,
 `migrate deploy` proven in CI), the dead `/api/cron/etl-artist-trajectory`
