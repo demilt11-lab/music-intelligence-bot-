@@ -32,6 +32,9 @@ jobs:
           # applies additive changes automatically but ABORTS (non-zero exit) on
           # any destructive change (dropped column/table), forcing human review.
           # Never re-add --accept-data-loss to an automated production workflow.
+          # Self-arming: records the squashed baseline on db-push-managed
+          # databases (no-op on fresh or already-migrated ones).
+          DATABASE_URL="$SESSION_URL" DIRECT_URL="$SESSION_URL" npx tsx scripts/ensure-baseline.ts
           DATABASE_URL="$SESSION_URL" DIRECT_URL="$SESSION_URL" npx prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
