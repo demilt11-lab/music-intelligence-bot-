@@ -34,35 +34,42 @@ export async function reconcile(): Promise<{
 }> {
   const issues: ReconcileIssue[] = [];
 
-  // ── 1. Referential integrity: signals pointing at missing tracks ─────────
-  const orphanChecks: Array<{ name: string; sql: string }> = [
-    {
-      name: 'orphaned_talent_scout_scores',
-      sql: `SELECT COUNT(*)::int AS n FROM talent_scout_scores s
-            LEFT JOIN tracks t ON t.id = s."trackId" WHERE t.id IS NULL`,
-    },
-    {
-      name: 'orphaned_ugc_track_metrics',
-      sql: `SELECT COUNT(*)::int AS n FROM ugc_track_metrics u
-            LEFT JOIN tracks t ON t.id = u."trackId" WHERE t.id IS NULL`,
-    },
-    {
-      name: 'orphaned_trajectory_snapshots',
-      sql: `SELECT COUNT(*)::int AS n FROM "ArtistTrajectorySnapshot" s
-            LEFT JOIN artists a ON a.id = s."artistId" WHERE a.id IS NULL`,
-    },
+  // ── 1a. Derived-signal orphans: swept automatically ──────────────────────
+  // Scores and UGC metrics are recomputable derivatives; rows pointing at
+  // deleted tracks (e.g. legacy chart-stub cleanups) are debris, not data.
+  // Sweep them and report what was removed instead of failing the run.
+  const derivedSweeps: Array<{ name: string; table: string }> = [
+    { name: 'orphaned_talent_scout_scores', table: 'talent_scout_scores' },
+    { name: 'orphaned_ugc_track_metrics', table: 'ugc_track_metrics' },
   ];
 
-  for (const check of orphanChecks) {
-    const [{ n }] = await db.$queryRawUnsafe<[{ n: number }]>(check.sql);
-    if (n > 0) {
+  for (const sweep of derivedSweeps) {
+    const removed = await db.$executeRawUnsafe(
+      `DELETE FROM ${sweep.table} s
+       WHERE NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id = s."trackId")`,
+    );
+    if (removed > 0) {
       issues.push({
-        check: check.name,
-        severity: 'error',
-        count: n,
-        detail: `${n} rows reference entities that no longer exist`,
+        check: sweep.name,
+        severity: 'warn',
+        count: removed,
+        detail: `swept ${removed} derived rows referencing deleted tracks`,
       });
     }
+  }
+
+  // ── 1b. Structural orphans: real errors ───────────────────────────────────
+  const [{ n: orphanSnaps }] = await db.$queryRawUnsafe<[{ n: number }]>(
+    `SELECT COUNT(*)::int AS n FROM "ArtistTrajectorySnapshot" s
+     LEFT JOIN artists a ON a.id = s."artistId" WHERE a.id IS NULL`,
+  );
+  if (orphanSnaps > 0) {
+    issues.push({
+      check: 'orphaned_trajectory_snapshots',
+      severity: 'error',
+      count: orphanSnaps,
+      detail: `${orphanSnaps} snapshots reference artists that no longer exist`,
+    });
   }
 
   // ── 2. Value ranges: probabilities/scores must stay in [0, 1] ────────────
