@@ -1,284 +1,282 @@
 // jobs/etl/genres.ts
+//
+// Aggregates per-genre momentum metrics for the genre breakout detector:
+//   UgcGenreMetrics      <- UgcTrackMetrics (TikTok UGC)
+//   GenrePlaylistMetrics <- TrackPlatformStatsDaily (Spotify streams/adds)
+//   GenreAirplayMetrics  <- LuminateAirplay (US radio)
+//
+// A track's genre comes from real associations only: TrackTag(category=genre)
+// first, then TrackTrendLabel.genre. Tracks without either are grouped under
+// 'Unknown' so totals remain traceable instead of silently dropped.
+import { db } from '@/lib/db';
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
-import { PrismaClient } from '@prisma/client';
+const GLOBAL = 'GLOBAL';
+const ALL_FORMATS = 'ALL';
+const SEP = '::';
 
-const db = new PrismaClient();
+function utcDateOnly(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+function pctGrowthNum(curr: number, prev: number): number {
+  if (prev <= 0) return 0;
+  return ((curr - prev) / prev) * 100;
+}
+
+function pctGrowthBig(curr: bigint, prev: bigint): number {
+  if (prev <= 0n) return 0;
+  return Number(((curr - prev) * 10_000n) / prev) / 100;
+}
+
+/** Map trackId -> genre using TrackTag(category='genre'), then TrackTrendLabel. */
+async function loadTrackGenres(trackIds: number[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  if (!trackIds.length) return out;
+
+  const tagged = await db.trackTag.findMany({
+    where: {
+      trackId: { in: trackIds },
+      tag: { category: 'genre' },
+    },
+    include: { tag: true },
+  });
+  for (const t of tagged) {
+    if (!out.has(t.trackId)) out.set(t.trackId, t.tag.name);
+  }
+
+  const remaining = trackIds.filter((id) => !out.has(id));
+  if (remaining.length) {
+    const labels = await db.trackTrendLabel.findMany({
+      where: { trackId: { in: remaining }, genre: { not: null } },
+      select: { trackId: true, genre: true },
+    });
+    for (const l of labels) {
+      if (l.genre && !out.has(l.trackId)) out.set(l.trackId, l.genre);
+    }
+  }
+
+  return out;
+}
 
 export async function runGenreEtl(referenceDate?: string) {
   const today = referenceDate ? new Date(referenceDate) : new Date();
-  const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  if (Number.isNaN(today.getTime())) {
+    throw new Error(`Invalid reference date: ${referenceDate}`);
+  }
+  const date = utcDateOnly(today);
   const sevenDaysAgo = new Date(date);
   sevenDaysAgo.setUTCDate(date.getUTCDate() - 7);
-  const prevSevenDaysAgo = new Date(sevenDaysAgo);
-  prevSevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
+  const fourteenDaysAgo = new Date(sevenDaysAgo);
+  fourteenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
 
-  await aggregateUgcGenre(date, sevenDaysAgo, prevSevenDaysAgo);
-  await aggregatePlaylistGenre(date, sevenDaysAgo, prevSevenDaysAgo);
-  await aggregateAirplayGenre(date, sevenDaysAgo, prevSevenDaysAgo);
+  await aggregateUgcGenre(date);
+  await aggregatePlaylistGenre(date, sevenDaysAgo, fourteenDaysAgo);
+  await aggregateAirplayGenre(date, sevenDaysAgo, fourteenDaysAgo);
 }
 
-/**
- * Aggregate UGC into UgcGenreMetrics from UgcTrackMetrics + track genres.
- */
-async function aggregateUgcGenre(
-  date: Date,
-  sevenDaysAgo: Date,
-  prevSevenDaysAgo: Date,
-) {
-  // Join UgcTrackMetrics with track genres
-  const ugc = await db.ugcTrackMetrics.findMany({
-    where: {
-      date,
-    },
-    include: {
-      track: true, // assumes relation UgcTrackMetrics.track -> tracks
-    },
-  });
-
-  const byGenreKey = new Map<
-    string,
-    { videos: number; views: bigint; code2: string; leadCountry?: string }
-  >();
-
-  ugc.forEach((row) => {
-    const genre = row.track.primary_genre ?? 'Unknown';
-    const key = `${genre}:${row.code2}`;
-    const existing = byGenreKey.get(key) ?? {
-      videos: 0,
-      views: 0n,
-      code2: row.code2,
-      leadCountry: row.code2,
-    };
-    existing.videos += row.videos7d;
-    existing.views += row.views7d;
-    byGenreKey.set(key, existing);
-  });
-
-  // For growth, you can re-run aggregate for previous window or store previous UgcGenreMetrics
-
-  for (const [key, agg] of byGenreKey.entries()) {
-    const [genre, code2] = key.split(':');
-    // Fetch previous metric for growth
-    const prev = await db.ugcGenreMetrics.findFirst({
-      where: {
-        genre,
-        code2,
-        date: sevenDaysAgo,
-      },
-    });
-
-    const videosPrev = prev?.videos7d ?? 0;
-    const viewsPrev = prev?.views7d ?? 0n;
-
-    const videosGrowth =
-      videosPrev > 0 ? ((agg.videos - videosPrev) / videosPrev) * 100 : 0;
-    const viewsGrowth =
-      Number(viewsPrev) > 0
-        ? ((Number(agg.views - viewsPrev) / Number(viewsPrev)) * 100)
-        : 0;
-
-    await db.ugcGenreMetrics.upsert({
-      where: {
-        genre_code2_date: {
-          genre,
-          code2,
-          date,
-        },
-      },
-      update: {
-        videos7d: agg.videos,
-        videos7dGrowth: videosGrowth,
-        views7d: agg.views,
-        views7dGrowth: viewsGrowth,
-        leadCountry: agg.leadCountry,
-      },
-      create: {
-        genre,
-        code2,
-        date,
-        videos7d: agg.videos,
-        videos7dGrowth: videosGrowth,
-        views7d: agg.views,
-        views7dGrowth: viewsGrowth,
-        leadCountry: agg.leadCountry,
-      },
-    });
+/** UGC: roll UgcTrackMetrics (already 7d windows) up to genre level. */
+async function aggregateUgcGenre(date: Date) {
+  const ugc = await db.ugcTrackMetrics.findMany({ where: { date } });
+  if (!ugc.length) {
+    console.log('[genre-etl] no UgcTrackMetrics for date - skipping UGC rollup');
+    return;
   }
-}
 
-/**
- * Aggregate playlist/streaming into GenrePlaylistMetrics.
- * Assumes track_platform_stats_daily + track.genre metadata.
- */
-async function aggregatePlaylistGenre(
-  date: Date,
-  sevenDaysAgo: Date,
-  prevSevenDaysAgo: Date,
-) {
-  const daily = await db.track_platform_stats_daily.findMany({
-    where: {
-      date: {
-        gte: sevenDaysAgo,
-        lt: date,
-      },
-      platform: 'spotify',
-    },
-    include: {
-      track: true,
-    },
-  });
+  const genreByTrack = await loadTrackGenres(ugc.map((u) => u.trackId));
 
   const byKey = new Map<
     string,
-    { streams: bigint; adds: number; genre: string; country: string; playlistType: string }
+    { genre: string; code2: string; videos: number; views: bigint }
   >();
 
-  daily.forEach((row) => {
-    const genre = row.track.primary_genre ?? 'Unknown';
-    const country = row.code2 ?? 'GLOBAL';
-    const playlistType = row.playlist_type ?? 'unknown';
-    const key = `${genre}:${country}:${playlistType}`;
-    const existing = byKey.get(key) ?? {
-      streams: 0n,
-      adds: 0,
-      genre,
-      country,
-      playlistType,
-    };
-    existing.streams += BigInt(row.streams ?? 0n);
-    existing.adds += row.playlist_adds ?? 0;
-    byKey.set(key, existing);
-  });
+  for (const row of ugc) {
+    const genre = genreByTrack.get(row.trackId) ?? 'Unknown';
+    const key = `${genre}${SEP}${row.code2}`;
+    const agg = byKey.get(key) ?? { genre, code2: row.code2, videos: 0, views: 0n };
+    agg.videos += row.videos7d;
+    agg.views += row.views7d;
+    byKey.set(key, agg);
+  }
 
-  for (const [key, agg] of byKey.entries()) {
-    const [genre, country, playlistType] = key.split(':');
+  const prevDate = new Date(date);
+  prevDate.setUTCDate(prevDate.getUTCDate() - 7);
 
-    const prev = await db.genrePlaylistMetrics.findFirst({
-      where: {
-        genre,
-        country,
-        playlistType,
-        date: sevenDaysAgo,
-      },
+  for (const agg of byKey.values()) {
+    const prev = await db.ugcGenreMetrics.findFirst({
+      where: { genre: agg.genre, code2: agg.code2, date: prevDate },
     });
 
-    const prevStreams = prev?.streams7d ?? 0n;
+    const data = {
+      videos7d: agg.videos,
+      videos7dGrowth: pctGrowthNum(agg.videos, prev?.videos7d ?? 0),
+      views7d: agg.views,
+      views7dGrowth: pctGrowthBig(agg.views, prev?.views7d ?? 0n),
+      leadCountry: agg.code2 === GLOBAL ? null : agg.code2,
+    };
 
-    const streamsGrowth =
-      Number(prevStreams) > 0
-        ? ((Number(agg.streams - prevStreams) / Number(prevStreams)) * 100)
-        : 0;
+    await db.ugcGenreMetrics.upsert({
+      where: {
+        genre_code2_date: { genre: agg.genre, code2: agg.code2, date },
+      },
+      update: data,
+      create: { genre: agg.genre, code2: agg.code2, date, ...data },
+    });
+  }
+
+  console.log(`[genre-etl] UGC rollup wrote ${byKey.size} genre rows`);
+}
+
+/** Spotify streams + playlist adds per genre over the trailing 7 days. */
+async function aggregatePlaylistGenre(
+  date: Date,
+  sevenDaysAgo: Date,
+  fourteenDaysAgo: Date,
+) {
+  const window = async (gte: Date, lt: Date) =>
+    db.trackPlatformStatsDaily.groupBy({
+      by: ['trackId'],
+      where: { platform: 'spotify', date: { gte, lt } },
+      _sum: { streams: true, playlistAdds: true },
+    });
+
+  const [current, previous] = await Promise.all([
+    window(sevenDaysAgo, date),
+    window(fourteenDaysAgo, sevenDaysAgo),
+  ]);
+
+  if (!current.length) {
+    console.log('[genre-etl] no spotify daily stats in window - skipping playlist rollup');
+    return;
+  }
+
+  const genreByTrack = await loadTrackGenres(current.map((r) => r.trackId));
+
+  type Agg = { streams: bigint; adds: number };
+  const sumByGenre = (rows: typeof current): Map<string, Agg> => {
+    const m = new Map<string, Agg>();
+    for (const r of rows) {
+      const genre = genreByTrack.get(r.trackId) ?? 'Unknown';
+      const agg = m.get(genre) ?? { streams: 0n, adds: 0 };
+      agg.streams += r._sum.streams ?? 0n;
+      agg.adds += Number(r._sum.playlistAdds ?? 0n);
+      m.set(genre, agg);
+    }
+    return m;
+  };
+
+  const currByGenre = sumByGenre(current);
+  const prevByGenre = sumByGenre(previous);
+
+  // TrackPlatformStatsDaily has no per-country split - aggregate as GLOBAL.
+  for (const [genre, agg] of currByGenre.entries()) {
+    const prev = prevByGenre.get(genre);
+
+    const data = {
+      streams7d: agg.streams,
+      streams7dGrowth: pctGrowthBig(agg.streams, prev?.streams ?? 0n),
+      adds7d: agg.adds,
+    };
 
     await db.genrePlaylistMetrics.upsert({
       where: {
         genre_country_date_playlistType: {
           genre,
-          country,
+          country: GLOBAL,
           date,
-          playlistType,
+          playlistType: 'all',
         },
       },
-      update: {
-        streams7d: agg.streams,
-        streams7dGrowth: streamsGrowth,
-        adds7d: agg.adds,
-      },
-      create: {
-        genre,
-        country,
-        date,
-        playlistType,
-        streams7d: agg.streams,
-        streams7dGrowth: streamsGrowth,
-        adds7d: agg.adds,
-      },
+      update: data,
+      create: { genre, country: GLOBAL, date, playlistType: 'all', ...data },
     });
   }
+
+  console.log(`[genre-etl] playlist rollup wrote ${currByGenre.size} genre rows`);
 }
 
-/**
- * Aggregate Luminate airplay into GenreAirplayMetrics.
- */
+/** US radio spins/audience per genre from Luminate airplay facts. */
 async function aggregateAirplayGenre(
   date: Date,
   sevenDaysAgo: Date,
-  prevSevenDaysAgo: Date,
+  fourteenDaysAgo: Date,
 ) {
-  const airplay = await db.luminateAirplay.findMany({
-    where: {
-      date: {
-        gte: sevenDaysAgo,
-        lt: date,
-      },
-      locationId: 'US',
-    },
-    include: {
-      track: true,
-    },
-  });
-
-  const byKey = new Map<
-    string,
-    { genre: string; country: string; formatId: string | null; spins: number; audience: bigint }
-  >();
-
-  airplay.forEach((row) => {
-    const genre = row.track.primary_genre ?? 'Unknown';
-    const country = 'US';
-    const formatId = row.formatId ?? 'ALL';
-    const key = `${genre}:${country}:${formatId}`;
-    const existing = byKey.get(key) ?? {
-      genre,
-      country,
-      formatId,
-      spins: 0,
-      audience: 0n,
-    };
-    existing.spins += Number(row.spins ?? 0);
-    existing.audience += BigInt(row.audience ?? 0n);
-    byKey.set(key, existing);
-  });
-
-  for (const [key, agg] of byKey.entries()) {
-    const [genre, country, formatId] = key.split(':');
-
-    const prev = await db.genreAirplayMetrics.findFirst({
+  const loadWindow = (gte: Date, lt: Date) =>
+    db.luminateAirplay.findMany({
       where: {
-        genre,
-        country,
-        formatId: formatId === 'ALL' ? null : formatId,
-        date: sevenDaysAgo,
+        entityType: 'track',
+        date: { gte, lt },
+        locationId: 'US',
       },
+      select: { entityId: true, spins: true, audience: true, formatId: true },
     });
 
-    const prevSpins = prev?.spins7d ?? 0;
+  const [current, previous] = await Promise.all([
+    loadWindow(sevenDaysAgo, date),
+    loadWindow(fourteenDaysAgo, sevenDaysAgo),
+  ]);
 
-    const spinsGrowth =
-      prevSpins > 0 ? ((agg.spins - prevSpins) / prevSpins) * 100 : 0;
+  if (!current.length) {
+    console.log('[genre-etl] no Luminate airplay in window - skipping airplay rollup');
+    return;
+  }
+
+  const genreByTrack = await loadTrackGenres(
+    Array.from(new Set(current.map((r) => r.entityId))),
+  );
+
+  type Agg = { genre: string; formatId: string; spins: number; audience: bigint };
+  const sumRows = (rows: typeof current): Map<string, Agg> => {
+    const m = new Map<string, Agg>();
+    for (const r of rows) {
+      const genre = genreByTrack.get(r.entityId) ?? 'Unknown';
+      const formatId = r.formatId ?? ALL_FORMATS;
+      const key = `${genre}${SEP}${formatId}`;
+      const agg = m.get(key) ?? { genre, formatId, spins: 0, audience: 0n };
+      agg.spins += Number(r.spins ?? 0);
+      agg.audience += BigInt(Math.round(Number(r.audience ?? 0)));
+      m.set(key, agg);
+    }
+    return m;
+  };
+
+  const currByKey = sumRows(current);
+  const prevByKey = sumRows(previous);
+
+  for (const [key, agg] of currByKey.entries()) {
+    const prev = prevByKey.get(key);
+
+    const data = {
+      spins7d: agg.spins,
+      spins7dGrowth: pctGrowthNum(agg.spins, prev?.spins ?? 0),
+      audience7d: agg.audience,
+    };
 
     await db.genreAirplayMetrics.upsert({
       where: {
         genre_country_date_formatId: {
-          genre,
-          country,
+          genre: agg.genre,
+          country: 'US',
           date,
-          formatId: formatId === 'ALL' ? null : formatId,
+          formatId: agg.formatId,
         },
       },
-      update: {
-        spins7d: agg.spins,
-        spins7dGrowth: spinsGrowth,
-        audience7d: agg.audience,
-      },
-      create: {
-        genre,
-        country,
-        date,
-        formatId: formatId === 'ALL' ? null : formatId,
-        spins7d: agg.spins,
-        spins7dGrowth: spinsGrowth,
-        audience7d: agg.audience,
-      },
+      update: data,
+      create: { genre: agg.genre, country: 'US', date, formatId: agg.formatId, ...data },
     });
   }
+
+  console.log(`[genre-etl] airplay rollup wrote ${currByKey.size} genre rows`);
+}
+
+if (require.main === module) {
+  runTrackedJob('etl:genres', () => runGenreEtl(process.argv[2]))
+    .then(() => {
+      console.log('Genre ETL complete');
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
 }

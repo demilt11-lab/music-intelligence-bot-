@@ -1,0 +1,47 @@
+name: Cold Start Ingestion
+
+# One-button cold start: runs every configured provider ingest in dependency
+# order, the full ETL chain, and the reconciliation gate. Providers without
+# secrets are skipped loudly. Safe to re-run (idempotent jobs).
+on:
+  workflow_dispatch:
+    inputs:
+      skip_ingest:
+        description: "Skip Phase 1 ingestion (ETL + reconcile only)"
+        type: boolean
+        default: false
+
+jobs:
+  coldstart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Run cold-start sequence
+        run: bash scripts/coldstart.sh
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          COLDSTART_SKIP_INGEST: ${{ inputs.skip_ingest && '1' || '0' }}
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          SHAZAM_API_KEY: ${{ secrets.SHAZAM_API_KEY }}
+          SHAZAM_BASE_URL: ${{ secrets.SHAZAM_BASE_URL }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          SEARCHAPI_KEY: ${{ secrets.SEARCHAPI_KEY }}
+          META_APP_ID: ${{ secrets.META_APP_ID }}
+          # Repo secret is named META_SECRET; accept either name.
+          META_APP_SECRET: ${{ secrets.META_APP_SECRET || secrets.META_SECRET }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}

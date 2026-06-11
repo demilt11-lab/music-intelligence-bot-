@@ -11,12 +11,12 @@ import {
   getTrackDetails,
   getPlaylistTracks,
   getPopularTracks,
-  searchTracks,
   delay,
   SpotifyPlaylistItem,
   SpotifyTrack,
 } from '@/lib/spotify/client';
 import { resolveSpotifyTrack } from '@/lib/spotify/resolver';
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 const db = new PrismaClient();
 
@@ -36,8 +36,6 @@ const EDITORIAL_PLAYLISTS: Array<{ id: string; name: string }> = [
 ];
 
 // ─── Top 50 chart markets ─────────────────────────────────────────────────────
-
-const TOP_CHART_MARKETS = ['global', 'US', 'GB', 'AU', 'CA', 'BR', 'DE', 'FR', 'MX'];
 
 const TOP_CHART_PLAYLIST_IDS: Record<string, string> = {
   global: '37i9dQZEVXbMDoHDwVN2tF',
@@ -364,7 +362,7 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
+runTrackedJob('ingest:spotify', main).catch((err) => {
   console.error('Fatal error:', err);
   process.exit(1);
 });

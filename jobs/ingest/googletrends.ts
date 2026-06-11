@@ -14,6 +14,7 @@
 import { PrismaClient } from "@prisma/client";
 import { getInterestOverTime, getRisingQueries } from "@/lib/googletrends/client";
 import { googleTrends as searchApiTrends } from "@/lib/searchapi/client";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 const db = new PrismaClient();
 
@@ -82,7 +83,7 @@ async function ingestTrack(track: TrackRow, snapshotDate: Date): Promise<boolean
   let result;
   try {
     result = await getInterestOverTime(query, "", 7);
-  } catch (err) {
+  } catch {
     console.warn(`[googletrends] Unofficial API failed for "${query}", trying SearchAPI fallback…`);
     try {
       if (!process.env.SEARCHAPI_KEY) throw new Error('no SEARCHAPI_KEY');
@@ -131,7 +132,7 @@ async function ingestTrack(track: TrackRow, snapshotDate: Date): Promise<boolean
       `[googletrends] RISING TRACK — trackId=${track.id} ` +
         `"${track.title}" by ${track.artistName} | ` +
         `avg=${result.averageInterest} peak=${result.peakInterest} ` +
-        `related=[${result.relatedQueries.slice(0, 3).join(", ")}]`
+        `related=[${(result.relatedQueries ?? []).slice(0, 3).join(", ")}]`
     );
   }
 
@@ -214,7 +215,7 @@ async function main(): Promise<void> {
   await db.$disconnect();
 }
 
-main().catch((err) => {
+runTrackedJob('ingest:googletrends', main).catch((err) => {
   console.error("[googletrends] Fatal error:", err);
   process.exit(1);
 });

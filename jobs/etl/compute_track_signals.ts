@@ -1,5 +1,6 @@
 // jobs/etl/compute_track_signals.ts
 import { db } from "@/lib/db";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 // ─────────────────────────────────────────────
 // Helpers
@@ -713,7 +714,7 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
 
   const results: TrackSignals[] = [];
 
-  for (const [key, s] of platformSignals.entries()) {
+  for (const s of platformSignals.values()) {
     const accel = accelerationMap.get(s.trackId);
     const diffusion = diffusionMap.get(s.trackId);
     const organic = organicMap.get(s.trackId);
@@ -861,7 +862,7 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
 
 if (require.main === module) {
   const dateArg = process.argv[2] || new Date().toISOString().slice(0, 10);
-  computeTrackSignals(dateArg)
+  runTrackedJob('etl:compute-track-signals', () => computeTrackSignals(dateArg))
     .then(() => {
       console.log("TrackSignals computed for", dateArg);
       process.exit(0);

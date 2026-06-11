@@ -1,6 +1,6 @@
 # Deployment Guide
 
-Production deployment runbook for the Music Intelligence API (Next.js 14 on
+Production deployment runbook for the Music Intelligence API (Next.js 16 on
 Vercel + Postgres + an optional Python ML sidecar).
 
 ---
@@ -9,7 +9,7 @@ Vercel + Postgres + an optional Python ML sidecar).
 
 | Component | Tech | Hosting |
 |-----------|------|---------|
-| Web app + REST API | Next.js 14 (App Router) | Vercel |
+| Web app + REST API | Next.js 16 (App Router, Turbopack) | Vercel |
 | Database | PostgreSQL (Prisma ORM) | Supabase (or any managed Postgres) |
 | Rate limiting | Upstash Redis (optional) | Upstash |
 | Scheduled jobs | Vercel Cron + GitHub Actions | Vercel / GitHub |
@@ -45,17 +45,23 @@ Copy `.env.example` → `.env.local` for local dev. In production set them in
 | `DATABASE_URL` | Postgres connection (transaction pooler, `?pgbouncer=true`). Prisma Client is created at import time, so this **must** be present or the build/runtime fails. |
 | `DIRECT_URL` | Direct/session-pooler connection used for schema migrations. |
 | `CRON_SECRET` | Authenticates Vercel Cron → `/api/cron/*`. **The app fails closed** — if unset, every `/api/cron/*` call returns 401. Generate with `openssl rand -base64 32`. |
+| `AUTH_SECRET` | Signs UI session cookies. **Required in production — the app fails closed (503) without it.** Generate with `openssl rand -base64 32`. Provision users with `npm run create-user -- you@co.com <password> ADMIN`. |
 
 ### Required for specific features
 | Variable | Needed by |
 |----------|-----------|
 | `INTERNAL_API_BASE_URL` | **Server-rendered detail pages** (`/tracks/[id]`, `/curators/[id]`, `/playlists/[id]`, `/songwriters/[id]`) fetch the internal API server-side. Without an absolute base URL these pages render "not found". Set to your deployment URL (e.g. `https://app.example.com`). |
-| `NEXT_PUBLIC_API_KEY` + `NEXT_PUBLIC_API_BASE_URL` | The bundled dashboard pages call the v1 API. Use a **low-privilege, scoped** key — it ships in the browser bundle. |
+| `UI_TENANT_SLUG` | Tenant slug the first-party web UI operates under (default `workspace`, auto-created on first use). The UI no longer ships any API key to the browser — `/api/ui/*` routes resolve the tenant server-side. |
+| `SCOUT_SAMPLE_FALLBACK` | Set to `1` to let the Talent Scout return clearly-labeled sample rows when no UGC/ML/chart data exists (default off: an honest empty state is shown instead). |
 | `ML_ARTIST_TRAJECTORY_URL` | Artist trajectory prediction endpoint (points at the FastAPI ML service). |
 | `UPSTASH_REDIS_URL` + `UPSTASH_REDIS_TOKEN` | Rate limiting. If absent, rate limiting is disabled (all requests allowed). |
 | `ALLOWED_ORIGIN` | CORS allow-origin for `/api/*`. Defaults to `*`; set to your domain. |
-| `INTERNAL_CRON_SECRET` | Auth between the trajectory cron and the internal ETL endpoint. |
 | Data-provider keys | The ingest/ETL jobs (see `.env.example` for the full list). |
+
+> Removed in this hardening pass: `NEXT_PUBLIC_API_KEY` / `NEXT_PUBLIC_API_BASE_URL`
+> (the dashboard previously shipped a tenant API key in the browser bundle) and
+> `INTERNAL_CRON_SECRET` (the trajectory cron now runs the ETL inline instead of
+> calling a separate internal endpoint).
 
 See `.env.example` for the complete, annotated list (kept in sync with the code).
 
@@ -63,23 +69,28 @@ See `.env.example` for the complete, annotated list (kept in sync with the code)
 
 ## 4. Database setup
 
-> ⚠️ **Migration model:** this project deploys its schema with `prisma db push`,
-> **not** `prisma migrate deploy`. The `prisma/migrations/` folder is **not a
-> complete history** — it only contains incremental add-ons (indexes, watchlist/
-> digest/alert tables, prediction outcomes) layered on top of a base schema that
-> was originally created via `db push`. There is no baseline migration, so
-> `migrate deploy` on a fresh DB will fail. See "Deployment debt" below.
+> ✅ **Migration model:** as of 2026-06-11 the schema deploys with
+> `npx prisma migrate deploy` from a squashed baseline
+> (`prisma/migrations/20260611000000_baseline`). Fresh databases work
+> directly; databases previously managed via `db push` must run
+> `npx prisma migrate resolve --applied 20260611000000_baseline` once first
+> (see prisma/migrations/README.md).
 
 **First deploy (fresh database):**
 ```bash
-DATABASE_URL=<direct-5432-url> DIRECT_URL=<direct-5432-url> npx prisma db push
+DATABASE_URL=<direct-5432-url> DIRECT_URL=<direct-5432-url> npx prisma migrate deploy
 ```
 
-**Subsequent schema changes:** trigger the **Database Migrations** GitHub Action
-(`.github/workflows/db_migrate.yml`, `workflow_dispatch`). It runs `prisma db push`
-against the session pooler. Note: `--accept-data-loss` was intentionally removed —
-the push **aborts** on any destructive change so a human can review it. Never
-re-add that flag to an automated workflow.
+**Existing database previously managed by `db push`:** mark the baseline applied once:
+```bash
+npx prisma migrate resolve --applied 20260611000000_baseline
+npx prisma migrate deploy
+```
+
+**Subsequent schema changes:** create a migration locally with
+`npx prisma migrate dev --name <change>`, commit it, and run
+`npx prisma migrate deploy` against production (or trigger the Database
+Migrations workflow).
 
 ---
 
@@ -123,10 +134,13 @@ on schedules / manual dispatch. They require these repo secrets:
 `FIRECRAWL_API_KEY`, `SEARCHAPI_KEY`, `META_*`, `LUMINATE_*`, `SOUNDCHARTS_*`,
 `SONGSTATS_*`).
 
-> The **artist-trajectory ETL** runs via the `artist_etl.yml` workflow
-> (`npm run etl:artist-all`), **not** via the `/api/cron/etl-artist-trajectory`
-> route — that route targets an internal ETL endpoint that does not exist in
-> this codebase and is therefore left out of the Vercel cron schedule.
+> The **artist-trajectory ETL** runs via the `artist_etl.yml` workflow daily
+> at 8:30 UTC (after ingestion). The `/api/cron/etl-artist-trajectory` route
+> also runs the same ETL inline (idempotent) and can be scheduled on Vercel
+> Pro for an intraday refresh. A daily **Data Reconciliation** workflow (9:30
+> UTC) verifies cross-table invariants and signal freshness, and
+> **Pipeline Alerts** posts any workflow failure to Slack when
+> `SLACK_WEBHOOK_URL` is configured.
 
 ---
 
@@ -158,13 +172,18 @@ deployed, only the artist-trajectory prediction endpoints are affected.
 
 ## 9. Deployment debt (tracked, not yet resolved)
 
-- **No baseline Prisma migration.** Schema is managed by `db push`. To move to a
-  proper migration history, generate a baseline with
-  `prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma`
-  against a checkpoint, add a `migration_lock.toml`, then switch deploys to
-  `prisma migrate deploy`. Requires validation against a copy of prod.
-- **Residual npm advisories.** `npm audit` reports 2 low-impact transitive
-  advisories whose only fix is a Next.js **major** (preview) upgrade — deferred.
-  The critical/high Next.js CVEs were resolved by upgrading to 14.2.x.
-- **`/api/cron/etl-artist-trajectory`** is a dead route (its target endpoint
-  doesn't exist); ETL runs via GitHub Actions instead.
+- **One moderate npm advisory.** postcss <8.5.10 pinned *inside Next's own
+  bundle* (`node_modules/next/node_modules/postcss`) — present in every Next
+  release through 16.x and only fixable upstream by Next. Our top-level
+  postcss is patched. CI's blocking `npm audit --audit-level=high` gate is
+  unaffected.
+
+Resolved 2026-06-11: **Next.js 16.2.9 + React 19 migration** — clears all
+high-severity framework advisories. Includes async request APIs (codemod),
+`middleware.ts` → `proxy.ts`, `serverExternalPackages`, ESLint 9 flat config
+(`next lint` was removed), Turbopack builds, and React 19 type updates.
+
+Resolved in the 2026-06 hardening passes: baseline Prisma migration (squashed,
+`migrate deploy` proven in CI), the dead `/api/cron/etl-artist-trajectory`
+route (now runs the ETL inline), browser-exposed API keys (session auth), and
+ETL typecheck coverage.

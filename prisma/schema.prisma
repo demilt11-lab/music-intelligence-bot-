@@ -278,16 +278,54 @@ model AlertRule {
 }
 
 model TenantUser {
-  id        Int        @id @default(autoincrement())
-  tenantId  Int
-  email     String
-  role      TenantRole
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id           Int        @id @default(autoincrement())
+  tenantId     Int
+  email        String
+  role         TenantRole
+  passwordHash String?    // scrypt salt:hash — null until the user sets a password
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
-  tenant    Tenant     @relation(fields: [tenantId], references: [id])
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  sessions Session[]
 
   @@unique([tenantId, email])
+  @@index([email])
+}
+
+model Session {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique // SHA-256 of the bearer token; raw token lives only in the cookie
+  userId     Int
+  tenantId   Int
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+
+  user TenantUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// One row per ingest/ETL/cron execution — powers the pipeline status page,
+// staleness alerts, and incident diagnosis.
+model JobRun {
+  id          Int       @id @default(autoincrement())
+  jobName     String
+  status      String    // "running" | "success" | "failed"
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
+  durationMs  Int?
+  rowsWritten Int?
+  error       String?
+  meta        Json?
+
+  @@index([jobName, startedAt])
+  @@index([status, startedAt])
+  @@map("job_runs")
 }
 
 model ApiKey {
@@ -632,6 +670,7 @@ model UgcTrackMetrics {
   updatedAt      DateTime @updatedAt
 
   @@unique([trackId, code2, date])
+  @@index([date, views7d])
   @@map("ugc_track_metrics")
 }
 
@@ -1176,6 +1215,7 @@ model TalentScoutScore {
   updatedAt             DateTime @updatedAt
 
   @@unique([trackId, code2, date])
+  @@index([date, viralScore])
   @@map("talent_scout_scores")
 }
 
@@ -1239,10 +1279,11 @@ model ArtistTrajectorySnapshot {
   maxTrackProbViral   Float?
   createdAt        DateTime @default(now())
 
-  @@index([artistId, date])
+  @@unique([artistId, date])
   @@index([status])
   @@index([primaryGenre])
   @@index([primaryCode2])
+  @@index([date])
 }
 
 model ArtistSpotifyReleaseStats {

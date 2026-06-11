@@ -5,7 +5,6 @@ import { CompanionHeader } from '@/components/talent-scout/CompanionHeader';
 import { ScoutTrackCard, ScoutTrack } from '@/components/talent-scout/ScoutTrackCard';
 import { StatCard } from '@/components/ui/StatCard';
 import { TrackCardSkeleton } from '@/components/ui/Skeleton';
-import { CompanionMessage } from '@/components/ui/CompanionMessage';
 import { formatNumber } from '@/lib/utils';
 
 type ApiResponse = {

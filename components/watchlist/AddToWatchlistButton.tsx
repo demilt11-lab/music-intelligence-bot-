@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils';
 interface AddToWatchlistButtonProps {
   entityType: 'track' | 'artist';
   entityId: number;
-  apiKey: string;
   initialAdded?: boolean;
   className?: string;
 }
@@ -14,50 +13,61 @@ interface AddToWatchlistButtonProps {
 export function AddToWatchlistButton({
   entityType,
   entityId,
-  apiKey,
   initialAdded = false,
   className,
 }: AddToWatchlistButtonProps) {
   const [added, setAdded] = useState(initialAdded);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   async function toggle() {
     setLoading(true);
+    setFailed(false);
     try {
       if (added) {
-        // For simplicity, look up by entity — a real impl would pass watchlistItemId
-        await fetch('/api/v1/watchlist', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
-          body: JSON.stringify({ entityType, entityId }),
-        });
+        const res = await fetch(
+          `/api/ui/watchlist?entityType=${entityType}&entityId=${entityId}`,
+          { method: 'DELETE' },
+        );
+        if (!res.ok) throw new Error(`remove failed (${res.status})`);
         setAdded(false);
       } else {
-        const res = await fetch('/api/v1/watchlist', {
+        const res = await fetch('/api/ui/watchlist', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ entityType, entityId }),
         });
-        if (res.ok) setAdded(true);
+        if (!res.ok) throw new Error(`add failed (${res.status})`);
+        setAdded(true);
       }
+    } catch (err) {
+      console.warn('[watchlist-toggle]', err);
+      setFailed(true);
     } finally {
       setLoading(false);
     }
   }
+
+  const label = failed
+    ? 'Watchlist update failed — click to retry'
+    : added
+      ? 'Remove from watchlist'
+      : 'Add to watchlist';
 
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); toggle(); }}
       disabled={loading}
-      aria-label={added ? 'Remove from watchlist' : 'Add to watchlist'}
-      title={added ? 'Remove from watchlist' : 'Add to watchlist'}
+      aria-label={label}
+      title={label}
       className={cn(
         'p-1.5 rounded-md transition-colors duration-150',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
         added
           ? 'text-emerald-400 hover:text-rose-400'
           : 'text-slate-500 hover:text-emerald-400',
+        failed && 'text-rose-400',
         loading && 'opacity-50 cursor-not-allowed',
         className,
       )}

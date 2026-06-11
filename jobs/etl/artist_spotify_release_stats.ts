@@ -1,11 +1,12 @@
 // jobs/etl/artist_spotify_release_stats.ts
 import { db } from "@/lib/db";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 type ArtistTrackRow = {
   trackId: number;
   releaseDate: Date | null;
   spotifyStreamsTotal: bigint;
-  spotifyStreams28d: bigint;
+  spotifyStreams28d: bigint | null;
 };
 
 function bigintToNum(b: bigint | null | undefined): number {
@@ -37,9 +38,11 @@ export async function buildArtistSpotifyReleaseStats(
   windowDays = 365,
 ) {
   const snapshotDate = new Date(snapshotDateStr);
+  if (Number.isNaN(snapshotDate.getTime())) {
+    throw new Error(`Invalid snapshot date: ${snapshotDateStr}`);
+  }
 
-  // Get all artists (or subset)
-  const artists = await db.artists.findMany({
+  const artists = await db.artist.findMany({
     select: { id: true },
   });
 
@@ -61,7 +64,7 @@ export async function buildArtistSpotifyReleaseStats(
         },
       },
       include: {
-        track_statistics_latest: true,
+        statisticsLatest: true,
       },
       orderBy: {
         releaseDate: "desc",
@@ -74,12 +77,10 @@ export async function buildArtistSpotifyReleaseStats(
     const rows: ArtistTrackRow[] = tracks.map((t) => ({
       trackId: t.id,
       releaseDate: t.releaseDate,
-      spotifyStreamsTotal:
-        t.track_statistics_latest
-          ?.spotifyStreams ?? 0n,
-      spotifyStreams28d:
-        t.track_statistics_latest
-          ?.spotifyStreams28d ?? 0n, // add this field if needed
+      spotifyStreamsTotal: t.statisticsLatest?.totalStreams ?? 0n,
+      // No per-track 28d stream column exists yet — keep null rather than
+      // fabricating a number from a different window.
+      spotifyStreams28d: null,
     }));
 
     const streamsNums = rows.map((r) =>
@@ -199,7 +200,7 @@ if (require.main === module) {
     );
     process.exit(1);
   }
-  buildArtistSpotifyReleaseStats(dateArg)
+  runTrackedJob('etl:release-stats', () => buildArtistSpotifyReleaseStats(dateArg))
     .then(() => {
       console.log(
         "ArtistSpotifyReleaseStats built for",

@@ -1,17 +1,14 @@
 import { NextRequest } from 'next/server';
-import { db } from '@/lib/db';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
 import { logRequest } from '@/lib/platform/logging';
-import { ScoutSources } from '@/lib/engine';
 import { toCsvResponse } from '@/lib/export/csv';
-import { emptyTrack } from '@/lib/talentScout/emptyTrack';
+import { listWatchlist } from '@/lib/watchlist/service';
 
 const endpoint = '/api/v1/watchlist/export';
 
 const CSV_COLUMNS = [
-  'entityType', 'entityId',
-  'addedAt', 'viralScore', 'viralScoreDelta',
-  'trendLabel', 'pitchStatus',
+  'entityType', 'entityId', 'entityName', 'artistNames',
+  'addedAt', 'viralScore', 'viralScoreDelta', 'trendLabel',
 ];
 
 export async function GET(req: NextRequest) {
@@ -21,39 +18,19 @@ export async function GET(req: NextRequest) {
     ctx = await buildRequestContext(req);
     requireScope(ctx, 'watchlist:read');
 
-    const items = await db.watchlistItem.findMany({
-      where: { tenantId: ctx.tenantId },
-      orderBy: { addedAt: 'desc' },
-    });
+    const items = await listWatchlist(ctx.tenantId);
 
-    type WItem = { entityType: string; entityId: number; addedAt: Date; notes: string | null };
-    const trackIds = (items as WItem[])
-      .filter((i) => i.entityType === 'track')
-      .map((i) => i.entityId);
-
-    const hydrated = new Map<number, { viralScore: number | null }>();
-    if (trackIds.length) {
-      const withMl = await ScoutSources.hydrateMlSignals(trackIds.map(emptyTrack));
-      for (const t of withMl) hydrated.set(t.trackId, { viralScore: t.viralScore });
-    }
-
-    const rows = (items as WItem[]).map((item) => {
-      const baseline = item.notes ? (JSON.parse(item.notes) as { baselineViralScore?: number | null }) : null;
-      const live = item.entityType === 'track' ? hydrated.get(item.entityId) : null;
-      const viralScoreDelta =
-        live?.viralScore != null && baseline?.baselineViralScore != null
-          ? (live.viralScore - baseline.baselineViralScore).toFixed(4)
-          : '';
-      return {
-        entityType: item.entityType,
-        entityId: item.entityId,
-        addedAt: item.addedAt.toISOString().slice(0, 10),
-        viralScore: live?.viralScore != null ? live.viralScore.toFixed(4) : '',
-        viralScoreDelta,
-        trendLabel: '',
-        pitchStatus: 'Not Pitched',
-      };
-    });
+    const rows = items.map((item) => ({
+      entityType: item.entityType,
+      entityId: item.entityId,
+      entityName: item.entityName ?? '',
+      artistNames: item.artistNames.join('; '),
+      addedAt: item.addedAt.toISOString().slice(0, 10),
+      viralScore: item.viralScore != null ? item.viralScore.toFixed(4) : '',
+      viralScoreDelta:
+        item.viralScoreDelta != null ? item.viralScoreDelta.toFixed(4) : '',
+      trendLabel: item.trendLabel ?? '',
+    }));
 
     await logRequest(ctx, endpoint, 'GET', 200, startedAt);
     return toCsvResponse(rows, CSV_COLUMNS, 'watchlist-export.csv');

@@ -7,9 +7,10 @@ import { tracksService } from '@/lib/tracks/service';
 import { radioService } from '@/lib/radio';
 import { db } from '@/lib/db';
 
-type RouteParams = { params: { id: string } };
+type RouteParams = { params: Promise<{ id: string }> };
 
-export async function GET(req: NextRequest, { params }: RouteParams) {
+export async function GET(req: NextRequest, props: RouteParams) {
+  const params = await props.params;
   const startedAt = Date.now();
   let ctx;
 

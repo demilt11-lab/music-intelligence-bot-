@@ -1,3 +1,4 @@
+import { fetchWithRetry } from '@/lib/http/retry';
 /**
  * Meta Graph API client for Instagram Reels music ingestion.
  *
@@ -36,7 +37,7 @@ export interface IgHashtagMediaResponse {
   };
 }
 
-export interface IgMediaDetailsResponse extends IgMediaItem {}
+export type IgMediaDetailsResponse = IgMediaItem;
 
 // ─── Token cache ──────────────────────────────────────────────────────────────
 
@@ -69,7 +70,7 @@ async function getAppAccessToken(): Promise<string> {
   url.searchParams.set('client_secret', appSecret);
   url.searchParams.set('grant_type', 'client_credentials');
 
-  const res = await fetch(url.toString());
+  const res = await fetchWithRetry(url.toString(), {}, { label: 'instagram' });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Meta OAuth2 token request failed (${res.status}): ${text}`);
@@ -97,7 +98,7 @@ export async function metaGet<T>(
   }
   url.searchParams.set('access_token', token);
 
-  const res = await fetch(url.toString());
+  const res = await fetchWithRetry(url.toString(), {}, { label: 'instagram' });
 
   if (res.status === 429) {
     console.warn('[instagram] Rate limit hit — waiting 60 s before retry');

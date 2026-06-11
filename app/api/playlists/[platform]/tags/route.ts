@@ -12,7 +12,7 @@ import { badRequest, handleApiError } from '@/lib/shared/errors';
 import { successResponse } from '@/lib/shared/response';
 
 interface RouteContext {
-  params: { platform: string };
+  params: Promise<{ platform: string }>;
 }
 
 /**
@@ -21,7 +21,8 @@ interface RouteContext {
  * @param _request - The incoming Next.js request (unused).
  * @param context  - Route context containing the platform path segment.
  */
-export async function GET(_request: NextRequest, { params }: RouteContext): Promise<NextResponse> {
+export async function GET(_request: NextRequest, props: RouteContext): Promise<NextResponse> {
+  const params = await props.params;
   try {
     const { platform } = params;
     if (!PLAYLIST_PLATFORMS.includes(platform as PlaylistPlatform)) {

@@ -13,6 +13,7 @@
 import { db } from "@/lib/db";
 import { queryVideos, queryCreators, searchSounds } from "@/lib/tiktok/client";
 import { resolveTiktokSound } from "@/lib/tiktok/resolver";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -57,7 +58,6 @@ async function fetchTrendingVideos(): Promise<VideoRecord[]> {
 
   const all: VideoRecord[] = [];
   let rank = 1;
-  let researchApiWorking = false;
 
   for (const hashtag of MUSIC_HASHTAGS) {
     console.log(`[tiktok] Fetching videos for #${hashtag}…`);
@@ -83,7 +83,6 @@ async function fetchTrendingVideos(): Promise<VideoRecord[]> {
       }
 
       for (const v of resp.data?.videos ?? []) {
-        researchApiWorking = true;
         all.push({
           videoId: v.id,
           soundId: v.music_id ?? v.music?.id ?? "",
@@ -578,7 +577,7 @@ async function main(): Promise<void> {
   await db.$disconnect();
 }
 
-main().catch((err) => {
+runTrackedJob('ingest:tiktok', main).catch((err) => {
   console.error("[tiktok] Fatal error:", err);
   process.exit(1);
 });

@@ -6,8 +6,9 @@ from typing import List
 import joblib
 import pandas as pd
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+
+from ml.utils.splits import leakage_safe_split
 
 MODEL_PATH = "output/track_trend_model.joblib"
 SCALER_PATH = "output/track_trend_scaler.joblib"
@@ -46,9 +47,13 @@ def train_model(train_csv: str) -> None:
   X = df[FEATURE_COLS].fillna(0.0)
   y = df["label_id"]
 
-  X_train, X_test, y_train, y_test = train_test_split(
-      X, y, test_size=0.2, random_state=42, stratify=y
+  # Track-disjoint split: the same track must not appear in train and test,
+  # or the model memorizes tracks instead of learning trend structure.
+  train_idx, test_idx, strategy = leakage_safe_split(
+      df, date_col=None, group_col="track_id", test_size=0.2
   )
+  X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+  y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
   scaler = StandardScaler()
   X_train_scaled = scaler.fit_transform(X_train)
@@ -62,7 +67,10 @@ def train_model(train_csv: str) -> None:
   joblib.dump(scaler, SCALER_PATH)
 
   acc = clf.score(X_test_scaled, y_test)
-  print(f"Trained model {MODEL_NAME} {MODEL_VERSION}, test accuracy={acc:.3f}")
+  print(
+      f"Trained model {MODEL_NAME} {MODEL_VERSION} (split={strategy}), "
+      f"test accuracy={acc:.3f}"
+  )
 
 
 def predict(input_csv: str, output_csv: str) -> None:

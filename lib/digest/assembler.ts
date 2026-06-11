@@ -1,4 +1,4 @@
-import { ScoutScore, ScoutSources } from '@/lib/engine';
+import { ScoutSources } from '@/lib/engine';
 import { db } from '@/lib/db';
 import { emptyTrack } from '@/lib/talentScout/emptyTrack';
 import type { TalentScoutTrack as ScoreTrack } from '@/lib/talentScout/score';

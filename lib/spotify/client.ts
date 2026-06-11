@@ -1,4 +1,5 @@
 // lib/spotify/client.ts
+import { fetchWithRetry } from '@/lib/http/retry';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
@@ -34,14 +35,14 @@ async function getAccessToken(): Promise<string> {
 
   const credentials = Buffer.from(`${getClientId()}:${getClientSecret()}`).toString('base64');
 
-  const res = await fetch(SPOTIFY_TOKEN_URL, {
+  const res = await fetchWithRetry(SPOTIFY_TOKEN_URL, {
     method: 'POST',
     headers: {
       Authorization: `Basic ${credentials}`,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: 'grant_type=client_credentials',
-  });
+  }, { label: 'spotify' });
 
   if (!res.ok) {
     const body = await res.text();
@@ -96,13 +97,13 @@ export async function spotifyGet<T>(
     }
   }
 
-  const res = await fetch(url.toString(), {
+  const res = await fetchWithRetry(url.toString(), {
     method: 'GET',
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/json',
     },
-  });
+  }, { label: 'spotify' });
 
   const body = await parseBody(res);
 

@@ -6,6 +6,7 @@ export function emptyTrack(trackId: number): TalentScoutTrack {
     name: '',
     artists: [],
     code2: null,
+    source: 'ml_scores',
     tiktokScore: 0,
     tiktokViews: '0',
     tiktokLikes: '0',

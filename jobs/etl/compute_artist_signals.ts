@@ -1,6 +1,7 @@
 // jobs/etl/compute_artist_signals.ts
 // Feature engineering ETL: compute artist-level signals from aggregated track signals.
 import { db } from "@/lib/db";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 // ─── Math helpers ─────────────────────────────────────────────────────────────
 
@@ -356,7 +357,7 @@ export async function computeArtistSignals(dateStr?: string): Promise<void> {
 
 if (require.main === module) {
   const dateArg = process.argv[2] || new Date().toISOString().slice(0, 10);
-  computeArtistSignals(dateArg)
+  runTrackedJob('etl:compute-artist-signals', () => computeArtistSignals(dateArg))
     .then(() => process.exit(0))
     .catch((err) => {
       console.error(err);

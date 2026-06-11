@@ -20,12 +20,11 @@ async function getPlaylist(playlistId: string) {
 }
 
 type PlaylistPageProps = {
-  params: { playlistId: string };
+  params: Promise<{ playlistId: string }>;
 };
 
-export default async function PlaylistPage({
-  params,
-}: PlaylistPageProps) {
+export default async function PlaylistPage(props: PlaylistPageProps) {
+  const params = await props.params;
   const playlist = await getPlaylist(params.playlistId);
 
   return (

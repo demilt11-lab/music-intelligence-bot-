@@ -22,7 +22,7 @@ async function getTrack(trackId: string) {
 }
 
 type TrackPageProps = {
-  params: { trackId: string }
+  params: Promise<{ trackId: string }>
 }
 
 function formatArtists(track: any) {
@@ -52,7 +52,8 @@ function metricValue(value: unknown): string | number {
   return String(value)
 }
 
-export default async function TrackPage({ params }: TrackPageProps) {
+export default async function TrackPage(props: TrackPageProps) {
+  const params = await props.params;
   const { trackId } = params
   const track = await getTrack(trackId)
 

@@ -1,4 +1,4 @@
-import { toBigIntString, safeNumber } from '@/lib/shared/bigint';
+import { toBigIntString } from '@/lib/shared/bigint';
 import { TrackMetadata, TrackArtist, TrackAlbum, TrackStatistics } from './types';
 
 // ─────────────────────────────────────────────────────────────────────────────

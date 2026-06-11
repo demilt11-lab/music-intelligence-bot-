@@ -21,10 +21,8 @@ import { successResponse } from '@/lib/shared/response';
  * @param params  - Route segment params containing `videoId`.
  * @returns JSON response conforming to {@link TikTokVideoTrendsResponse}.
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { videoId: string } },
-): Promise<NextResponse> {
+export async function GET(request: NextRequest, props: { params: Promise<{ videoId: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   try {
     const searchParams = request.nextUrl.searchParams;
     const validatedParams = validateTikTokVideoTrendsParams(

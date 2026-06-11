@@ -1,14 +1,33 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, use } from 'react';
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
 import { SkeletonBox } from '@/components/ui/Skeleton'
+import { TrendSparkline } from '@/components/ui/TrendSparkline'
 
 type Artist = {
   id: string
   name: string
   code2: string | null
+}
+
+type ExplanationFactor = {
+  factor: string
+  value: number | null
+  display: string
+  direction: 'positive' | 'negative' | 'neutral'
+  note: string
+}
+
+type ModelAccuracy = {
+  modelName: string
+  evaluationDate: string
+  windowDays: number
+  totalPredictions: number
+  accuracy: number
+  precision: number | null
+  recall: number | null
 }
 
 type ArtistDailyStats = {
@@ -56,6 +75,8 @@ type TrajectoryResponse = {
   obj: {
     artist: Artist
     snapshot: ArtistTrajectorySnapshot | null
+    explanation: ExplanationFactor[]
+    modelAccuracy: ModelAccuracy | null
     history: ArtistDailyStats[]
     releases: Release[]
   }
@@ -115,11 +136,12 @@ function summarize(snapshot: ArtistTrajectorySnapshot | null) {
   return 'This artist currently reads more like a watch candidate than an immediate move, but the profile is still worth keeping in the system.'
 }
 
-export default function ArtistPage({
-  params,
-}: {
-  params: { artistId: string }
-}) {
+export default function ArtistPage(
+  props: {
+    params: Promise<{ artistId: string }>
+  }
+) {
+  const params = use(props.params);
   const [data, setData] = useState<TrajectoryResponse['obj'] | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -251,7 +273,12 @@ export default function ArtistPage({
     )
   }
 
-  const { artist, snapshot, history, releases } = data
+  const { artist, snapshot, explanation, modelAccuracy, history, releases } = data
+
+  // Oldest → newest stream series for the sparkline
+  const streamSeries = [...history]
+    .reverse()
+    .map((h) => Number(h.totalStreams))
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col gap-5 px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
@@ -335,22 +362,16 @@ export default function ArtistPage({
 
               <div className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                  Suggested next moves
+                  Streams — last {streamSeries.length} days
                 </p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {[
-                    'Check growth consistency',
-                    'Review playlist lift',
-                    'Inspect releases below',
-                    'Move high-conviction acts into active follow-up',
-                  ].map((action) => (
-                    <span
-                      key={action}
-                      className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-zinc-300"
-                    >
-                      {action}
-                    </span>
-                  ))}
+                <div className="mt-4">
+                  {streamSeries.length > 1 ? (
+                    <TrendSparkline data={streamSeries} width={280} height={56} />
+                  ) : (
+                    <p className="text-sm text-zinc-500">
+                      Not enough daily history for a trend line yet.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -359,6 +380,48 @@ export default function ArtistPage({
 
         <div className="grid gap-5 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:px-8">
           <div className="space-y-5">
+            {explanation.length > 0 ? (
+              <section className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.86),rgba(10,10,11,0.94))] p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+                    Why this status
+                  </h2>
+                  <p className="text-xs text-zinc-500">
+                    Every factor below maps directly to a stored signal
+                  </p>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {explanation.map((f) => (
+                    <div
+                      key={f.factor}
+                      className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-zinc-200">{f.factor}</p>
+                        <p className="mt-1 text-xs leading-5 text-zinc-500">{f.note}</p>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full border px-3 py-1 text-sm font-semibold tabular-nums ${
+                          f.direction === 'positive'
+                            ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300'
+                            : f.direction === 'negative'
+                              ? 'border-rose-400/20 bg-rose-500/10 text-rose-300'
+                              : 'border-white/10 bg-white/5 text-zinc-300'
+                        }`}
+                      >
+                        {f.display}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-4 text-xs leading-5 text-zinc-500">
+                  {modelAccuracy
+                    ? `Model context: ${modelAccuracy.modelName} has been ${(modelAccuracy.accuracy * 100).toFixed(0)}% accurate across ${modelAccuracy.totalPredictions.toLocaleString()} predictions evaluated over ${modelAccuracy.windowDays}-day outcomes (as of ${String(modelAccuracy.evaluationDate).slice(0, 10)}).`
+                    : 'No model accuracy report is available yet — prediction outcomes are evaluated 30 days after they are logged, so this fills in as live data accumulates.'}
+                </p>
+              </section>
+            ) : null}
+
             <section className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.86),rgba(10,10,11,0.94))] p-5">
               <h2 className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
                 Snapshot metrics

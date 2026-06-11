@@ -150,7 +150,6 @@ export function Tabs({
     }
   }
 
-  const activeTab = tabs.find((t) => t.id === active);
 
   return (
     <div className={cn('flex flex-col', className)}>

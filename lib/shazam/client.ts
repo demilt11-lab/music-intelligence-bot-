@@ -1,3 +1,4 @@
+import { fetchWithRetry } from '@/lib/http/retry';
 /**
  * Shazam client using the official Shazam API.
  *
@@ -69,13 +70,13 @@ async function shazamGet<T>(path: string, params: Record<string, string> = {}): 
     url.searchParams.set(k, v);
   }
 
-  const res = await fetch(url.toString(), {
+  const res = await fetchWithRetry(url.toString(), {
     method: 'GET',
     headers: {
       'x-rapidapi-key': key,
       'x-rapidapi-host': new URL(base).hostname,
     },
-  });
+  }, { label: 'shazam' });
 
   if (!res.ok) {
     const text = await res.text();

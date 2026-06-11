@@ -12,7 +12,7 @@ import { handleApiError } from '@/lib/shared/errors';
 import { successResponse } from '@/lib/shared/response';
 
 interface RouteContext {
-  params: { platform: string };
+  params: Promise<{ platform: string }>;
 }
 
 /**
@@ -21,7 +21,8 @@ interface RouteContext {
  * @param request - The incoming Next.js request.
  * @param context - Route context containing the platform path segment.
  */
-export async function GET(request: NextRequest, { params }: RouteContext): Promise<NextResponse> {
+export async function GET(request: NextRequest, props: RouteContext): Promise<NextResponse> {
+  const params = await props.params;
   try {
     const { platform } = params;
     const searchParams = request.nextUrl.searchParams;

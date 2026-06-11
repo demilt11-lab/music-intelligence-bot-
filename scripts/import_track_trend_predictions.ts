@@ -40,46 +40,47 @@ async function main() {
     const trackId = parseInt(row.track_id, 10);
     if (!trackId) continue;
 
-    await db.trackTrendPrediction.upsert({
+    const genre = row.genre || null;
+    const code2 = row.code2 || null;
+    const values = {
+      label: row.pred_label,
+      probViral: parseFloat(row.prob_viral || "0"),
+      probTrending: parseFloat(row.prob_trending || "0"),
+      probPopular: parseFloat(row.prob_popular || "0"),
+      probNone: parseFloat(row.prob_none || "0"),
+      predictedAt: new Date(),
+    };
+
+    // The compound unique includes nullable genre/code2, which Prisma's
+    // upsert `where` cannot express — emulate with findFirst + update/create.
+    const existing = await db.trackTrendPrediction.findFirst({
       where: {
-        trackId_genre_code2_modelName_modelVersion: {
-          trackId,
-          genre: row.genre || null,
-          code2: row.code2 || null,
-          modelName: row.model_name,
-          modelVersion: row.model_version,
-        },
-      },
-      update: {
-        label: row.pred_label,
-        probViral: parseFloat(row.prob_viral || "0"),
-        probTrending: parseFloat(
-          row.prob_trending || "0",
-        ),
-        probPopular: parseFloat(
-          row.prob_popular || "0",
-        ),
-        probNone: parseFloat(row.prob_none || "0"),
-        predictedAt: new Date(),
-      },
-      create: {
         trackId,
-        genre: row.genre || null,
-        code2: row.code2 || null,
-        label: row.pred_label,
-        probViral: parseFloat(row.prob_viral || "0"),
-        probTrending: parseFloat(
-          row.prob_trending || "0",
-        ),
-        probPopular: parseFloat(
-          row.prob_popular || "0",
-        ),
-        probNone: parseFloat(row.prob_none || "0"),
+        genre,
+        code2,
         modelName: row.model_name,
         modelVersion: row.model_version,
-        predictedAt: new Date(),
       },
+      select: { id: true },
     });
+
+    if (existing) {
+      await db.trackTrendPrediction.update({
+        where: { id: existing.id },
+        data: values,
+      });
+    } else {
+      await db.trackTrendPrediction.create({
+        data: {
+          trackId,
+          genre,
+          code2,
+          modelName: row.model_name,
+          modelVersion: row.model_version,
+          ...values,
+        },
+      });
+    }
   }
 
   console.log(

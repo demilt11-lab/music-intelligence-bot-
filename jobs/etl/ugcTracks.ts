@@ -1,114 +1,124 @@
 // jobs/etl/ugcTracks.ts
+//
+// Recomputes UgcTrackMetrics (7-day TikTok UGC momentum per track) from
+// TrackPlatformStatsDaily rows written by jobs/ingest/tiktok.ts. The ingest
+// job also writes UgcTrackMetrics directly for the tracks it touches; this
+// ETL exists to rebuild/backfill the aggregate for a given date from the
+// raw daily stats (e.g. after a partial ingest failure).
+//
+// Country granularity: TrackPlatformStatsDaily is not segmented by country,
+// so rows produced here use code2 = 'GLOBAL'.
+import { db } from '@/lib/db';
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
-import { PrismaClient } from '@prisma/client';
+const GLOBAL = 'GLOBAL';
 
-const db = new PrismaClient();
+type WindowAgg = { videos: number; views: bigint };
+
+function utcDateOnly(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+/** BigInt-safe percent growth ((curr - prev) / prev * 100). */
+export function pctGrowth(curr: bigint, prev: bigint): number {
+  if (prev <= 0n) return 0;
+  // Scale by 10000 before division to keep two decimal places of precision.
+  return Number(((curr - prev) * 10_000n) / prev) / 100;
+}
+
+async function aggregateWindow(gte: Date, lt: Date): Promise<Map<number, WindowAgg>> {
+  const rows = await db.trackPlatformStatsDaily.groupBy({
+    by: ['trackId'],
+    where: {
+      platform: 'tiktok',
+      date: { gte, lt },
+    },
+    _sum: { videoViews: true, shares: true },
+    _count: { _all: true },
+  });
+
+  const out = new Map<number, WindowAgg>();
+  for (const r of rows) {
+    out.set(r.trackId, {
+      // One row per (track, day); row count approximates active UGC days.
+      // Real "videos created" lives in UgcTrackMetrics written at ingest
+      // time — this recompute uses the daily stat count as the fallback.
+      videos: r._count._all,
+      views: r._sum.videoViews ?? 0n,
+    });
+  }
+  return out;
+}
 
 export async function runUgcTrackEtl(referenceDate?: string) {
-  // 1) Determine date (use yesterday by default)
   const today = referenceDate ? new Date(referenceDate) : new Date();
-  const date = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+  if (Number.isNaN(today.getTime())) {
+    throw new Error(`Invalid reference date: ${referenceDate}`);
+  }
+  const date = utcDateOnly(today);
   const sevenDaysAgo = new Date(date);
   sevenDaysAgo.setUTCDate(date.getUTCDate() - 7);
-  const prevSevenDaysAgo = new Date(sevenDaysAgo);
-  prevSevenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
+  const fourteenDaysAgo = new Date(sevenDaysAgo);
+  fourteenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
 
-  // 2) Pull TikTok per-day stats; assume you have tiktok_track_chart_breakout_daily
-  const currentWindow = await db.tiktok_track_chart_breakout_daily.groupBy({
-    by: ['linked_track_id', 'code2'],
-    where: {
-      source_date: {
-        gte: sevenDaysAgo,
-        lt: date,
-      },
-    },
-    _sum: {
-      videos: true,
-      views: true,
-    },
-  });
+  const [currentWindow, previousWindow] = await Promise.all([
+    aggregateWindow(sevenDaysAgo, date),
+    aggregateWindow(fourteenDaysAgo, sevenDaysAgo),
+  ]);
 
-  const previousWindow = await db.tiktok_track_chart_breakout_daily.groupBy({
-    by: ['linked_track_id', 'code2'],
-    where: {
-      source_date: {
-        gte: prevSevenDaysAgo,
-        lt: sevenDaysAgo,
-      },
-    },
-    _sum: {
-      videos: true,
-      views: true,
-    },
-  });
+  let written = 0;
 
-  const prevKey = new Map<string, { videos: number; views: bigint }>();
-  previousWindow.forEach((row) => {
-    const key = `${row.linked_track_id}:${row.code2}`;
-    prevKey.set(key, {
-      videos: Number(row._sum.videos ?? 0),
-      views: BigInt(row._sum.views ?? 0n),
-    });
-  });
+  for (const [trackId, agg] of currentWindow.entries()) {
+    const prev = previousWindow.get(trackId);
 
-  // 3) Latest rank for rankDelta
-  const latestRanks = await db.tiktok_track_chart_breakout.findMany({
-    where: {
-      source_date: date,
-    },
-  });
-
-  const rankByKey = new Map<string, number>();
-  latestRanks.forEach((row) => {
-    const key = `${row.linked_track_id}:${row.code2}`;
-    rankByKey.set(key, row.rank ?? 0);
-  });
-
-  // 4) Insert/update UgcTrackMetrics
-  for (const row of currentWindow) {
-    const key = `${row.linked_track_id}:${row.code2}`;
-    const prev = prevKey.get(key);
-
-    const videos7d = Number(row._sum.videos ?? 0);
-    const views7d = BigInt(row._sum.views ?? 0n);
-
+    const videos7d = agg.videos;
+    const views7d = agg.views;
     const videosPrev = prev?.videos ?? 0;
     const viewsPrev = prev?.views ?? 0n;
 
-    const videosGrowth =
+    const videos7dGrowth =
       videosPrev > 0 ? ((videos7d - videosPrev) / videosPrev) * 100 : 0;
-    const viewsGrowth =
-      viewsPrev > 0
-        ? ((Number(views7d - viewsPrev) / Number(viewsPrev)) * 100)
-        : 0;
-
-    const rank = rankByKey.get(key) ?? 0;
+    const views7dGrowth = pctGrowth(views7d, viewsPrev);
 
     await db.ugcTrackMetrics.upsert({
       where: {
-        trackId_code2_date: {
-          trackId: row.linked_track_id ?? 0,
-          code2: row.code2,
-          date,
-        },
+        trackId_code2_date: { trackId, code2: GLOBAL, date },
       },
       update: {
         videos7d,
-        videos7dGrowth: videosGrowth,
+        videos7dGrowth,
         views7d,
-        views7dGrowth: viewsGrowth,
-        rankDelta7d: rank, // you can compute delta vs earlier rank if stored
+        views7dGrowth,
+        rankDelta7d: 0,
       },
       create: {
-        trackId: row.linked_track_id ?? 0,
-        code2: row.code2,
+        trackId,
+        code2: GLOBAL,
         date,
         videos7d,
-        videos7dGrowth: videosGrowth,
+        videos7dGrowth,
         views7d,
-        views7dGrowth: viewsGrowth,
-        rankDelta7d: rank,
+        views7dGrowth,
+        rankDelta7d: 0,
       },
     });
+    written++;
   }
+
+  console.log(
+    `[ugc-etl] date=${date.toISOString().slice(0, 10)} tracks=${currentWindow.size} written=${written}`,
+  );
+  return { tracks: currentWindow.size, written };
+}
+
+if (require.main === module) {
+  runTrackedJob('etl:ugc', () => runUgcTrackEtl(process.argv[2]))
+    .then(({ written }) => {
+      console.log(`UgcTrackMetrics ETL complete (${written} rows)`);
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    });
 }

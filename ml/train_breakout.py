@@ -233,12 +233,44 @@ def load_training_data(conn) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def subsample_snapshots(df: pd.DataFrame, min_gap_days: int = 7) -> pd.DataFrame:
+    """
+    Keep at most one snapshot per artist per `min_gap_days`. Daily snapshots
+    of the same artist are nearly identical rows with overlapping 180-day
+    outcomes; training on all of them inflates metrics via temporal
+    autocorrelation without adding information.
+    """
+    df = df.sort_values(["artistId", "snapshotDate"])
+    kept_idx = []
+    last_kept: dict[int, date] = {}
+    for idx, row in df.iterrows():
+        aid = int(row["artistId"])
+        snap = row["snapshotDate"]
+        prev = last_kept.get(aid)
+        if prev is None or (snap - prev).days >= min_gap_days:
+            kept_idx.append(idx)
+            last_kept[aid] = snap
+    out = df.loc[kept_idx]
+    logger.info(
+        f"Subsampled snapshots: {len(df)} -> {len(out)} "
+        f"(>= {min_gap_days}d gap per artist)"
+    )
+    return out
+
+
 def train_model(conn) -> None:
     """
     Train XGBClassifier with calibrated probabilities.
     Saves model to ml/models/breakout_xgb.pkl.
 
-    Uses GroupShuffleSplit so the same artist is never in both train and val.
+    Split design (leakage controls):
+      1. Snapshots subsampled to >= 7-day gaps per artist (autocorrelation).
+      2. OUTER split is temporal: the most recent ~20% of snapshot dates form
+         the validation set, so reported metrics reflect forward-looking use.
+      3. Validation rows whose artist also appears in training are dropped,
+         so no artist straddles the boundary.
+      4. Calibration uses a group-aware slice held out from training — the
+         base model never sees the calibration rows.
     """
     logger.info("Loading training data...")
     df = load_training_data(conn)
@@ -247,6 +279,9 @@ def train_model(conn) -> None:
         logger.error("No training examples found. Run generate_training_labels first.")
         sys.exit(1)
 
+    df["snapshotDate"] = pd.to_datetime(df["snapshotDate"]).dt.date
+    df = subsample_snapshots(df)
+
     logger.info(f"Training on {len(df)} examples, {df['breakoutLabel'].sum()} positive labels")
 
     # Prepare features
@@ -254,28 +289,51 @@ def train_model(conn) -> None:
     for col in FEATURE_COLS:
         X[col] = pd.to_numeric(X[col], errors="coerce")
 
-    # Fill NaN with median (simple imputation)
-    X = X.fillna(X.median())
+    # Median imputation, with the medians persisted so inference imputes the
+    # same way instead of silently substituting zeros.
+    medians = X.median(numeric_only=True).fillna(0.0)
+    X = X.fillna(medians)
 
     y = df["breakoutLabel"].astype(int).values
     groups = df["artistId"].astype(int).values
 
-    # Group-aware train/val split
-    gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-    train_idx, val_idx = next(gss.split(X, y, groups))
+    # ── Temporal outer split ────────────────────────────────────────────────
+    cutoff = df["snapshotDate"].quantile(0.8)
+    is_val = df["snapshotDate"] > cutoff
+    if is_val.sum() == 0 or (~is_val).sum() == 0:
+        logger.warning("Too little date spread for a temporal split; falling back to group split.")
+        gss = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+        train_idx, val_idx = next(gss.split(X, y, groups))
+        is_val = pd.Series(False, index=df.index)
+        is_val.iloc[val_idx] = True
 
-    X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
-    y_train, y_val = y[train_idx], y[val_idx]
+    train_artists = set(df.loc[~is_val, "artistId"].astype(int))
+    overlap = is_val & df["artistId"].astype(int).isin(train_artists)
+    if overlap.any():
+        logger.info(f"Dropping {overlap.sum()} validation rows whose artist appears in training")
+        is_val = is_val & ~overlap
 
-    logger.info(f"Train: {len(X_train)} | Val: {len(X_val)}")
+    X_trainval, X_val = X[~is_val.values], X[is_val.values]
+    y_trainval, y_val = y[~is_val.values], y[is_val.values]
+    g_trainval = groups[~is_val.values]
 
-    # Class imbalance: compute scale_pos_weight
-    n_neg = (y_train == 0).sum()
-    n_pos = (y_train == 1).sum()
+    logger.info(
+        f"Train+calib: {len(X_trainval)} | Val (temporal holdout): {len(X_val)} "
+        f"| split date > {cutoff}"
+    )
+
+    # ── Group-aware calibration slice ───────────────────────────────────────
+    gss_cal = GroupShuffleSplit(n_splits=1, test_size=0.25, random_state=42)
+    fit_idx, cal_idx = next(gss_cal.split(X_trainval, y_trainval, g_trainval))
+    X_fit, X_cal = X_trainval.iloc[fit_idx], X_trainval.iloc[cal_idx]
+    y_fit, y_cal = y_trainval[fit_idx], y_trainval[cal_idx]
+
+    # Class imbalance on the actual fitting slice
+    n_neg = (y_fit == 0).sum()
+    n_pos = (y_fit == 1).sum()
     scale_pos_weight = float(n_neg) / max(n_pos, 1)
     logger.info(f"scale_pos_weight: {scale_pos_weight:.2f}")
 
-    # XGBoost base classifier
     base_clf = XGBClassifier(
         n_estimators=300,
         max_depth=5,
@@ -283,32 +341,41 @@ def train_model(conn) -> None:
         subsample=0.8,
         colsample_bytree=0.8,
         scale_pos_weight=scale_pos_weight,
-        use_label_encoder=False,
         eval_metric="logloss",
         random_state=42,
         n_jobs=-1,
     )
+    base_clf.fit(X_fit, y_fit)
 
-    # Calibrate probabilities with Platt scaling
-    calibrated_clf = CalibratedClassifierCV(base_clf, cv=3, method="sigmoid")
-    calibrated_clf.fit(X_train, y_train)
+    # Platt-scale on data the base model never saw
+    calibrated_clf = CalibratedClassifierCV(base_clf, cv="prefit", method="sigmoid")
+    calibrated_clf.fit(X_cal, y_cal)
 
-    # Evaluation
-    val_probs = calibrated_clf.predict_proba(X_val)[:, 1]
-    roc_auc = roc_auc_score(y_val, val_probs)
-    pr_auc = average_precision_score(y_val, val_probs)
-
-    logger.info(f"Validation ROC-AUC: {roc_auc:.4f}")
-    logger.info(f"Validation PR-AUC:  {pr_auc:.4f}")
+    # ── Evaluation on the temporal holdout ──────────────────────────────────
+    if len(X_val) and y_val.sum() > 0 and y_val.sum() < len(y_val):
+        val_probs = calibrated_clf.predict_proba(X_val)[:, 1]
+        roc_auc = roc_auc_score(y_val, val_probs)
+        pr_auc = average_precision_score(y_val, val_probs)
+        logger.info(f"Validation ROC-AUC (temporal holdout): {roc_auc:.4f}")
+        logger.info(f"Validation PR-AUC  (temporal holdout): {pr_auc:.4f}")
+    else:
+        roc_auc = None
+        pr_auc = None
+        logger.warning(
+            "Validation set has a single class or is empty — metrics not computed. "
+            "Treat this model as unevaluated."
+        )
 
     # Save model
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
     model_payload = {
         "model": calibrated_clf,
         "feature_cols": FEATURE_COLS,
-        "model_version": "v1.0.0",
+        "feature_medians": medians.to_dict(),
+        "model_version": "v1.1.0",
         "roc_auc": roc_auc,
         "pr_auc": pr_auc,
+        "split": "temporal-80/20, artist-disjoint, group-aware prefit calibration",
         "trained_on": date.today().isoformat(),
     }
     with open(MODEL_PATH, "wb") as f:

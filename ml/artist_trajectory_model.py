@@ -5,7 +5,7 @@ import os
 import joblib
 import pandas as pd
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.model_selection import train_test_split
+from ml.utils.splits import leakage_safe_split
 from sklearn.preprocessing import StandardScaler
 
 from ml.config import MODEL_DIR
@@ -46,9 +46,16 @@ def train_model(csv_path: str):
   X = df[FEATURE_COLS].fillna(0.0)
   y = df["status_id"]
 
-  X_train, X_test, y_train, y_test = train_test_split(
-      X, y, test_size=0.2, random_state=42, stratify=y
+  # NOTE: `status` labels are produced by the rule-based classifier from the
+  # same delta features used here, so this model learns to approximate the
+  # heuristic (useful for filling gaps/smoothing) — it is NOT an independent
+  # forward-looking predictor. Outcome-based labels (PredictionOutcome) are
+  # the path to a true predictive target.
+  train_idx, test_idx, strategy = leakage_safe_split(
+      df, date_col="snapshot_date", group_col="artist_id", test_size=0.2
   )
+  X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
+  y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 
   scaler = StandardScaler()
   X_train_scaled = scaler.fit_transform(X_train)
@@ -61,7 +68,7 @@ def train_model(csv_path: str):
   joblib.dump(clf, MODEL_PATH)
   joblib.dump(scaler, SCALER_PATH)
 
-  acc = clf.score(X_test_scaled, y_test)
+  acc = clf.score(X_test_scaled, y_test)  # noqa: see split strategy above
   print(
       f"Trained {MODEL_NAME} {MODEL_VERSION}, test accuracy={acc:.3f}"
   )

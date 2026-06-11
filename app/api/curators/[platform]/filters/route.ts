@@ -15,7 +15,6 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  CURATOR_PLATFORM_CONFIGS,
   getCuratorPlatformConfig,
 } from '@/lib/curators/list/platform-config';
 import { CURATOR_PLATFORMS, type CuratorPlatform } from '@/lib/curators/list/types';
@@ -30,10 +29,8 @@ import { successResponse } from '@/lib/shared/response';
  * @param context - Route context containing the `platform` path segment.
  * @returns JSON response with available sorts and supported filters for the platform.
  */
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: { platform: string } },
-): Promise<NextResponse> {
+export async function GET(_request: NextRequest, props: { params: Promise<{ platform: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   try {
     if (!CURATOR_PLATFORMS.includes(params.platform as CuratorPlatform)) {
       throw badRequest(

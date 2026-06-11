@@ -2,7 +2,7 @@ name: Artist ETL
 
 on:
   schedule:
-    - cron: "0 5 * * *" # 5:00 UTC daily
+    - cron: "30 8 * * *" # 8:30 UTC daily — after ingestion (≤7:00) and signal ETL (8:00)
   workflow_dispatch:
 
 jobs:

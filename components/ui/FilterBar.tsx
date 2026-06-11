@@ -39,7 +39,6 @@ export function FilterBar({ filters, values, onChange, onReset, className }: Fil
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
       {filters.map((filter) => {
         const current = values[filter.key] ?? '';
-        const isActive = current !== '';
 
         return (
           <div key={filter.key} className="flex items-center gap-1.5">

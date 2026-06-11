@@ -1,20 +1,76 @@
 import Link from 'next/link'
+import { db } from '@/lib/db'
 import { BuddyCharacter } from '@/components/buddy/BuddyCharacter'
 
+export const dynamic = 'force-dynamic'
+
 const QUICK_TASKS = [
-  'Scout breakout Jersey club artists',
-  'Find emerging R&B songwriters',
-  'Identify producer momentum shifts',
-  'Review viral TikTok crossover signals',
+  { label: 'Scout early UGC breakouts', href: '/talent-scout' },
+  { label: 'Review breaking artists', href: '/artists' },
+  { label: 'Check genre momentum', href: '/genres' },
+  { label: 'Open my watchlist', href: '/watchlist' },
 ]
 
-const ACTIVE_QUEUES = [
-  { label: 'Artist scouting', value: '18 live scans' },
-  { label: 'Writer sourcing', value: '6 open briefs' },
-  { label: 'Producer watch', value: '11 movement alerts' },
+const NAV_ITEMS: { label: string; href: string }[] = [
+  { label: 'Home', href: '/' },
+  { label: 'Talent Scout', href: '/talent-scout' },
+  { label: 'Artists', href: '/artists' },
+  { label: 'Songwriters', href: '/songwriters' },
+  { label: 'Genres', href: '/genres' },
+  { label: 'Playlists', href: '/playlists' },
+  { label: 'Watchlist', href: '/watchlist' },
+  { label: 'Analytics', href: '/analytics' },
 ]
 
-export default function HomePage() {
+type QueueStats = {
+  scoutSignals: number | null
+  breakingArtists: number | null
+  watchlistItems: number | null
+}
+
+async function loadQueueStats(): Promise<QueueStats> {
+  try {
+    const [latestScore, latestSnapshot, watchlistItems] = await Promise.all([
+      db.talentScoutScore.findFirst({ orderBy: { date: 'desc' }, select: { date: true } }),
+      db.artistTrajectorySnapshot.findFirst({
+        orderBy: { date: 'desc' },
+        select: { date: true },
+      }),
+      db.watchlistItem.count(),
+    ])
+
+    const [scoutSignals, breakingArtists] = await Promise.all([
+      latestScore
+        ? db.talentScoutScore.count({ where: { date: latestScore.date } })
+        : Promise.resolve(0),
+      latestSnapshot
+        ? db.artistTrajectorySnapshot.count({
+            where: { date: latestSnapshot.date, status: 'ABOUT_TO_BREAK' },
+          })
+        : Promise.resolve(0),
+    ])
+
+    return { scoutSignals, breakingArtists, watchlistItems }
+  } catch (err) {
+    console.error('[home] queue stats unavailable:', err)
+    return { scoutSignals: null, breakingArtists: null, watchlistItems: null }
+  }
+}
+
+function queueValue(v: number | null, unit: string): string {
+  if (v == null) return 'unavailable'
+  return `${v.toLocaleString()} ${unit}`
+}
+
+export default async function HomePage() {
+  const stats = await loadQueueStats()
+
+  const activeQueues = [
+    { label: 'Scout signals (latest day)', value: queueValue(stats.scoutSignals, 'tracks scored') },
+    { label: 'About-to-break artists', value: queueValue(stats.breakingArtists, 'flagged') },
+    { label: 'Watchlist', value: queueValue(stats.watchlistItems, 'items saved') },
+  ]
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#05070a] text-white">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(30,64,175,0.16),transparent_28%),radial-gradient(circle_at_80%_20%,rgba(16,185,129,0.12),transparent_24%),linear-gradient(180deg,#05070a_0%,#090b10_52%,#040506_100%)]" />
@@ -36,29 +92,21 @@ export default function HomePage() {
             </div>
 
             <nav className="mt-8 space-y-2">
-              {[
-                'Home',
-                'Scout Artists',
-                'Scout Writers',
-                'Scout Producers',
-                'Assignments',
-                'Watchlists',
-                'Reports',
-                'Analytics',
-              ].map((item, index) => (
-                <div
-                  key={item}
-                  className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-sm ${
+              {NAV_ITEMS.map((item, index) => (
+                <Link
+                  key={item.label}
+                  href={item.href}
+                  className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-sm transition ${
                     index === 0
                       ? 'border-emerald-400/20 bg-emerald-500/10 text-white'
-                      : 'border-white/10 bg-white/[0.03] text-zinc-400'
+                      : 'border-white/10 bg-white/[0.03] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200'
                   }`}
                 >
-                  <span>{item}</span>
+                  <span>{item.label}</span>
                   {index === 0 ? (
                     <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.75)]" />
                   ) : null}
-                </div>
+                </Link>
               ))}
             </nav>
 
@@ -67,7 +115,7 @@ export default function HomePage() {
                 Live queues
               </p>
               <div className="mt-4 space-y-3">
-                {ACTIVE_QUEUES.map((item) => (
+                {activeQueues.map((item) => (
                   <div
                     key={item.label}
                     className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3"
@@ -126,31 +174,43 @@ export default function HomePage() {
                       Command Buddy
                     </p>
 
-                    <div className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.04] p-4">
+                    <form
+                      action="/search"
+                      method="get"
+                      className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.04] p-4"
+                    >
                       <div className="flex min-h-[120px] flex-col justify-between gap-4">
                         <p className="text-sm leading-7 text-zinc-300">
                           What do you want me to scout today?
                         </p>
 
                         <div className="flex flex-col gap-3 sm:flex-row">
-                          <div className="flex-1 rounded-2xl border border-white/10 bg-[#0a0d12] px-4 py-3 text-sm text-zinc-500">
-                            Scout breakout R&B producers with viral crossover signals
-                          </div>
-                          <button className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-5 py-3 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20">
+                          <input
+                            type="text"
+                            name="q"
+                            placeholder="Search an artist, track, writer, or playlist…"
+                            className="flex-1 rounded-2xl border border-white/10 bg-[#0a0d12] px-4 py-3 text-sm text-zinc-200 placeholder-zinc-500 outline-none transition focus:border-emerald-400/30"
+                            aria-label="Search the music intelligence graph"
+                          />
+                          <button
+                            type="submit"
+                            className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-5 py-3 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+                          >
                             Run task
                           </button>
                         </div>
                       </div>
-                    </div>
+                    </form>
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       {QUICK_TASKS.map((task) => (
-                        <button
-                          key={task}
+                        <Link
+                          key={task.label}
+                          href={task.href}
                           className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-zinc-300 transition hover:bg-white/10"
                         >
-                          {task}
-                        </button>
+                          {task.label}
+                        </Link>
                       ))}
                     </div>
                   </div>
@@ -166,31 +226,44 @@ export default function HomePage() {
           <aside className="hidden rounded-[28px] border border-white/10 bg-white/[0.04] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur xl:flex xl:flex-col">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                Active direction
+                Start here
               </p>
               <h3 className="mt-3 text-xl font-semibold tracking-[-0.03em] text-white">
-                Tasks for Buddy
+                Scouting workflows
               </h3>
             </div>
 
             <div className="mt-6 space-y-3">
               {[
-                'Scout female pop writers with recent sync momentum',
-                'Find producers rising on TikTok before DSP crossover',
-                'Review artists with strong saves-to-streams ratios',
-                'Build a watchlist of breakout Latin collaborators',
+                {
+                  label: 'Triage today’s early UGC breakouts in Talent Scout',
+                  href: '/talent-scout',
+                },
+                {
+                  label: 'Review artists flagged as about to break',
+                  href: '/artists',
+                },
+                {
+                  label: 'Compare genre momentum across markets',
+                  href: '/genres',
+                },
+                {
+                  label: 'Keep your shortlist current in the watchlist',
+                  href: '/watchlist',
+                },
               ].map((task, index) => (
-                <div
-                  key={task}
-                  className="rounded-[22px] border border-white/10 bg-black/20 p-4"
+                <Link
+                  key={task.label}
+                  href={task.href}
+                  className="block rounded-[22px] border border-white/10 bg-black/20 p-4 transition hover:bg-black/30"
                 >
                   <div className="flex items-start gap-3">
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-emerald-400/20 bg-emerald-500/10 text-xs font-semibold text-emerald-300">
                       {index + 1}
                     </div>
-                    <p className="text-sm leading-6 text-zinc-300">{task}</p>
+                    <p className="text-sm leading-6 text-zinc-300">{task.label}</p>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
 
@@ -199,8 +272,8 @@ export default function HomePage() {
                 Insight mode
               </p>
               <p className="mt-3 text-sm leading-6 text-zinc-300">
-                Buddy should guide the user first. Deep charts, metrics, and tracking live in
-                Analytics, not on the home screen.
+                Buddy guides the workflow from here. Deep charts, metrics, and tracking
+                live in Analytics and the entity pages.
               </p>
             </div>
           </aside>

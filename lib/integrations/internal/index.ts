@@ -9,9 +9,8 @@ import {
   type RadioLiveFeedResult,
 } from '@/lib/services/radios';
 
-export interface InternalConnectorConfig {
-  // reserved for per-tenant / feature-flag config
-}
+// Reserved for per-tenant / feature-flag config.
+export type InternalConnectorConfig = Record<string, never>;
 
 export class InternalConnector {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

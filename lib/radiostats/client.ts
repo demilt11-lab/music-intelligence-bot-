@@ -1,4 +1,5 @@
 // lib/radiostats/client.ts
+import { fetchWithRetry } from '@/lib/http/retry';
 
 const BASE_URL =
   process.env.SONGSTATS_API_BASE_URL ||
@@ -43,12 +44,12 @@ export async function radiostatsGet<T>(
     }
   });
 
-  const res = await fetch(url.toString(), {
+  const res = await fetchWithRetry(url.toString(), {
     method: 'GET',
     headers: {
       apikey: getApiKey(), // Radiostats docs: `apikey` header
     },
-  });
+  }, { label: 'radiostats' });
 
   const body = await parseBody(res);
 
@@ -83,7 +84,7 @@ export async function radiostatsPost<T>(
     }
   });
 
-  const res = await fetch(url.toString(), {
+  const res = await fetchWithRetry(url.toString(), {
     method: 'POST',
     headers: {
       apikey: getApiKey(),
@@ -92,7 +93,7 @@ export async function radiostatsPost<T>(
       'Accept-Encoding': 'gzip, deflate, br',
     },
     body: JSON.stringify({}), // params live in query string per docs.[page:2]
-  });
+  }, { label: 'radiostats' });
 
   const body = await parseBody(res);
 

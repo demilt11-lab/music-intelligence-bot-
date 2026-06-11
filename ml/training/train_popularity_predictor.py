@@ -29,7 +29,7 @@ from sklearn.metrics import (
     average_precision_score,
     classification_report,
 )
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, train_test_split
 from xgboost import XGBClassifier
 
 from ml.config import DATA_DIR, MODEL_DIR, LOG_DIR, configure_logging
@@ -137,11 +137,16 @@ def _train_horizon(
     avg_prec = average_precision_score(y, oof_probs)
     logger.info("[%s] OOF ROC-AUC=%.4f  Avg-Precision=%.4f", horizon, roc_auc, avg_prec)
 
+    # Hold out a stratified slice for early stopping + calibration so the
+    # final model is never calibrated on its own training data.
+    X_fit, X_cal, y_fit, y_cal = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
     final = XGBClassifier(**params)
-    final.fit(X, y, eval_set=[(X, y)], early_stopping_rounds=150, verbose=False)
+    final.fit(X_fit, y_fit, eval_set=[(X_cal, y_cal)], early_stopping_rounds=150, verbose=False)
 
     calibrated = CalibratedClassifierCV(final, cv="prefit", method="sigmoid")
-    calibrated.fit(X, y)
+    calibrated.fit(X_cal, y_cal)
 
     model_path = MODEL_DIR / f"popularity_predictor_{horizon}_xgb.json"
     cal_path = MODEL_DIR / f"popularity_predictor_{horizon}_calibrated.joblib"

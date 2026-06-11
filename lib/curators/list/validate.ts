@@ -5,7 +5,6 @@ import {
   parseOptionalBoolean,
   parseOptionalIsoAlpha2,
   parseOptionalString,
-  parsePositiveInt,
 } from '@/lib/shared/validation';
 import { getCuratorPlatformConfig } from './platform-config';
 import { CURATOR_PLATFORMS, type CuratorListParams, type CuratorPlatform } from './types';

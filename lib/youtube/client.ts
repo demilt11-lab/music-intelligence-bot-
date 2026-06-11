@@ -1,3 +1,4 @@
+import { fetchWithRetry } from '@/lib/http/retry';
 /**
  * YouTube Data API v3 client
  * Uses API key auth — public data only, no OAuth needed.
@@ -21,7 +22,7 @@ export async function youtubeGet<T>(
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined) url.searchParams.set(k, String(v));
   }
-  const res = await fetch(url.toString());
+  const res = await fetchWithRetry(url.toString(), {}, { label: 'youtube' });
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`YouTube API error ${res.status} for ${endpoint}: ${body}`);

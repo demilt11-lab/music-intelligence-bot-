@@ -121,39 +121,55 @@ function ResultRow({ item, bucket }: { item: any; bucket: string }) {
   )
 }
 
-export default function SearchClient() {
-  const [q, setQ] = useState('')
+export default function SearchClient({
+  initialQuery = '',
+}: {
+  initialQuery?: string
+}) {
+  const [q, setQ] = useState(initialQuery)
   const [type, setType] = useState<SearchType>('all')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SearchResultBuckets | null>(null)
   const [searched, setSearched] = useState(false)
 
+  const runSearch = React.useCallback(
+    async (query: string, searchType: SearchType) => {
+      if (!query.trim()) return
+
+      setLoading(true)
+      setError(null)
+      setSearched(true)
+
+      try {
+        const params = new URLSearchParams({ q: query, type: searchType })
+        const res = await fetch(`/api/search?${params}`)
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => null)
+          throw new Error(body?.error || `Search failed (${res.status})`)
+        }
+
+        const data = await res.json()
+        setResult(data.obj)
+      } catch (err: any) {
+        setError(err.message ?? 'Unknown error')
+        setResult(null)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [],
+  )
+
+  // Deep links (e.g. the home-page command bar) land here with ?q= set.
+  React.useEffect(() => {
+    if (initialQuery.trim()) void runSearch(initialQuery, 'all')
+  }, [initialQuery, runSearch])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!q.trim()) return
-
-    setLoading(true)
-    setError(null)
-    setSearched(true)
-
-    try {
-      const params = new URLSearchParams({ q, type })
-      const res = await fetch(`/api/search?${params}`)
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => null)
-        throw new Error(body?.error || `Search failed (${res.status})`)
-      }
-
-      const data = await res.json()
-      setResult(data.obj)
-    } catch (err: any) {
-      setError(err.message ?? 'Unknown error')
-      setResult(null)
-    } finally {
-      setLoading(false)
-    }
+    await runSearch(q, type)
   }
 
   const totalResults = useMemo(() => {

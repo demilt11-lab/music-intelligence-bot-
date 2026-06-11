@@ -42,10 +42,8 @@ import { successResponse } from '@/lib/shared/response';
  * @param context - Route context containing the `platform` path segment.
  * @returns JSON success or error response.
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { platform: string } },
-): Promise<NextResponse> {
+export async function GET(request: NextRequest, props: { params: Promise<{ platform: string }> }): Promise<NextResponse> {
+  const params = await props.params;
   try {
     const listParams = validateCuratorListParams(
       params.platform,

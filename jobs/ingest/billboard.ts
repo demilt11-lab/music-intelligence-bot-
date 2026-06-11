@@ -15,6 +15,7 @@
 
 import { db } from '@/lib/db';
 import { scrapeUrl } from '@/lib/firecrawl/client';
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -312,7 +313,7 @@ async function main(): Promise<void> {
   await db.$disconnect();
 }
 
-main().catch((err) => {
+runTrackedJob('ingest:billboard', main).catch((err) => {
   console.error('[billboard] Fatal error:', err);
   process.exit(1);
 });

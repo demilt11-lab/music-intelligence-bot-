@@ -16,10 +16,10 @@ import {
   getTrendingMusicVideos,
   getYouTubeShortsCharts,
   getVideoStats,
-  YtVideo,
   YtSearchItem,
 } from '@/lib/youtube/client';
 import { resolveYoutubeVideo } from '@/lib/youtube/resolver';
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -152,7 +152,7 @@ async function ingestShortsChart(): Promise<void> {
     .map((item: YtSearchItem) => item.id?.videoId)
     .filter((id): id is string => Boolean(id));
 
-  let statsMap = new Map<string, { views?: bigint; likes?: bigint; comments?: bigint }>();
+  const statsMap = new Map<string, { views?: bigint; likes?: bigint; comments?: bigint }>();
 
   if (videoIds.length > 0) {
     const statsResponse = await getVideoStats(videoIds);
@@ -269,7 +269,7 @@ async function main(): Promise<void> {
   await db.$disconnect();
 }
 
-main().catch((err) => {
+runTrackedJob('ingest:youtube', main).catch((err) => {
   console.error('[youtube] Fatal error:', err);
   process.exit(1);
 });

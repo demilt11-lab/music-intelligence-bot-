@@ -12,7 +12,7 @@
  * ```
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { queryAirplayCountries } from '@/lib/charts/airplay-tracks/query';
 
 /**
@@ -21,7 +21,7 @@ import { queryAirplayCountries } from '@/lib/charts/airplay-tracks/query';
  * @param _request - Incoming Next.js request (no query parameters required).
  * @returns `{ obj: Array<{ code2: string; name: string }> }`
  */
-export async function GET(_request: NextRequest): Promise<NextResponse> {
+export async function GET(): Promise<NextResponse> {
   try {
     const countries = await queryAirplayCountries();
     return NextResponse.json({ obj: countries });

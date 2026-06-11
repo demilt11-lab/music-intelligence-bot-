@@ -1,5 +1,6 @@
 // jobs/etl/evaluate_predictions.ts
 import { db } from "@/lib/db";
+import { runTrackedJob } from '@/lib/jobs/tracker';
 
 const WINDOW_DAYS = 30;
 
@@ -264,7 +265,7 @@ export async function evaluatePredictions(dateStr: string): Promise<void> {
 
 if (require.main === module) {
   const dateArg = process.argv[2] ?? new Date().toISOString().slice(0, 10);
-  evaluatePredictions(dateArg)
+  runTrackedJob('etl:evaluate-predictions', () => evaluatePredictions(dateArg))
     .then(() => {
       console.log(`[evaluate_predictions] Done for ${dateArg}.`);
       process.exit(0);

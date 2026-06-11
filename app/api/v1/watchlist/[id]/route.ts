@@ -5,10 +5,8 @@ import { logRequest } from '@/lib/platform/logging';
 
 const endpoint = '/api/v1/watchlist/[id]';
 
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: { id: string } },
-) {
+export async function DELETE(req: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const startedAt = Date.now();
   let ctx;
   try {
