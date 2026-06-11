@@ -1,0 +1,35 @@
+name: Provision Admin User
+
+# Creates (or updates) the workspace admin login from repo secrets — so the
+# first production user can be provisioned without anyone touching a
+# terminal. Re-running updates the password. Requires repo secrets:
+#   SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD (min 8 chars), DATABASE_URL
+on:
+  workflow_dispatch:
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Create / update admin user
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          UI_TENANT_SLUG: ${{ vars.UI_TENANT_SLUG }}
+          SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
+          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
+        run: |
+          if [ -z "$SEED_ADMIN_EMAIL" ] || [ -z "$SEED_ADMIN_PASSWORD" ]; then
+            echo "✗ Set the SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD repo secrets first." >&2
+            exit 1
+          fi
+          npx tsx scripts/create-user.ts "$SEED_ADMIN_EMAIL" "$SEED_ADMIN_PASSWORD" ADMIN
