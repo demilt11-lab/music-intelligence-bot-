@@ -1549,6 +1549,23 @@ model UserFeedback {
 }
 
 // ─────────────────────────────────────────────
+// ML model store
+// ─────────────────────────────────────────────
+
+model MlModel {
+  id          Int      @id @default(autoincrement())
+  modelType   String   @unique
+  version     Int      @default(1)
+  weights     Json
+  accuracy    Float
+  nSamples    Int
+  trainedAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@map("ml_models")
+}
+
+// ─────────────────────────────────────────────
 // Songwriters
 // ─────────────────────────────────────────────
 
