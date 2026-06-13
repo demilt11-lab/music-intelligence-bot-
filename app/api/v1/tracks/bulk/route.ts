@@ -36,6 +36,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (body.tracks.length > 500) {
+      return NextResponse.json(
+        { error: 'max 500 tracks per request' },
+        { status: 400 },
+      );
+    }
+
     await upsertCatalogTracks(ctx, body.tracks);
 
     const res = NextResponse.json(

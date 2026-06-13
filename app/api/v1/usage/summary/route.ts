@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { buildRequestContext } from '@/lib/platform/context';
+import { buildRequestContext, requireScope } from '@/lib/platform/context';
 import { logRequest } from '@/lib/platform/logging';
 
 const endpoint = '/api/v1/usage/summary';
@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
   let ctx;
   try {
     ctx = await buildRequestContext(req);
+    requireScope(ctx, 'usage:read');
 
     const since = new Date();
     since.setUTCDate(since.getUTCDate() - 7);

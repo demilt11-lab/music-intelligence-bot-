@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
+import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { logRequest } from '@/lib/platform/logging';
 import { ScoutSources } from '@/lib/engine';
 import { toCsvResponse } from '@/lib/export/csv';
@@ -20,6 +21,7 @@ export async function GET(req: NextRequest) {
   try {
     ctx = await buildRequestContext(req);
     requireScope(ctx, 'talent-scout:read');
+    await enforceRateLimit(ctx, `tenant:${ctx.tenantId}:talent-scout:export`, 10);
 
     const { searchParams } = new URL(req.url);
     const date = searchParams.get('date') ?? undefined;

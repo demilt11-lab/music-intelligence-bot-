@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
+import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { logRequest } from '@/lib/platform/logging';
+import { validateWebhookUrl } from '@/lib/platform/webhook-url';
 
 const endpoint = '/api/v1/digest/subscribe';
 
@@ -11,6 +13,7 @@ export async function POST(req: NextRequest) {
   try {
     ctx = await buildRequestContext(req);
     requireScope(ctx, 'digest:write');
+    await enforceRateLimit(ctx, `tenant:${ctx.tenantId}:digest:subscribe`, 20);
 
     const body = await req.json();
     const { email, webhookUrl, frequency = 'daily' } = body;
@@ -20,6 +23,13 @@ export async function POST(req: NextRequest) {
     }
     if (!['daily', 'weekly'].includes(frequency)) {
       return NextResponse.json({ error: 'frequency must be daily or weekly' }, { status: 400 });
+    }
+    if (webhookUrl) {
+      try {
+        validateWebhookUrl(webhookUrl);
+      } catch (e: any) {
+        return NextResponse.json({ error: e.message ?? 'Invalid webhookUrl' }, { status: 400 });
+      }
     }
 
     const sub = await db.digestSubscription.create({
