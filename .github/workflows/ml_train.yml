@@ -12,20 +12,29 @@ jobs:
     steps:
       - name: Train both models
         run: |
-          echo "Triggering ML training on $VERCEL_URL ..."
-          RESPONSE=$(curl -sf -X POST "$VERCEL_URL/api/internal/ml/train" \
+          # Ensure URL has https:// prefix and no trailing slash
+          BASE_URL="${VERCEL_URL#http://}"
+          BASE_URL="https://${BASE_URL%/}"
+          echo "Triggering ML training on $BASE_URL ..."
+          RESPONSE=$(curl -sLf -X POST "$BASE_URL/api/internal/ml/train" \
             -H "Authorization: Bearer $INTERNAL_ADMIN_SECRET" \
             -H "Content-Type: application/json" \
-            -d '{}')
-          echo "$RESPONSE"
-          echo "$RESPONSE" | grep -q '"ok":true' || (echo "Training failed" && exit 1)
+            -d '{}' \
+            -w "\nHTTP_STATUS:%{http_code}")
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+          BODY=$(echo "$RESPONSE" | grep -v "HTTP_STATUS:")
+          echo "Status: $HTTP_STATUS"
+          echo "$BODY"
+          echo "$BODY" | grep -q '"ok":true' || (echo "Training failed (HTTP $HTTP_STATUS)" && exit 1)
         env:
           VERCEL_URL: ${{ secrets.VERCEL_URL }}
           INTERNAL_ADMIN_SECRET: ${{ secrets.INTERNAL_ADMIN_SECRET }}
 
       - name: Check model status
         run: |
-          curl -sf "$VERCEL_URL/api/internal/ml/status" \
+          BASE_URL="${VERCEL_URL#http://}"
+          BASE_URL="https://${BASE_URL%/}"
+          curl -sLf "$BASE_URL/api/internal/ml/status" \
             -H "Authorization: Bearer $INTERNAL_ADMIN_SECRET"
         env:
           VERCEL_URL: ${{ secrets.VERCEL_URL }}
