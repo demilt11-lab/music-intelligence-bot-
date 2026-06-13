@@ -35,19 +35,6 @@ const EDITORIAL_PLAYLISTS: Array<{ id: string; name: string }> = [
   { id: '37i9dQZF1DWUZv12GM5bny', name: 'Young & Free' },
 ];
 
-// ─── Top 50 chart markets ─────────────────────────────────────────────────────
-
-const TOP_CHART_PLAYLIST_IDS: Record<string, string> = {
-  global: '37i9dQZEVXbMDoHDwVN2tF',
-  US: '37i9dQZEVXbLRQDuF5jeBp',
-  GB: '37i9dQZEVXbLnolsZ8PSNw',
-  AU: '37i9dQZEVXbJPcfkRz0wJ0',
-  CA: '37i9dQZEVXbKj23U1GF4IR',
-  BR: '37i9dQZEVXbMXbN3EUUhlg',
-  DE: '37i9dQZEVXbJiZcmkrIHGU',
-  FR: '37i9dQZEVXbIPWwFssbupI',
-  MX: '37i9dQZEVXbO3qyFxbkOE1',
-};
 
 // ─── Counters ─────────────────────────────────────────────────────────────────
 
