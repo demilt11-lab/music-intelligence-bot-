@@ -209,7 +209,7 @@ async function main() {
         body: JSON.stringify({ label: 'Smoke Test Key' }),
       });
       check('POST /api/ui/api-keys → 201', createKey.status === 201, `status=${createKey.status}`);
-      const rawKey: string | undefined = createKey.body?.obj?.key;
+      const rawKey: string | undefined = createKey.body?.obj?.apiKey;
       const keyId: number | undefined = createKey.body?.obj?.id;
       check('  API key response includes raw key', typeof rawKey === 'string' && rawKey.startsWith('mi_'));
 
@@ -222,7 +222,7 @@ async function main() {
           method: 'DELETE',
           headers: { cookie },
         });
-        check('DELETE /api/ui/api-keys/:id → 204', delKey.status === 204, `status=${delKey.status}`);
+        check('DELETE /api/ui/api-keys/:id → 200', delKey.status === 200, `status=${delKey.status}`);
       }
     }
 
@@ -231,6 +231,7 @@ async function main() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream',
         ...(authHeaders ?? {}),
       },
       body: JSON.stringify({
