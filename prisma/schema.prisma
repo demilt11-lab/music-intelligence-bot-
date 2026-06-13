@@ -566,6 +566,7 @@ model TrackStatisticsLatest {
   appleMusicPlays       BigInt?
   youtubeViews          BigInt?
   tiktokCreations       BigInt?
+  shazamCount           BigInt?
   updatedAt             DateTime @updatedAt
 
   track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)

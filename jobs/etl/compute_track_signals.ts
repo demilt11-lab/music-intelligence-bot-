@@ -512,18 +512,20 @@ async function fetchPlatformSignals(
     today.toISOString().slice(0, 10),
   );
 
-  // Playlist adds in last 7d
+  // Playlist adds in last 7d — weighted by log(followerCount+1) so a Spotify
+  // Editorial Thousands-follower playlist outweighs a 50-follower indie list.
   const playlistRows = await db.$queryRawUnsafe<
     { track_id: number; adds7d: number }[]
   >(
     `
     SELECT
-      "trackId" AS track_id,
-      COUNT(*) AS adds7d
-    FROM playlist_membership_events
-    WHERE "eventDate" BETWEEN $1::date AND $2::date
-      AND "eventType" = 'added'
-    GROUP BY "trackId"
+      pme."trackId" AS track_id,
+      SUM(GREATEST(1.0, LN(COALESCE(p."followerCount"::numeric, 1) + 1))) AS adds7d
+    FROM playlist_membership_events pme
+    LEFT JOIN playlists p ON p.id = pme."playlistId"
+    WHERE pme."eventDate" BETWEEN $1::date AND $2::date
+      AND pme."eventType" = 'added'
+    GROUP BY pme."trackId"
     `,
     day7.toISOString().slice(0, 10),
     today.toISOString().slice(0, 10),

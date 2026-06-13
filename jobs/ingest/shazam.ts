@@ -9,13 +9,9 @@
  *     (schema has no dedicated shazam field; see note below)
  * - 500ms delay between market fetches
  *
- * NOTE: TrackStatisticsLatest has no Shazam-specific column.  We record the
- * shazamCount as a raw upsert only when it is present, keyed to tiktokCreations
- * which is the closest "viral count" proxy — OR we skip updating that table
- * entirely and rely solely on the ChartRow presence as the signal.
- * We choose to skip polluting an unrelated column and instead just store
- * the rank data in chart_snapshots / chart_rows, which is the canonical
- * location for chart signals.
+ * Shazam count (numberOfShazams) is written to TrackStatisticsLatest.shazamCount
+ * so it flows into the talent-scout view and viral scoring alongside YouTube
+ * views and TikTok creations.
  */
 
 import { PrismaClient } from "@prisma/client";
@@ -307,6 +303,21 @@ async function ingestMarket(market: Market, snapshotDate: Date): Promise<MarketS
       );
       stats.errors++;
       continue;
+    }
+
+    // Write shazam count to latest stats table so it's available for scoring
+    if (raw.shazamCount != null && raw.shazamCount > 0) {
+      try {
+        await db.trackStatisticsLatest.upsert({
+          where: { trackId: resolved.trackId },
+          create: { trackId: resolved.trackId, shazamCount: BigInt(raw.shazamCount) },
+          update: { shazamCount: BigInt(raw.shazamCount) },
+        });
+      } catch (err) {
+        console.warn(
+          `[shazam] Failed to upsert shazamCount trackId=${resolved.trackId}: ${(err as Error).message}`
+        );
+      }
     }
 
     stats.resolved++;

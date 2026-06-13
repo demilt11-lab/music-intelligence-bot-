@@ -28,6 +28,7 @@
     "ingest:spotify": "tsx jobs/ingest/spotify.ts",
     "ingest:tiktok": "tsx jobs/ingest/tiktok.ts",
     "ingest:youtube": "tsx jobs/ingest/youtube.ts",
+    "ingest:luminate": "tsx jobs/ingest/luminate.ts",
     "ingest:radiostats": "tsx jobs/ingest/radiostats.ts",
     "export:artist-training": "tsx scripts/export_artist_trajectory_training.ts",
     "export:artist-trajectory-features": "tsx scripts/export_artist_trajectory_features.ts",

@@ -1,0 +1,32 @@
+name: Ingest Luminate
+
+on:
+  schedule:
+    - cron: "0 6 * * *" # daily at 06:00 UTC (Luminate data is typically available by then)
+  workflow_dispatch:
+
+jobs:
+  ingest-luminate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm install
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run Luminate ingestion
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          LUMINATE_BASE_URL: ${{ secrets.LUMINATE_BASE_URL }}
+          LUMINATE_API_KEY: ${{ secrets.LUMINATE_API_KEY }}
+        run: npx tsx jobs/ingest/luminate.ts
