@@ -98,13 +98,9 @@ export async function metaGet<T>(
   }
   url.searchParams.set('access_token', token);
 
-  const res = await fetchWithRetry(url.toString(), {}, { label: 'instagram' });
-
-  if (res.status === 429) {
-    console.warn('[instagram] Rate limit hit — waiting 60 s before retry');
-    await sleep(60_000);
-    return metaGet<T>(path, params);
-  }
+  // fetchWithRetry already handles 429 with Retry-After + exponential backoff.
+  // Do not recurse here — that would create an unbounded retry loop.
+  const res = await fetchWithRetry(url.toString(), {}, { label: 'instagram', retries: 4 });
 
   if (!res.ok) {
     const text = await res.text();
