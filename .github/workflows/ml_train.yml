@@ -12,8 +12,9 @@ jobs:
     steps:
       - name: Train both models
         run: |
-          # Ensure URL has https:// prefix and no trailing slash
-          BASE_URL="${VERCEL_URL#http://}"
+          # Strip any protocol prefix and trailing slash, then force https://
+          BASE_URL="${VERCEL_URL#https://}"
+          BASE_URL="${BASE_URL#http://}"
           BASE_URL="https://${BASE_URL%/}"
           echo "Triggering ML training on $BASE_URL ..."
           RESPONSE=$(curl -sLf -X POST "$BASE_URL/api/internal/ml/train" \
@@ -32,7 +33,8 @@ jobs:
 
       - name: Check model status
         run: |
-          BASE_URL="${VERCEL_URL#http://}"
+          BASE_URL="${VERCEL_URL#https://}"
+          BASE_URL="${BASE_URL#http://}"
           BASE_URL="https://${BASE_URL%/}"
           curl -sLf "$BASE_URL/api/internal/ml/status" \
             -H "Authorization: Bearer $INTERNAL_ADMIN_SECRET"
