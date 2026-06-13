@@ -26,7 +26,7 @@ function buildMessage(trackCount: number, hotCount: number, code2: string): stri
     } flashing strong breakout potential right now.`
   }
 
-  return `I'm monitoring ${trackCount} active tracks ${market}. Nothing is fully breaking yet, but several records are showing early movement worth tracking.`
+  return `${trackCount} tracks ${market} are showing early momentum signals worth immediate A&R attention. Review them now before velocity peaks.`
 }
 
 function formatModeLabel(mode: 'ugc_early' | 'general') {

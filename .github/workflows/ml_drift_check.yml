@@ -1,0 +1,57 @@
+name: ML Drift Check & Retrain
+
+on:
+  schedule:
+    - cron: '0 4 * * 1' # every Monday at 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download latest ML model artifacts
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: ml_train.yml
+          name_is_regexp: true
+          name: ml-models-.*
+          path: .
+          if_no_artifact_found: warn
+
+      - name: Run drift detection
+        id: drift
+        run: |
+          python ml/training/retrain_scheduler.py 2>&1 | tee drift_output.txt
+          if grep -q "RETRAIN_REQUIRED" drift_output.txt; then
+            echo "retrain_needed=true" >> $GITHUB_OUTPUT
+          else
+            echo "retrain_needed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Trigger full retrain if drift detected
+        if: steps.drift.outputs.retrain_needed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ml_train.yml',
+              ref: context.ref,
+            });
+            core.notice('Drift detected — triggered ml_train.yml retraining run');

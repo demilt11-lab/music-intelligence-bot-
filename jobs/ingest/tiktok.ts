@@ -373,7 +373,12 @@ async function updateTrackStatistics(
   videos: VideoRecord[],
   soundToTrackId: Map<string, number>
 ): Promise<void> {
-  // Aggregate total video count per trackId
+  // tiktokCreations stores the number of videos observed in this scraping batch
+  // for a given sound — NOT the total lifetime creation count from TikTok's API
+  // (TikTok Research API does not expose aggregate creation counts). The number
+  // fluctuates across runs and is meaningful only as a relative signal (trending
+  // sounds appear in more videos per batch). UgcTrackMetrics uses videoViews from
+  // TrackPlatformStatsDaily for momentum calculations, not this count.
   const countByTrackId = new Map<number, number>();
   for (const v of videos) {
     const trackId = soundToTrackId.get(v.soundId);

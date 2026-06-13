@@ -53,6 +53,23 @@ def _geo_entropy(df: pd.DataFrame) -> pd.Series:
     return pd.Series(0.0, index=df.index)
 
 
+def _fill_with_indicator(df: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
+    """
+    For each column in cols, add a binary `{col}_observed` indicator (1 if not null, 0 if null)
+    then fill the column itself with 0. This lets the model distinguish
+    "zero activity" from "data not yet collected."
+    """
+    for c in cols:
+        observed_col = f"{c}_observed"
+        if c in df.columns:
+            df[observed_col] = df[c].notna().astype(float)
+            df[c] = df[c].fillna(0.0)
+        else:
+            df[c] = 0.0
+            df[observed_col] = 0.0
+    return df
+
+
 # ── UGC / viral feature set ───────────────────────────────────────────────────
 
 _VIRAL_COLS = [
@@ -183,6 +200,15 @@ def build_popularity_features(
     df = pd.DataFrame.from_records(records)
     df = _fill(df, _POPULAR_COLS)
 
+    # Mark radio and chart features with missingness indicators — these are
+    # "unobserved" (no data) for new tracks, not "zero activity."
+    _SPARSE_COLS = [
+        "radio_spins_7d", "radio_spins_30d", "radio_spin_velocity", "radio_market_count",
+        "chart_count", "chart_peak_rank", "chart_days_on_chart", "chart_rank_velocity",
+        "trigger_city_count",
+    ]
+    df = _fill_with_indicator(df, _SPARSE_COLS)
+
     out = pd.DataFrame(index=df.index)
 
     # Log-transform all volume/count columns
@@ -240,6 +266,12 @@ def build_popularity_features(
     for col in ["energy", "danceability", "valence", "loudness", "tempo"]:
         out[col] = df[col]
 
+    # Missingness indicators (from _fill_with_indicator)
+    for c in _SPARSE_COLS:
+        obs_col = f"{c}_observed"
+        if obs_col in df.columns:
+            out[obs_col] = df[obs_col]
+
     feature_names = list(out.columns)
     X = out.to_numpy(dtype=float)
     X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
@@ -260,6 +292,13 @@ def build_combined_features(
     df = pd.DataFrame.from_records(records)
     all_cols = list(set(_VIRAL_COLS + _POPULAR_COLS))
     df = _fill(df, all_cols)
+
+    _SPARSE_COLS = [
+        "radio_spins_7d", "radio_spins_30d", "radio_spin_velocity", "radio_market_count",
+        "chart_count", "chart_peak_rank", "chart_days_on_chart", "chart_rank_velocity",
+        "trigger_city_count",
+    ]
+    df = _fill_with_indicator(df, _SPARSE_COLS)
 
     X_viral, viral_names = build_viral_features(records)
     X_pop, pop_names = build_popularity_features(records)

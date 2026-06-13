@@ -20,6 +20,7 @@ updated models incorporate the latest user and market signals.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -157,6 +158,32 @@ def _run_script(path: Path) -> bool:
         return False
 
 
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _update_baselines(
+    state: Dict,
+    now: datetime,
+    reasons: List[str],
+    recent_viral: Optional[np.ndarray],
+    recent_pop: Optional[np.ndarray],
+    recent_counts: Optional[Dict[str, int]],
+):
+    new_state = {
+        **state,
+        "last_check_at": now.isoformat(),
+    }
+    if reasons:
+        new_state["last_retrain_at"] = now.isoformat()
+        new_state["retrain_reasons"] = reasons
+    if recent_viral is not None:
+        new_state["baseline_viral_probs"] = recent_viral.tolist()
+    if recent_pop is not None:
+        new_state["baseline_popularity_probs"] = recent_pop.tolist()
+    if recent_counts:
+        new_state["baseline_trend_counts"] = recent_counts
+    _save_state(new_state)
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -215,15 +242,28 @@ def main():
 
     if not should_retrain:
         logger.info("No significant drift detected. Skipping retrain.")
+        # Update baselines even when no retrain needed so they stay current
+        _update_baselines(state, now, reasons=[], recent_viral=recent_viral,
+                          recent_pop=recent_pop, recent_counts=recent_counts)
         return
 
     logger.info("Retrain triggered: %s", ", ".join(reasons))
+    # Emit sentinel so GitHub Actions workflow can detect and dispatch ml_train.yml
+    print("RETRAIN_REQUIRED", flush=True)
 
-    # ── Step 1: Collect fresh user feedback into training data ────────────
+    in_ci = os.environ.get("CI", "").lower() in ("true", "1")
+    if in_ci:
+        # In CI the drift_check workflow dispatches ml_train.yml — don't run
+        # training inline here to avoid double-running and quota exhaustion.
+        logger.info("Running in CI — skipping inline retraining (workflow will dispatch ml_train.yml)")
+        return
+
+    # ── Local / manual run: execute training inline ───────────────────────
+    # Step 1: collect fresh user feedback
     logger.info("Collecting user feedback labels before retrain...")
     _run_script(FEEDBACK_SCRIPT)
 
-    # ── Step 2: Retrain all models ────────────────────────────────────────
+    # Step 2: retrain all models
     all_ok = True
     for name, script in TRAIN_SCRIPTS.items():
         ok = _run_script(script)
@@ -231,19 +271,9 @@ def main():
             logger.error("Model '%s' failed to retrain", name)
             all_ok = False
 
-    # ── Step 3: Update baselines and state ────────────────────────────────
+    # Step 3: update baselines and state
     if all_ok:
-        new_state = {
-            "last_retrain_at": now.isoformat(),
-            "retrain_reasons": reasons,
-        }
-        if recent_viral is not None:
-            new_state["baseline_viral_probs"] = recent_viral.tolist()
-        if recent_pop is not None:
-            new_state["baseline_popularity_probs"] = recent_pop.tolist()
-        if recent_counts:
-            new_state["baseline_trend_counts"] = recent_counts
-        _save_state(new_state)
+        _update_baselines(state, now, reasons, recent_viral, recent_pop, recent_counts)
         logger.info("Retrain complete and baselines updated.")
     else:
         logger.error("One or more models failed. State not updated to avoid masking failures.")

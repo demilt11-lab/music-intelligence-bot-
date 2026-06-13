@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
 import { logRequest } from '@/lib/platform/logging';
+import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { listWatchlist, addWatchlistItem } from '@/lib/watchlist/service';
 
 const endpoint = '/api/v1/watchlist';
@@ -11,6 +12,7 @@ export async function GET(req: NextRequest) {
   try {
     ctx = await buildRequestContext(req);
     requireScope(ctx, 'watchlist:read');
+    await enforceRateLimit(ctx, 'watchlist:read', 200);
 
     const items = await listWatchlist(ctx.tenantId);
 
@@ -30,6 +32,7 @@ export async function POST(req: NextRequest) {
   try {
     ctx = await buildRequestContext(req);
     requireScope(ctx, 'watchlist:write');
+    await enforceRateLimit(ctx, 'watchlist:write', 50);
 
     const body = await req.json() as { entityType?: string; entityId?: unknown };
     const { entityType, entityId } = body;

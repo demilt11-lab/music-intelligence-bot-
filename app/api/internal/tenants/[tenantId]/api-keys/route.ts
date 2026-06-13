@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import crypto from 'crypto';
+import { requireInternalAuth } from '@/lib/platform/internal-auth';
 
 function generateApiKey(): { raw: string; hash: string } {
   const raw = `mi_${crypto.randomBytes(32).toString('hex')}`;
@@ -12,6 +13,9 @@ function generateApiKey(): { raw: string; hash: string } {
 type RouteParams = { params: Promise<{ tenantId: string }> };
 
 export async function GET(req: NextRequest, props: RouteParams) {
+  const denied = requireInternalAuth(req);
+  if (denied) return denied;
+
   const params = await props.params;
   const tenantId = Number(params.tenantId);
   if (!Number.isFinite(tenantId)) {
@@ -30,6 +34,9 @@ export async function GET(req: NextRequest, props: RouteParams) {
 }
 
 export async function POST(req: NextRequest, props: RouteParams) {
+  const denied = requireInternalAuth(req);
+  if (denied) return denied;
+
   const params = await props.params;
   const tenantId = Number(params.tenantId);
   if (!Number.isFinite(tenantId)) {
@@ -65,7 +72,7 @@ export async function POST(req: NextRequest, props: RouteParams) {
     },
   });
 
-  // return the raw key once
+  // return the raw key once — it is never stored and cannot be recovered
   return NextResponse.json(
     {
       obj: {

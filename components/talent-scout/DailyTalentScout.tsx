@@ -169,7 +169,7 @@ export function DailyTalentScout() {
                     type="info"
                     message={
                       topTrack && isSignalBacked
-                        ? `Top priority right now is ${topTrack.name} by ${topTrack.artists.join(', ')}. It is leading this scan based on combined momentum signals and should be reviewed first for A&R follow-up.`
+                        ? `Top priority right now is ${topTrack.name}${topTrack.artists.length ? ` by ${topTrack.artists.join(‘, ‘)}` : ‘’}. It is leading this scan based on combined momentum signals and should be reviewed first for A&R follow-up.`
                         : topTrack
                           ? `I’m showing ${topTrack.name} and other tracks from fallback data while live breakout signals are unavailable for this market.`
                           : `I’m standing by with the latest scout pass. Once signals load in, I’ll highlight the best breakout opportunities for immediate review.`

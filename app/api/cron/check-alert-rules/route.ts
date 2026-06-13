@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { ScoutSources } from '@/lib/engine';
 import { emptyTrack } from '@/lib/talentScout/emptyTrack';
 import { verifyCronSecret } from '@/lib/platform/cron-auth';
+import { validateWebhookUrl } from '@/lib/platform/webhook-url';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -55,6 +56,12 @@ export async function GET(req: NextRequest) {
       if (triggered) {
         const msg = `Alert: ${target.entityType} ${target.entityId} — ${rule.metric} is ${value.toFixed(4)} (${rule.operator} ${rule.threshold})`;
         if (rule.channel === 'webhook') {
+          try {
+            validateWebhookUrl(rule.destination);
+          } catch (e: any) {
+            console.warn(`[alert-rules] Skipping invalid webhook URL for rule ${rule.id}: ${e.message}`);
+            continue;
+          }
           await fetch(rule.destination, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

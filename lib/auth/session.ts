@@ -85,10 +85,13 @@ export async function validateSessionToken(
   if (!session || session.revokedAt || session.expiresAt < new Date()) return null;
 
   // Touch lastSeenAt at most once a minute to avoid a write per request.
+  // Fire-and-forget intentionally — a missed touch doesn't affect auth decisions
+  // (expiry is enforced by expiresAt, not lastSeenAt). Log warnings so transient
+  // DB issues are visible without blocking the request.
   if (Date.now() - session.lastSeenAt.getTime() > 60_000) {
     db.session
       .update({ where: { id: session.id }, data: { lastSeenAt: new Date() } })
-      .catch(() => {});
+      .catch((err: Error) => console.warn('[session] lastSeenAt update failed:', err.message));
   }
 
   return {

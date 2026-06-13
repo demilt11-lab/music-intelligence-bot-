@@ -2,6 +2,7 @@
 export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 import { db } from "@/lib/db";
 
 const ML_URL =
@@ -111,12 +112,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (!mlRes.ok) {
-      const text = await mlRes.text();
+      const body = await mlRes.text();
+      console.error(`[trajectory/predict] ML service ${mlRes.status}: ${body.slice(0, 500)}`);
       return NextResponse.json(
-        {
-          error: "ML service error",
-          details: text,
-        },
+        { error: "ML service temporarily unavailable. Please try again shortly." },
         { status: 502 },
       );
     }
@@ -152,9 +151,10 @@ export async function POST(req: NextRequest) {
       })),
     });
   } catch (err: any) {
-    console.error(err);
+    const errorId = randomUUID();
+    console.error(`[trajectory/predict] errorId=${errorId}:`, err?.message ?? err);
     return NextResponse.json(
-      { error: "Internal error" },
+      { error: "Internal error", errorId },
       { status: 500 },
     );
   }

@@ -65,6 +65,34 @@ jobs:
         run: npx tsx scripts/import_artist_trajectory_predictions.ts
         continue-on-error: false
 
+      - name: Check drift and trigger retrain if needed
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python ml/training/retrain_scheduler.py
+        continue-on-error: true
+
+      - name: Write model registry metadata
+        run: |
+          mkdir -p output
+          cat > output/model_registry.json << EOF
+          {
+            "trained_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "run_id": "${{ github.run_id }}",
+            "commit_sha": "${{ github.sha }}",
+            "models": [
+              "output/track_trend_model.joblib",
+              "output/track_trend_scaler.joblib",
+              "output/artist_trajectory_model.joblib",
+              "output/artist_trajectory_scaler.joblib",
+              "ml/models/viral_predictor_7d_calibrated.joblib",
+              "ml/models/viral_predictor_14d_calibrated.joblib",
+              "ml/models/viral_predictor_30d_calibrated.joblib",
+              "ml/models/trend_classifier_xgb.json",
+              "ml/models/trend_classifier_label_encoder.joblib"
+            ]
+          }
+          EOF
+
       - name: Upload model artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -73,4 +101,6 @@ jobs:
             output/*.joblib
             output/*.json
             output/*.csv
-          retention-days: 30
+            ml/models/*.joblib
+            ml/models/*.json
+          retention-days: 90

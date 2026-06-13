@@ -184,7 +184,7 @@ export function TalentScoutDashboard() {
                       >
                         <td className="px-4 py-2.5 text-slate-500 tabular-nums">{idx + 1}</td>
                         <td className="px-4 py-2.5 text-slate-200 font-medium truncate max-w-[160px]">{track.name}</td>
-                        <td className="px-4 py-2.5 text-slate-400 truncate max-w-[120px]">{track.artists.join(', ')}</td>
+                        <td className="px-4 py-2.5 text-slate-400 truncate max-w-[120px]">{track.artists?.join(', ') || 'Unknown Artist'}</td>
                         <td className="px-4 py-2.5 text-center">
                           <span className={`font-semibold tabular-nums ${scoreColor}`}>
                             {(track.totalScore * 100).toFixed(0)}
