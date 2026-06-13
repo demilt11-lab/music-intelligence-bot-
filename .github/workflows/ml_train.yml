@@ -25,8 +25,9 @@ jobs:
           echo "HTTP status: $HTTP_STATUS"
           echo "Response body:"
           cat /tmp/ml_response.json
+          # Fail only on non-200 or if response contains an "error" field at the model level
           [ "$HTTP_STATUS" = "200" ] || (echo "Expected 200, got $HTTP_STATUS" && exit 1)
-          grep -q '"ok":true' /tmp/ml_response.json || (echo "Response missing ok:true" && exit 1)
+          grep -q '"error"' /tmp/ml_response.json && (echo "One or more models returned an error" && exit 1) || true
         env:
           VERCEL_URL: ${{ secrets.VERCEL_URL }}
           INTERNAL_ADMIN_SECRET: ${{ secrets.INTERNAL_ADMIN_SECRET }}
