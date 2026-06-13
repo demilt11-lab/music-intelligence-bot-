@@ -264,6 +264,11 @@ const SAMPLE_TRACKS: Array<{ name: string; artists: string[] }> = [
   { name: 'Sample Track E', artists: ['Demo Artist Five'] },
 ]
 
+/** Reject artist names that are raw URLs (e.g. stray Twitter/social profile links). */
+function isUrl(s: string): boolean {
+  return /^https?:\/\//i.test(s.trim())
+}
+
 async function loadTrackMeta(trackIds: number[]) {
   if (!trackIds.length) return new Map<number, { name: string; artists: string[] }>()
 
@@ -277,7 +282,9 @@ async function loadTrackMeta(trackIds: number[]) {
       t.id,
       {
         name: t.title,
-        artists: t.trackArtists.map((ta) => ta.artist.name),
+        artists: t.trackArtists
+          .map((ta) => ta.artist.name)
+          .filter((name) => !isUrl(name)),
       },
     ])
   )
