@@ -89,7 +89,9 @@ function formatPct(v: number | null | undefined) {
 
 function formatInt(v: string | number | null | undefined) {
   if (v == null) return '—'
-  return Number(v).toLocaleString()
+  const n = Number(v)
+  if (Number.isNaN(n)) return '—'
+  return n.toLocaleString()
 }
 
 function statusTone(status: string) {
@@ -527,12 +529,7 @@ export default function ArtistPage(
                         key={r.id}
                         className="border-t border-white/10 text-zinc-300"
                       >
-                        <td className="px-4 py-3">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-zinc-100">{r.name}</span>
-                            <span className="text-xs text-zinc-500">Track ID: {r.id}</span>
-                          </div>
-                        </td>
+                        <td className="px-4 py-3 font-medium text-zinc-100">{r.name}</td>
                         <td className="px-4 py-3">{r.albums?.[0]?.name || '—'}</td>
                         <td className="px-4 py-3">{r.isrc || '—'}</td>
                         <td className="px-4 py-3 text-right tabular-nums">

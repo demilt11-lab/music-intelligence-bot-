@@ -353,7 +353,7 @@ export default function ArtistsDashboardPage() {
                                     href={`/artists/${row.artistId}`}
                                     className="font-medium text-zinc-100 transition-colors hover:text-emerald-300"
                                   >
-                                    {row.name || row.artistId}
+                                    {row.name || 'Unknown Artist'}
                                   </Link>
                                 ) : (
                                   <span className="text-zinc-400">

@@ -114,7 +114,7 @@ export function ScoutTrackCard({
         heatStyle.glow,
         className,
       ].join(' ')}
-      aria-label={`Rank ${rank}: ${track.name} by ${track.artists.join(', ')}`}
+      aria-label={`Rank ${rank}: ${track.name}${track.artists?.length ? ` by ${track.artists.join(', ')}` : ''}`}
     >
       <div
         className={`pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b ${heatStyle.accent}`}
@@ -152,7 +152,7 @@ export function ScoutTrackCard({
             </h3>
 
             <p className="mt-1 truncate text-sm text-zinc-400">
-              {track.artists.join(', ') || 'Unknown artist'}
+              {track.artists?.join(', ') || 'Unknown Artist'}
             </p>
 
             <p className="mt-3 text-xs leading-5 text-zinc-300">
