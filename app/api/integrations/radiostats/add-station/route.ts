@@ -5,8 +5,11 @@ import {
   addRadiostatsStation,
   AddStationRequest,
 } from '@/lib/radiostats/addStation';
+import { requireInternalAuth } from '@/lib/platform/internal-auth';
 
 export async function POST(req: NextRequest) {
+  const denied = requireInternalAuth(req);
+  if (denied) return denied;
   try {
     const body = (await req.json()) as Partial<AddStationRequest>;
 

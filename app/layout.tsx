@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
+import { headers } from 'next/headers'
 import './globals.css'
 import { ToastProvider } from '@/components/ui/Toast'
 
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
   description:
     'AI-powered A&R intelligence workspace for scouting artists, tracking momentum, and turning music data into actionable decisions.',
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_BASE_URL ?? 'https://localhost:3000'
+    process.env.NEXT_PUBLIC_BASE_URL ?? 'https://example.com'
   ),
   robots: {
     index: false,
@@ -41,13 +42,15 @@ export const viewport: Viewport = {
   themeColor: '#09090b',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const nonce = (await headers()).get('x-nonce') ?? '';
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <head>{nonce && <meta property="csp-nonce" content={nonce} />}</head>
       <body className="min-h-screen bg-[#09090b] text-zinc-100 antialiased">
         <a
           href="#main-content"

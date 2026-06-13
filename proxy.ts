@@ -54,6 +54,7 @@ async function hasPlausibleSession(req: NextRequest): Promise<boolean> {
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const isProd = process.env.NODE_ENV === 'production';
 
   // CORS preflight
   if (req.method === 'OPTIONS') {
@@ -70,6 +71,9 @@ export async function proxy(req: NextRequest) {
 
   const requestId =
     req.headers.get('x-request-id') ?? `req_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+
+  // Per-request nonce for CSP — btoa(UUID) is safe in Edge Runtime
+  const nonce = btoa(crypto.randomUUID());
 
   const isApiRoute = pathname.startsWith('/api/');
   const isPublicApi = PUBLIC_API_PATTERNS.some((p) => p.test(pathname));
@@ -114,8 +118,29 @@ export async function proxy(req: NextRequest) {
     }
   }
 
-  const res = NextResponse.next();
+  // Forward nonce and request-id to the route handler via request headers
+  const reqHeaders = new Headers(req.headers);
+  reqHeaders.set('x-request-id', requestId);
+  reqHeaders.set('x-nonce', nonce);
+
+  const res = NextResponse.next({ request: { headers: reqHeaders } });
   res.headers.set('x-request-id', requestId);
+
+  // Nonce-based CSP — replaces the static unsafe-inline from next.config.js.
+  // 'strict-dynamic' allows nonce-trusted scripts to load further scripts,
+  // so third-party loaders work without needing to enumerate every src.
+  const scriptDirectives = isProd
+    ? `'self' 'nonce-${nonce}' 'strict-dynamic'`
+    : `'self' 'nonce-${nonce}' 'strict-dynamic' 'unsafe-eval'`;
+  res.headers.set('Content-Security-Policy', [
+    "default-src 'self'",
+    `script-src ${scriptDirectives}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https:",
+    "frame-ancestors 'none'",
+  ].join('; '));
 
   // Observability flag for v1 calls arriving without an API key
   if (isApiRoute && isSelfAuthedApi && !req.headers.get('x-api-key') && pathname.startsWith('/api/v1/')) {

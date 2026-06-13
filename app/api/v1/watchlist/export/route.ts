@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
+import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { logRequest } from '@/lib/platform/logging';
 import { toCsvResponse } from '@/lib/export/csv';
 import { listWatchlist } from '@/lib/watchlist/service';
@@ -17,6 +18,7 @@ export async function GET(req: NextRequest) {
   try {
     ctx = await buildRequestContext(req);
     requireScope(ctx, 'watchlist:read');
+    await enforceRateLimit(ctx, `tenant:${ctx.tenantId}:watchlist:export`, 10);
 
     const items = await listWatchlist(ctx.tenantId);
 
