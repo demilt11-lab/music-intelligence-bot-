@@ -9,8 +9,9 @@ const PUBLIC_API_PATTERNS = [
 ];
 
 // API namespaces with their own auth: v1 (API keys), cron (CRON_SECRET),
-// internal (per-route checks). Session auth applies to /api/ui only.
-const SELF_AUTHED_API = [/^\/api\/v1\//, /^\/api\/cron\//, /^\/api\/internal\//];
+// internal (per-route checks), mcp (session OR x-api-key handled in route).
+// Session auth applies to all other /api/* routes.
+const SELF_AUTHED_API = [/^\/api\/v1\//, /^\/api\/cron\//, /^\/api\/internal\//, /^\/api\/mcp/];
 
 const SESSION_COOKIE = 'nv8_session';
 
@@ -68,7 +69,7 @@ export async function proxy(req: NextRequest) {
   }
 
   const requestId =
-    req.headers.get('x-request-id') ?? `req_${Math.random().toString(36).slice(2, 11)}`;
+    req.headers.get('x-request-id') ?? `req_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
 
   const isApiRoute = pathname.startsWith('/api/');
   const isPublicApi = PUBLIC_API_PATTERNS.some((p) => p.test(pathname));
