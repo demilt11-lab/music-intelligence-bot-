@@ -710,6 +710,28 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
     if (absAccel > maxAccel) maxAccel = absAccel;
   }
 
+  // Fetch latest ML viral probabilities (30d) for all tracks in scope.
+  // These are written by scripts/import_track_trend_predictions.ts after each
+  // ml_train.yml run. When no prediction exists the modifier is neutral (1.0).
+  const trackIds = [...new Set([...platformSignals.values()].map((s) => s.trackId))];
+  const mlPredRows = trackIds.length > 0
+    ? await db.$queryRawUnsafe<{ track_id: number; prob_viral: number }[]>(
+        `SELECT DISTINCT ON ("trackId") "trackId" AS track_id, "probViral" AS prob_viral
+         FROM track_trend_predictions
+         WHERE "trackId" = ANY($1::int[])
+           AND "predictedAt" >= NOW() - INTERVAL '30 days'
+         ORDER BY "trackId", "predictedAt" DESC`,
+        trackIds,
+      )
+    : [];
+  const mlProbMap = new Map<number, number>();
+  for (const row of mlPredRows) {
+    mlProbMap.set(row.track_id, row.prob_viral);
+  }
+  console.log(
+    `[compute_track_signals] Loaded ML predictions for ${mlProbMap.size}/${trackIds.length} tracks`,
+  );
+
   console.log(
     `[compute_track_signals] Normalizing and writing ${platformSignals.size} track signals...`,
   );
@@ -756,7 +778,7 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
 
     const curveMultiplier = accel?.curveMultiplier ?? 1.0;
 
-    // Updated viral score formula
+    // Deterministic weighted formula (weights sum to 1.0)
     const rawViralScore =
       0.28 * tiktokNorm +
       0.18 * instagramNorm +
@@ -767,8 +789,14 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
       0.05 * youtubeNorm +
       0.05 * organicNorm;
 
+    // ML modifier: blend in the model's 30d viral probability as a ±7.5%
+    // nudge around the rule-based score. Neutral when no prediction exists.
+    // Formula: modifier = 1 + 0.15 * (probViral - 0.5), clamped to [0.85, 1.15]
+    const mlProb30d = mlProbMap.get(s.trackId) ?? 0.5;
+    const mlModifier = clamp(1 + 0.15 * (mlProb30d - 0.5), 0.85, 1.15);
+
     const viralScore = clamp(
-      rawViralScore * curveMultiplier * synergyMultiplier,
+      rawViralScore * curveMultiplier * synergyMultiplier * mlModifier,
       0,
       1,
     );
