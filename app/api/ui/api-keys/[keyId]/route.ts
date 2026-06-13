@@ -28,7 +28,7 @@ export async function DELETE(req: NextRequest, props: RouteParams) {
   }
 
   await db.apiKey.update({
-    where: { id },
+    where: { id, tenantId: user.tenantId },
     data: { isRevoked: true },
   });
 

@@ -2,9 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantByApiKey } from "@/lib/platform/auth";
 
-const INTERNAL_URL =
-  process.env.INTERNAL_ARTIST_TRAJECTORY_URL ||
-  "http://localhost:3000/api/v1/artist/trajectory/predict";
+const BASE = process.env.INTERNAL_API_BASE_URL;
+const INTERNAL_URL = BASE
+  ? `${BASE}/api/v1/artist/trajectory/predict`
+  : null;
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,6 +34,10 @@ export async function POST(req: NextRequest) {
         { error: "artistIds array is required" },
         { status: 400 },
       );
+    }
+
+    if (!INTERNAL_URL) {
+      return NextResponse.json({ error: "Service not configured" }, { status: 503 });
     }
 
     // Forward to internal service

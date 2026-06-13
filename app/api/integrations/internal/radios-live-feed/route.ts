@@ -2,8 +2,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createInternalConnector } from '@/lib/integrations/internal';
+import { requireInternalAuth } from '@/lib/platform/internal-auth';
 
 export async function GET(req: NextRequest) {
+  const denied = requireInternalAuth(req);
+  if (denied) return denied;
   try {
     const sp = req.nextUrl.searchParams;
 

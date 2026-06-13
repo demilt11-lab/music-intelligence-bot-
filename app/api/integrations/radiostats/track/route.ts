@@ -1,9 +1,12 @@
 // app/api/integrations/radiostats/track/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getRadiostatsTrackStats } from '@/lib/radiostats/tracks';
-import { db } from '@/lib/db'; // Prisma client, already in repo.[page:3]
+import { db } from '@/lib/db';
+import { requireInternalAuth } from '@/lib/platform/internal-auth';
 
 export async function POST(req: NextRequest) {
+  const denied = requireInternalAuth(req);
+  if (denied) return denied;
   try {
     const body = await req.json();
     const { trackId, isrc, spotifyTrackId, from, to } = body;

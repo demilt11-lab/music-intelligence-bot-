@@ -4,10 +4,12 @@ export const maxDuration = 60;
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { db } from "@/lib/db";
+import { requireInternalAuth } from "@/lib/platform/internal-auth";
 
-const ML_URL =
-  process.env.ML_ARTIST_TRAJECTORY_URL ||
-  "http://localhost:8000/v1/artist/trajectory/predict";
+const ML_URL = process.env.ML_ARTIST_TRAJECTORY_URL;
+if (!ML_URL) {
+  console.warn("[trajectory/predict] ML_ARTIST_TRAJECTORY_URL is not set — endpoint will return 503");
+}
 
 type MlRequestItem = {
   artist_id: number;
@@ -31,6 +33,13 @@ type MlResponseItem = {
 };
 
 export async function POST(req: NextRequest) {
+  const denied = requireInternalAuth(req);
+  if (denied) return denied;
+
+  if (!ML_URL) {
+    return NextResponse.json({ error: "ML service not configured" }, { status: 503 });
+  }
+
   try {
     const body = await req.json();
     const artistIds: number[] = body.artistIds;

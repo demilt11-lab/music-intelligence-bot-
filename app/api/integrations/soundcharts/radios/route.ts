@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSoundchartsConnector } from '@/lib/integrations/soundcharts';
+import { requireInternalAuth } from '@/lib/platform/internal-auth';
 
 export async function GET(req: NextRequest) {
+  const denied = requireInternalAuth(req);
+  if (denied) return denied;
   const searchParams = req.nextUrl.searchParams;
   const offset = Number(searchParams.get('offset') ?? '0');
   const limit = Number(searchParams.get('limit') ?? '25');
