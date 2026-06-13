@@ -4,14 +4,8 @@
 // Set ALLOWED_ORIGIN to your frontend domain in all environments.
 const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
 
-// CSP: production removes unsafe-eval (webpack dev server needs it locally).
-// NOTE: unsafe-inline for script-src is required by Next.js for inline hydration
-// scripts. Full removal requires implementing per-request nonces — tracked as
-// a future hardening task. unsafe-eval is removed in production unconditionally.
-const isProd = process.env.NODE_ENV === 'production';
-const scriptSrc = isProd
-  ? "script-src 'self' 'unsafe-inline'"
-  : "script-src 'self' 'unsafe-eval' 'unsafe-inline'";
+// CSP is now set per-request in proxy.ts middleware with a unique nonce,
+// replacing the static unsafe-inline that was here previously.
 
 const nextConfig = {
   // Security + CORS headers on every response
@@ -28,18 +22,6 @@ const nextConfig = {
           {
             key: 'Strict-Transport-Security',
             value: 'max-age=63072000; includeSubDomains; preload',
-          },
-          {
-            key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              scriptSrc,
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https:",
-              "font-src 'self' data:",
-              "connect-src 'self' https:",
-              "frame-ancestors 'none'",
-            ].join('; '),
           },
         ],
       },

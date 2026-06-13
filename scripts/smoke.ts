@@ -201,6 +201,57 @@ async function main() {
       check('  removed item no longer listed',
         !(after.body?.obj ?? []).some((i: any) => i.id === entry.id));
     }
+    // ── 10. API key CRUD (ADMIN-only) ──────────────────────────────────────
+    if (AUTH_ON && cookie) {
+      const createKey = await getJson('/api/ui/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', cookie },
+        body: JSON.stringify({ label: 'Smoke Test Key' }),
+      });
+      check('POST /api/ui/api-keys → 201', createKey.status === 201, `status=${createKey.status}`);
+      const rawKey: string | undefined = createKey.body?.obj?.key;
+      const keyId: number | undefined = createKey.body?.obj?.id;
+      check('  API key response includes raw key', typeof rawKey === 'string' && rawKey.startsWith('mi_'));
+
+      const listKeys = await getJson('/api/ui/api-keys', { headers: { cookie } });
+      check('GET /api/ui/api-keys → 200', listKeys.status === 200, `status=${listKeys.status}`);
+      check('  new key appears in list', (listKeys.body?.obj ?? []).some((k: any) => k.id === keyId));
+
+      if (keyId) {
+        const delKey = await getJson(`/api/ui/api-keys/${keyId}`, {
+          method: 'DELETE',
+          headers: { cookie },
+        });
+        check('DELETE /api/ui/api-keys/:id → 204', delKey.status === 204, `status=${delKey.status}`);
+      }
+    }
+
+    // ── 11. MCP initialize handshake ────────────────────────────────────────
+    const mcpRes = await getJson('/api/mcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authHeaders ?? {}),
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'smoke-test', version: '1.0' },
+        },
+      }),
+    });
+    if (AUTH_ON) {
+      check('POST /api/mcp initialize → 200', mcpRes.status === 200, `status=${mcpRes.status}`);
+      check('  MCP initialize returns serverInfo',
+        mcpRes.body?.result?.serverInfo?.name != null,
+        `body=${JSON.stringify(mcpRes.body)}`);
+    } else {
+      check('POST /api/mcp without auth → 401', mcpRes.status === 401, `status=${mcpRes.status}`);
+    }
   } finally {
     // ── Cleanup ──────────────────────────────────────────────────────────────
     await db.track.delete({ where: { id: track.id } }).catch(() => {});

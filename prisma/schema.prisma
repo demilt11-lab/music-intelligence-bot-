@@ -41,6 +41,7 @@ model Track {
   trendLabels           TrackTrendLabel[]
   trendPredictions      TrackTrendPrediction[]
   playlistTracks        PlaylistTrack[]
+  songwriterTracks      SongwriterTrack[]
 
   @@map("tracks")
 }
@@ -1545,4 +1546,33 @@ model UserFeedback {
   @@index([tenantId, createdAt])
   @@index([trackId])
   @@map("user_feedback")
+}
+
+// ─────────────────────────────────────────────
+// Songwriters
+// ─────────────────────────────────────────────
+
+model Songwriter {
+  id        Int      @id @default(autoincrement())
+  name      String
+  slug      String?  @unique
+  ipi       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tracks SongwriterTrack[]
+
+  @@map("songwriters")
+}
+
+model SongwriterTrack {
+  songwriterId Int
+  trackId      Int
+  role         String?
+
+  songwriter Songwriter @relation(fields: [songwriterId], references: [id], onDelete: Cascade)
+  track      Track      @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@id([songwriterId, trackId])
+  @@map("songwriter_tracks")
 }
