@@ -12,21 +12,21 @@ jobs:
     steps:
       - name: Train both models
         run: |
-          # Strip any protocol prefix and trailing slash, then force https://
           BASE_URL="${VERCEL_URL#https://}"
           BASE_URL="${BASE_URL#http://}"
           BASE_URL="https://${BASE_URL%/}"
           echo "Triggering ML training on $BASE_URL ..."
-          RESPONSE=$(curl -sLf -X POST "$BASE_URL/api/internal/ml/train" \
+          HTTP_STATUS=$(curl -sL -o /tmp/ml_response.json \
+            -w "%{http_code}" \
+            -X POST "$BASE_URL/api/internal/ml/train" \
             -H "Authorization: Bearer $INTERNAL_ADMIN_SECRET" \
             -H "Content-Type: application/json" \
-            -d '{}' \
-            -w "\nHTTP_STATUS:%{http_code}")
-          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
-          BODY=$(echo "$RESPONSE" | grep -v "HTTP_STATUS:")
-          echo "Status: $HTTP_STATUS"
-          echo "$BODY"
-          echo "$BODY" | grep -q '"ok":true' || (echo "Training failed (HTTP $HTTP_STATUS)" && exit 1)
+            -d '{}')
+          echo "HTTP status: $HTTP_STATUS"
+          echo "Response body:"
+          cat /tmp/ml_response.json
+          [ "$HTTP_STATUS" = "200" ] || (echo "Expected 200, got $HTTP_STATUS" && exit 1)
+          grep -q '"ok":true' /tmp/ml_response.json || (echo "Response missing ok:true" && exit 1)
         env:
           VERCEL_URL: ${{ secrets.VERCEL_URL }}
           INTERNAL_ADMIN_SECRET: ${{ secrets.INTERNAL_ADMIN_SECRET }}
@@ -36,7 +36,7 @@ jobs:
           BASE_URL="${VERCEL_URL#https://}"
           BASE_URL="${BASE_URL#http://}"
           BASE_URL="https://${BASE_URL%/}"
-          curl -sLf "$BASE_URL/api/internal/ml/status" \
+          curl -sL "$BASE_URL/api/internal/ml/status" \
             -H "Authorization: Bearer $INTERNAL_ADMIN_SECRET"
         env:
           VERCEL_URL: ${{ secrets.VERCEL_URL }}
