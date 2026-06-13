@@ -9,6 +9,9 @@ export async function DELETE(req: NextRequest, props: RouteParams) {
   if (!user) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
+  if (user.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const { keyId } = await props.params;
   const id = Number(keyId);

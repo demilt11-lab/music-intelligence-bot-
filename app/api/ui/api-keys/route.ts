@@ -17,6 +17,9 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
+  if (user.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const keys = await db.apiKey.findMany({
     where: { tenantId: user.tenantId },
@@ -39,6 +42,9 @@ export async function POST(req: NextRequest) {
   const user = await getSessionUser();
   if (!user) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  }
+  if (user.role !== 'ADMIN') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   const body = await req.json().catch(() => null) as { label?: string } | null;
