@@ -16,7 +16,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { getTenantByApiKey } from '@/lib/platform/auth';
@@ -317,7 +317,6 @@ function buildServer(tenantId: number | null) {
       }),
     },
     async ({ query, type, limit }) => {
-      const q = `%${query}%`;
       const results: Record<string, unknown[]> = {};
 
       if (type === 'all' || type === 'artist') {
