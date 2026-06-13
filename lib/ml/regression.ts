@@ -75,16 +75,16 @@ export function trainLogistic(
 
   // Weight initialisation (Xavier)
   const scale = Math.sqrt(2 / (nFeatures + nClasses));
-  let W: number[][] = Array.from({ length: nClasses }, () =>
+  const W: number[][] = Array.from({ length: nClasses }, () =>
     Array.from({ length: nFeatures }, () => (Math.random() * 2 - 1) * scale),
   );
-  let b: number[] = new Array(nClasses).fill(0);
+  const b: number[] = new Array(nClasses).fill(0);
 
   // Adam state
-  let mW = W.map((r) => r.map(() => 0));
-  let vW = W.map((r) => r.map(() => 0));
-  let mb = b.map(() => 0);
-  let vb = b.map(() => 0);
+  const mW = W.map((r) => r.map(() => 0));
+  const vW = W.map((r) => r.map(() => 0));
+  const mb = b.map(() => 0);
+  const vb = b.map(() => 0);
   const beta1 = 0.9, beta2 = 0.999, eps = 1e-8;
   let t = 0;
 
