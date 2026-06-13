@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { href: '/curators', label: 'Curators', icon: '✦' },
   { href: '/watchlist', label: 'Watchlist', icon: '◈' },
   { href: '/search', label: 'Search', icon: '⌕' },
+  { href: '/settings/api-keys', label: 'API Keys', icon: '⚿' },
 ]
 
 export function SidebarNav() {
