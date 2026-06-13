@@ -1,9 +1,10 @@
 'use client'
 
+import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { href: '/', label: 'Home', icon: '⌂' },
   { href: '/talent-scout', label: 'Buddy Scout', icon: '◎', hot: true },
   { href: '/artists', label: 'Artists', icon: '♪' },
@@ -13,8 +14,24 @@ const NAV_ITEMS = [
   { href: '/search', label: 'Search', icon: '⌕' },
 ]
 
+const ADMIN_NAV_ITEMS = [
+  { href: '/settings/api-keys', label: 'API Keys', icon: '⚿', hot: false },
+]
+
 export function SidebarNav() {
   const pathname = usePathname()
+  const [isAdmin, setIsAdmin] = React.useState(false)
+
+  React.useEffect(() => {
+    fetch('/api/auth/me')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.obj?.role === 'ADMIN') setIsAdmin(true)
+      })
+      .catch(() => {})
+  }, [])
+
+  const navItems = isAdmin ? [...BASE_NAV_ITEMS, ...ADMIN_NAV_ITEMS] : BASE_NAV_ITEMS
 
   return (
     <aside className="hidden min-h-screen w-[288px] shrink-0 border-r border-white/10 bg-[linear-gradient(180deg,rgba(7,7,9,0.96)_0%,rgba(11,12,16,0.98)_100%)] xl:flex xl:flex-col">
@@ -72,7 +89,7 @@ export function SidebarNav() {
         </div>
 
         <div className="space-y-1.5">
-          {NAV_ITEMS.map(({ href, label, icon, hot }) => {
+          {navItems.map(({ href, label, icon, hot }) => {
             const active =
               pathname === href || (href !== '/' && pathname.startsWith(href))
 
