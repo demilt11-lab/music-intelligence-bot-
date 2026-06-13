@@ -3,104 +3,30 @@ name: ML Training Pipeline
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * 0'
+    - cron: '0 7 * * *'   # 07:00 UTC daily (after ETL at 04:00 + Vercel cron at 06:00 as fallback)
 
 jobs:
   train:
+    name: Trigger in-process ML training on Vercel
     runs-on: ubuntu-latest
-    env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      DIRECT_URL: ${{ secrets.DIRECT_URL }}
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Setup Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Node dependencies
-        run: npm install
-
-      - name: Install Python dependencies
-        run: pip install -r requirements.txt
-
-      - name: Export track trend training data
-        run: npx tsx scripts/export_track_trend_training.ts
-        continue-on-error: false
-
-      - name: Export artist trajectory features
-        run: npx tsx scripts/export_artist_trajectory_features.ts
-        continue-on-error: false
-
-      - name: Train track trend model
-        run: python ml/track_trend_model.py --mode train --input output/track_trend_training.csv
-        continue-on-error: false
-
-      - name: Generate track trend predictions
-        run: python ml/track_trend_model.py --mode predict --input output/track_trend_training.csv --output output/track_trend_predictions.csv
-        continue-on-error: false
-
-      - name: Import track trend predictions
-        run: npx tsx scripts/import_track_trend_predictions.ts
-        continue-on-error: false
-
-      - name: Train artist trajectory model
-        run: python ml/artist_trajectory_model.py --mode train --input output/artist_trajectory_features.csv
-        continue-on-error: false
-
-      - name: Generate artist trajectory predictions
-        run: python ml/artist_trajectory_model.py --mode predict --input output/artist_trajectory_features.csv --output output/artist_trajectory_predictions.csv
-        continue-on-error: false
-
-      - name: Import artist trajectory predictions
-        run: npx tsx scripts/import_artist_trajectory_predictions.ts
-        continue-on-error: false
-
-      - name: Check drift and trigger retrain if needed
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: python ml/training/retrain_scheduler.py
-        continue-on-error: true
-
-      - name: Write model registry metadata
+      - name: Train both models
         run: |
-          mkdir -p output
-          cat > output/model_registry.json << EOF
-          {
-            "trained_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "run_id": "${{ github.run_id }}",
-            "commit_sha": "${{ github.sha }}",
-            "models": [
-              "output/track_trend_model.joblib",
-              "output/track_trend_scaler.joblib",
-              "output/artist_trajectory_model.joblib",
-              "output/artist_trajectory_scaler.joblib",
-              "ml/models/viral_predictor_7d_calibrated.joblib",
-              "ml/models/viral_predictor_14d_calibrated.joblib",
-              "ml/models/viral_predictor_30d_calibrated.joblib",
-              "ml/models/trend_classifier_xgb.json",
-              "ml/models/trend_classifier_label_encoder.joblib"
-            ]
-          }
-          EOF
+          echo "Triggering ML training on $VERCEL_URL ..."
+          RESPONSE=$(curl -sf -X POST "$VERCEL_URL/api/internal/ml/train" \
+            -H "Authorization: Bearer $INTERNAL_ADMIN_SECRET" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          echo "$RESPONSE"
+          echo "$RESPONSE" | grep -q '"ok":true' || (echo "Training failed" && exit 1)
+        env:
+          VERCEL_URL: ${{ secrets.VERCEL_URL }}
+          INTERNAL_ADMIN_SECRET: ${{ secrets.INTERNAL_ADMIN_SECRET }}
 
-      - name: Upload model artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ml-models-${{ github.run_id }}
-          path: |
-            output/*.joblib
-            output/*.json
-            output/*.csv
-            ml/models/*.joblib
-            ml/models/*.json
-          retention-days: 90
+      - name: Check model status
+        run: |
+          curl -sf "$VERCEL_URL/api/internal/ml/status" \
+            -H "Authorization: Bearer $INTERNAL_ADMIN_SECRET"
+        env:
+          VERCEL_URL: ${{ secrets.VERCEL_URL }}
+          INTERNAL_ADMIN_SECRET: ${{ secrets.INTERNAL_ADMIN_SECRET }}
