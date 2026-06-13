@@ -61,22 +61,23 @@ async function upsertYoutubeChart(
     update: {},
   });
 
-  // Delete existing rows for this snapshot so we can re-insert with fresh ranks
-  await db.youtubeShortsChartRow.deleteMany({ where: { snapshotId: snapshot.id } });
-
-  for (let i = 0; i < videos.length; i++) {
-    const v = videos[i];
-    await db.youtubeShortsChartRow.create({
-      data: {
-        snapshotId: snapshot.id,
-        videoId: v.videoId,
-        rank: i + 1,
-        views: v.views ?? null,
-        likes: v.likes ?? null,
-        comments: v.comments ?? null,
-      },
-    });
-  }
+  // Delete + re-insert atomically so a mid-loop failure can never leave the
+  // snapshot empty or partially populated.
+  await db.$transaction([
+    db.youtubeShortsChartRow.deleteMany({ where: { snapshotId: snapshot.id } }),
+    ...videos.map((v, i) =>
+      db.youtubeShortsChartRow.create({
+        data: {
+          snapshotId: snapshot.id,
+          videoId: v.videoId,
+          rank: i + 1,
+          views: v.views ?? null,
+          likes: v.likes ?? null,
+          comments: v.comments ?? null,
+        },
+      }),
+    ),
+  ]);
 }
 
 /**
