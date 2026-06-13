@@ -61,7 +61,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'max 200 items per request' }, { status: 400 });
     }
 
-    // Validate
     for (const item of items) {
       if (!item.trackId || typeof item.trackId !== 'number') {
         return NextResponse.json({ error: 'each item requires a numeric trackId' }, { status: 400 });
@@ -80,43 +79,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Write to DB — use raw SQL since user_feedback may not be in Prisma schema yet
-    await db.$executeRawUnsafe(
-      `
-      CREATE TABLE IF NOT EXISTS user_feedback (
-        id          SERIAL PRIMARY KEY,
-        tenant_id   INTEGER NOT NULL,
-        track_id    INTEGER NOT NULL,
-        label       TEXT,
-        is_viral    BOOLEAN,
-        is_popular  BOOLEAN,
-        notes       TEXT,
-        source      TEXT,
-        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-      `,
-    );
-
-    let inserted = 0;
-    for (const item of items) {
-      await db.$executeRawUnsafe(
-        `
-        INSERT INTO user_feedback (tenant_id, track_id, label, is_viral, is_popular, notes, source)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `,
-        ctx.tenantId,
-        item.trackId,
-        item.label ?? null,
-        item.isViral ?? null,
-        item.isPopular ?? null,
-        item.notes ?? null,
-        item.source ?? null,
-      );
-      inserted++;
-    }
+    await db.userFeedback.createMany({
+      data: items.map((item) => ({
+        tenantId: ctx!.tenantId,
+        trackId: item.trackId,
+        label: item.label ?? null,
+        isViral: item.isViral ?? null,
+        isPopular: item.isPopular ?? null,
+        notes: item.notes ?? null,
+        source: item.source ?? null,
+      })),
+    });
 
     await logRequest(ctx, endpoint, 'POST', 202, startedAt);
-    return NextResponse.json({ accepted: inserted }, { status: 202 });
+    return NextResponse.json({ accepted: items.length }, { status: 202 });
   } catch (err: any) {
     const status = err.status ?? 500;
     const message = status === 500 ? 'Internal server error' : (err.message ?? 'Error');

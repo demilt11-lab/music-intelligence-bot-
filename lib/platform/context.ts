@@ -1,5 +1,6 @@
 // lib/platform/context.ts
 import { NextRequest } from 'next/server';
+import { randomBytes } from 'crypto';
 import { getTenantByApiKey } from './auth';
 
 export type RequestContext = {
@@ -22,7 +23,7 @@ export async function buildRequestContext(
 
   const requestId =
     req.headers.get('x-request-id') ||
-    `req_${Math.random().toString(36).slice(2)}`;
+    `req_${randomBytes(8).toString('hex')}`;
 
   return { tenantId, scopes, requestId };
 }

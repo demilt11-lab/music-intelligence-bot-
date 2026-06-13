@@ -1530,3 +1530,19 @@ model TrainingExample {
   @@unique([artistId, snapshotDate])
   @@map("training_examples")
 }
+
+model UserFeedback {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  trackId   Int
+  label     String?
+  isViral   Boolean?
+  isPopular Boolean?
+  notes     String?
+  source    String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([trackId])
+  @@map("user_feedback")
+}

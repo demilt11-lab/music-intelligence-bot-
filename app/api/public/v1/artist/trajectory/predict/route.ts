@@ -1,31 +1,24 @@
 // app/api/public/v1/artist/trajectory/predict/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getTenantByApiKey } from "@/lib/platform/auth";
 
 const INTERNAL_URL =
   process.env.INTERNAL_ARTIST_TRAJECTORY_URL ||
   "http://localhost:3000/api/v1/artist/trajectory/predict";
 
-async function validateApiKey(apiKey: string | null) {
-  if (!apiKey) return null;
-
-  // Adjust field names to your actual api_keys schema
-  const keyRecord = await db.apiKey.findFirst({
-    where: {
-      keyHash: apiKey,
-      isRevoked: false,
-    },
-  });
-
-  return keyRecord;
-}
-
 export async function POST(req: NextRequest) {
   try {
-    const apiKey = req.headers.get("x-api-key");
-    const keyRecord = await validateApiKey(apiKey);
+    const rawKey = req.headers.get("x-api-key");
+    if (!rawKey) {
+      return NextResponse.json(
+        { error: "Invalid or missing API key" },
+        { status: 401 },
+      );
+    }
 
-    if (!keyRecord) {
+    try {
+      await getTenantByApiKey(rawKey);
+    } catch {
       return NextResponse.json(
         { error: "Invalid or missing API key" },
         { status: 401 },
@@ -34,8 +27,6 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
 
-    // Optionally enforce tenant/limit rules here based on keyRecord
-    // e.g., enforce max artistIds per request, etc.
     const artistIds: number[] = body.artistIds;
     if (!artistIds || !artistIds.length) {
       return NextResponse.json(
