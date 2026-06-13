@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { assembleDigest } from '@/lib/digest/assembler';
 import { verifyCronSecret } from '@/lib/platform/cron-auth';
+import { validateWebhookUrl } from '@/lib/platform/webhook-url';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -25,6 +26,7 @@ export async function GET(req: NextRequest) {
       const payload = await assembleDigest(sub.tenantId, (sub as any).tenant.name, today);
 
       if (sub.webhookUrl) {
+        validateWebhookUrl(sub.webhookUrl); // throws if URL targets a private range
         await fetch(sub.webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

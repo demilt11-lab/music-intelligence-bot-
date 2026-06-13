@@ -1,4 +1,18 @@
 /** @type {import('next').NextConfig} */
+
+// CORS: explicit allowlist — never default to wildcard.
+// Set ALLOWED_ORIGIN to your frontend domain in all environments.
+const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
+
+// CSP: production removes unsafe-eval (webpack dev server needs it locally).
+// NOTE: unsafe-inline for script-src is required by Next.js for inline hydration
+// scripts. Full removal requires implementing per-request nonces — tracked as
+// a future hardening task. unsafe-eval is removed in production unconditionally.
+const isProd = process.env.NODE_ENV === 'production';
+const scriptSrc = isProd
+  ? "script-src 'self' 'unsafe-inline'"
+  : "script-src 'self' 'unsafe-eval' 'unsafe-inline'";
+
 const nextConfig = {
   // Security + CORS headers on every response
   async headers() {
@@ -19,7 +33,7 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              scriptSrc,
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
@@ -35,7 +49,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Access-Control-Allow-Origin',
-            value: process.env.ALLOWED_ORIGIN ?? '*',
+            value: allowedOrigin,
           },
           {
             key: 'Access-Control-Allow-Methods',

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
 import { logRequest } from '@/lib/platform/logging';
+import { enforceRateLimit } from '@/lib/platform/rate-limit';
+import { validateWebhookUrl } from '@/lib/platform/webhook-url';
 
 const endpoint = '/api/v1/alerts';
 
@@ -16,6 +18,7 @@ export async function GET(req: NextRequest) {
   try {
     ctx = await buildRequestContext(req);
     requireScope(ctx, 'alerts:read');
+    await enforceRateLimit(ctx, 'alerts:read', 100);
 
     const rules = await db.alertRule.findMany({
       where: { tenantId: ctx.tenantId },
@@ -38,6 +41,7 @@ export async function POST(req: NextRequest) {
   try {
     ctx = await buildRequestContext(req);
     requireScope(ctx, 'alerts:write');
+    await enforceRateLimit(ctx, 'alerts:write', 20);
 
     const body = await req.json();
     const { entityType, entityId, metric, threshold, operator = 'gt', channel, destination } = body;
@@ -59,6 +63,10 @@ export async function POST(req: NextRequest) {
     }
     if (!destination) {
       return NextResponse.json({ error: 'destination (email or webhook URL) is required' }, { status: 400 });
+    }
+
+    if (channel === 'webhook') {
+      validateWebhookUrl(destination); // throws 400 if URL targets private ranges
     }
 
     const rule = await db.alertRule.create({
