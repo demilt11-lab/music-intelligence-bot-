@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
+import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { logRequest } from '@/lib/platform/logging';
 
 const endpoint = '/api/v1/watchlist/[id]';
@@ -12,6 +13,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   try {
     ctx = await buildRequestContext(req);
     requireScope(ctx, 'watchlist:write');
+    await enforceRateLimit(ctx, `tenant:${ctx.tenantId}:watchlist:delete`, 100);
 
     const id = Number(params.id);
     if (!Number.isInteger(id)) {

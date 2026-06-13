@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
+import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { logRequest } from '@/lib/platform/logging';
 
 const endpoint = '/api/v1/alerts/[id]';
@@ -12,6 +13,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
   try {
     ctx = await buildRequestContext(req);
     requireScope(ctx, 'alerts:write');
+    await enforceRateLimit(ctx, `tenant:${ctx.tenantId}:alerts`, 50);
 
     const id = Number(params.id);
     const rule = await db.alertRule.findFirst({ where: { id, tenantId: ctx.tenantId } });
@@ -40,6 +42,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
   try {
     ctx = await buildRequestContext(req);
     requireScope(ctx, 'alerts:write');
+    await enforceRateLimit(ctx, `tenant:${ctx.tenantId}:alerts`, 50);
 
     const id = Number(params.id);
     const rule = await db.alertRule.findFirst({ where: { id, tenantId: ctx.tenantId } });

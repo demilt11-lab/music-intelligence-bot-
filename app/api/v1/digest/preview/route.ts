@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { buildRequestContext, requireScope } from '@/lib/platform/context';
+import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { logRequest } from '@/lib/platform/logging';
 import { assembleDigest } from '@/lib/digest/assembler';
 
@@ -12,6 +13,7 @@ export async function GET(req: NextRequest) {
   try {
     ctx = await buildRequestContext(req);
     requireScope(ctx, 'digest:read');
+    await enforceRateLimit(ctx, `tenant:${ctx.tenantId}:digest:preview`, 20);
 
     const { searchParams } = new URL(req.url);
     const date = searchParams.get('date') ?? undefined;
