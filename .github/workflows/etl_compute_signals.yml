@@ -34,3 +34,9 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npx tsx jobs/etl/compute_artist_signals.ts
+
+      - name: Build track trend labels
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx tsx jobs/etl/track_trend_labels.ts $(date -u +%Y-%m-%d)
