@@ -808,6 +808,54 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
     `[compute_track_signals] Loaded ML predictions for ${mlProbMap.size}/${trackIds.length} tracks`,
   );
 
+  // Compute rights complexity score per track from available DB metadata.
+  // Score is 0–1: more parties + missing identifiers = higher complexity.
+  // Used as a signal to flag songs where royalty collection may be unclear.
+  const rightsRows = trackIds.length > 0
+    ? await db.$queryRawUnsafe<{
+        track_id: number;
+        has_isrc: boolean;
+        has_iswc: boolean;
+        has_label: boolean;
+        writer_count: number;
+        ipi_count: number;
+      }[]>(
+        `SELECT
+           t.id AS track_id,
+           (t.isrc IS NOT NULL) AS has_isrc,
+           (t.iswc IS NOT NULL) AS has_iswc,
+           EXISTS(
+             SELECT 1 FROM track_albums ta
+             JOIN albums a ON a.id = ta."albumId"
+             WHERE ta."trackId" = t.id AND a.label IS NOT NULL
+           ) AS has_label,
+           COUNT(DISTINCT st."songwriterId")::int AS writer_count,
+           COUNT(DISTINCT CASE WHEN sw.ipi IS NOT NULL THEN st."songwriterId" END)::int AS ipi_count
+         FROM tracks t
+         LEFT JOIN songwriter_tracks st ON st."trackId" = t.id
+         LEFT JOIN songwriters sw ON sw.id = st."songwriterId"
+         WHERE t.id = ANY($1::int[])
+         GROUP BY t.id, t.isrc, t.iswc`,
+        trackIds,
+      )
+    : [];
+
+  const rightsComplexityMap = new Map<number, number>();
+  for (const row of rightsRows) {
+    let complexity = 0;
+    if (!row.has_isrc) complexity += 0.10;
+    if (!row.has_iswc) complexity += 0.10;
+    if (!row.has_label) complexity += 0.10;
+    // More writers = more parties to track
+    complexity += Math.min(row.writer_count / 5, 0.30);
+    // Missing IPI for registered writers = unverifiable PRO affiliation
+    const missingIpiCount = row.writer_count - row.ipi_count;
+    complexity += Math.min(missingIpiCount / 3, 0.25);
+    // No writers at all = completely unknown ownership
+    if (row.writer_count === 0) complexity += 0.15;
+    rightsComplexityMap.set(row.track_id, Math.min(complexity, 1.0));
+  }
+
   console.log(
     `[compute_track_signals] Normalizing and writing ${platformSignals.size} track signals...`,
   );
@@ -936,13 +984,14 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
       },
       update: {
         viralScore: sig.viralScore,
+        rightsComplexityScore: rightsComplexityMap.get(sig.trackId) ?? 0,
       },
       create: {
         trackId: sig.trackId,
         code2: sig.code2,
         date: snapshotDate,
         viralScore: sig.viralScore,
-        rightsComplexityScore: 0,
+        rightsComplexityScore: rightsComplexityMap.get(sig.trackId) ?? 0,
       },
     });
 

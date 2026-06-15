@@ -15,6 +15,7 @@ datasource db {
 model Track {
   id               Int      @id @default(autoincrement())
   isrc             String?  @unique
+  iswc             String?  @unique
   title            String
   durationMs       Int?
   explicit         Boolean  @default(false)
