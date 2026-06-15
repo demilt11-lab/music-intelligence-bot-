@@ -17,6 +17,11 @@ export class ApiError extends Error {
       Error.captureStackTrace(this, ApiError);
     }
   }
+
+  // Alias used by route catch-blocks that check `err.status`
+  get status(): number {
+    return this.statusCode;
+  }
 }
 
 /**

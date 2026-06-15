@@ -128,12 +128,10 @@ export async function GET(req: NextRequest, props: RouteParams) {
       mlPrediction,
       history: history.map((h: any) => ({
         date: h.date,
-        totalStreams: h.totalStreams.toString(),
-        streams7d: h.streams7d,
-        streams28d: h.streams28d,
-        streams90d: h.streams90d,
-        playlistCount: h.playlistCount,
-        followerCount: h.followerCount,
+        totalStreams: h.totalStreams?.toString() ?? null,
+        totalListeners: h.totalListeners?.toString() ?? null,
+        totalFollowers: h.totalFollowers?.toString() ?? null,
+        playlistCount: h.playlistCount ?? null,
         playlistReach: h.playlistReach?.toString() ?? null,
       })),
     };

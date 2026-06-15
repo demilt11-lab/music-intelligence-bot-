@@ -37,6 +37,7 @@ export async function upsertCatalogTracks(
       skipDuplicates: true,
     }),
     // Update existing rows — one bulk UPDATE via raw SQL for efficiency.
+    // PostgreSQL uses $N positional parameters (not MySQL-style ?).
     db.$executeRawUnsafe(
       `
       UPDATE catalog_tracks AS ct
@@ -49,7 +50,10 @@ export async function upsertCatalogTracks(
         youtube_video_id = v.youtube_video_id,
         updated_at       = NOW()
       FROM (VALUES ${tracks
-        .map(() => '(?::int, ?::text, ?::text, ?::text, ?::text, ?::text, ?::text, ?::text)')
+        .map((_, i) => {
+          const b = i * 8;
+          return `($${b + 1}::int, $${b + 2}::text, $${b + 3}::text, $${b + 4}::text, $${b + 5}::text, $${b + 6}::text, $${b + 7}::text, $${b + 8}::text)`;
+        })
         .join(', ')}) AS v(
           tenant_id, client_track_id, isrc, name, artist_name,
           spotify_track_id, tiktok_sound_id, youtube_video_id

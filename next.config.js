@@ -8,6 +8,12 @@ const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
 // replacing the static unsafe-inline that was here previously.
 
 const nextConfig = {
+  // Turbopack workspace root — required so the bundler can find node_modules
+  // when the inferred root doesn't match the project directory.
+  turbopack: {
+    root: process.cwd(),
+  },
+
   // Security + CORS headers on every response
   async headers() {
     return [
