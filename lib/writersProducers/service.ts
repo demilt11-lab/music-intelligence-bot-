@@ -5,6 +5,7 @@ import {
   Collaboration,
   PlaylistAppearance,
   ChartPosition,
+  ClusterEvent,
   RisingTalentEntry,
   ALL_CREATOR_ROLES,
   WRITER_ROLES,
@@ -311,11 +312,18 @@ export async function getRisingWritersProducers(opts: {
                   },
                   statisticsLatest: true,
                   playlistTracks: {
-                    include: { playlist: { select: { name: true, isOfficial: true } } },
-                    orderBy: {
-                      playlist: { followerCount: 'desc' },
+                    include: {
+                      playlist: {
+                        select: { id: true, name: true, isOfficial: true, followerCount: true },
+                      },
                     },
-                    take: 1,
+                    orderBy: { playlist: { followerCount: 'desc' } },
+                    take: 10,
+                  },
+                  trackAlbums: {
+                    include: {
+                      album: { select: { id: true, title: true, releaseDate: true } },
+                    },
                   },
                   chartRows: {
                     orderBy: { rank: 'asc' },
@@ -326,12 +334,14 @@ export async function getRisingWritersProducers(opts: {
               },
             },
             orderBy: { track: { popularity: 'desc' } },
-            take: 3,
+            take: 10,
           },
         },
       },
     },
   });
+
+  const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   return scores.map((s) => {
     const sw = s.songwriter;
@@ -346,7 +356,82 @@ export async function getRisingWritersProducers(opts: {
       if (type === 'producer' && creatorType === 'writer') return null;
     }
 
-    const topTracks = sw.tracks.map((st) => {
+    // ── Cluster event detection ───────────────────────────────────────────
+    // Rebuild the same three cluster signals computed in risingScorer so the
+    // UI has human-readable evidence for why multiTrackPresence is high.
+
+    const albumMap = new Map<number, { title: string; releaseDate: Date | null; trackTitles: string[] }>();
+    const playlistMap = new Map<number, { name: string; followerCount: bigint | null; isOfficial: boolean; trackTitles: string[] }>();
+    const weeklyTitles: string[] = [];
+
+    for (const st of sw.tracks) {
+      const t = st.track as typeof st.track & {
+        trackAlbums: Array<{ album: { id: number; title: string; releaseDate: Date | null } }>;
+      };
+
+      for (const ta of t.trackAlbums) {
+        const alb = ta.album;
+        const entry = albumMap.get(alb.id);
+        if (entry) entry.trackTitles.push(t.title);
+        else albumMap.set(alb.id, { title: alb.title, releaseDate: alb.releaseDate, trackTitles: [t.title] });
+      }
+
+      for (const pt of t.playlistTracks) {
+        const pl = pt.playlist;
+        const entry = playlistMap.get(pl.id);
+        if (entry) entry.trackTitles.push(t.title);
+        else playlistMap.set(pl.id, { name: pl.name, followerCount: pl.followerCount, isOfficial: pl.isOfficial, trackTitles: [t.title] });
+      }
+
+      if (t.releaseDate && t.releaseDate >= weekAgo) {
+        weeklyTitles.push(t.title);
+      }
+    }
+
+    const clusterEvents: ClusterEvent[] = [];
+
+    // Album clusters — only include albums released this week with ≥2 tracks
+    for (const alb of albumMap.values()) {
+      const isNew = alb.releaseDate != null && alb.releaseDate >= weekAgo;
+      if (isNew && alb.trackTitles.length >= 2) {
+        clusterEvents.push({
+          type: 'album',
+          name: alb.title,
+          trackCount: alb.trackTitles.length,
+          trackTitles: alb.trackTitles,
+          releaseDate: alb.releaseDate?.toISOString().split('T')[0],
+        });
+      }
+    }
+
+    // Playlist clusters — only include playlists where ≥2 of creator's tracks appear
+    for (const pl of playlistMap.values()) {
+      if (pl.trackTitles.length >= 2) {
+        clusterEvents.push({
+          type: 'playlist',
+          name: pl.name,
+          trackCount: pl.trackTitles.length,
+          trackTitles: pl.trackTitles,
+          followerCount: bigintToStr(pl.followerCount),
+          isOfficial: pl.isOfficial,
+        });
+      }
+    }
+
+    // Weekly release burst — group all new releases as a single cluster event
+    if (weeklyTitles.length >= 2) {
+      clusterEvents.push({
+        type: 'weekly_release',
+        name: `Week of ${weekAgo.toISOString().split('T')[0]}`,
+        trackCount: weeklyTitles.length,
+        trackTitles: weeklyTitles,
+      });
+    }
+
+    // Sort clusters by trackCount desc so the strongest signal appears first
+    clusterEvents.sort((a, b) => b.trackCount - a.trackCount);
+
+    const topTracks = sw.tracks.slice(0, 3).map((st) => {
       const t = st.track;
       return {
         trackId: t.id,
@@ -378,11 +463,13 @@ export async function getRisingWritersProducers(opts: {
       playlistMomentum: s.playlistMomentum,
       collaborationScore: s.collaborationScore,
       ugcMomentum: s.ugcMomentum,
+      multiTrackPresence: s.multiTrackPresence,
       isSigned: s.isSigned,
       signedLabel: s.signedLabel,
       region: s.region ?? 'GLOBAL',
       topTracks,
       notableCollaborators,
+      clusterEvents,
     } satisfies RisingTalentEntry;
   }).filter(Boolean) as RisingTalentEntry[];
 }

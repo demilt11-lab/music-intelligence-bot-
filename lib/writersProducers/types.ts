@@ -76,6 +76,21 @@ export interface WriterProducerResult {
   source: 'database' | 'spotify' | 'youtube' | 'soundcloud' | 'blog';
 }
 
+/**
+ * A detected concentration event: the creator is credited on multiple songs
+ * from the same album, the same playlist, or within the same release week.
+ * Surfaced in the UI as evidence for the multiTrackPresence score.
+ */
+export interface ClusterEvent {
+  type: 'album' | 'playlist' | 'weekly_release';
+  name: string;           // album title / playlist name / "Week of YYYY-MM-DD"
+  trackCount: number;     // how many of this creator's tracks appear in the cluster
+  trackTitles: string[];  // the actual track titles
+  releaseDate?: string;   // ISO date — for album clusters
+  followerCount?: string | null; // for playlist clusters
+  isOfficial?: boolean;   // for playlist clusters
+}
+
 export interface RisingTalentEntry {
   songwriterId: number;
   name: string;
@@ -86,6 +101,7 @@ export interface RisingTalentEntry {
   playlistMomentum: number | null;
   collaborationScore: number | null;
   ugcMomentum: number | null;
+  multiTrackPresence: number | null;
   isSigned: boolean;
   signedLabel: string | null;
   region: string;
@@ -98,6 +114,7 @@ export interface RisingTalentEntry {
     streams7d: string | null;
   }>;
   notableCollaborators: string[];
+  clusterEvents: ClusterEvent[];
 }
 
 export interface ExternalCreatorHit {

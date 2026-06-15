@@ -13,6 +13,7 @@ interface ScoredCreator {
   playlistMomentum: number | null;
   collaborationScore: number | null;
   ugcMomentum: number | null;
+  multiTrackPresence: number | null;
   isSigned: boolean;
   signedLabel: string | null;
   region: string;
@@ -49,6 +50,9 @@ function detectIsSigned(label: string | null): { isSigned: boolean; signedLabel:
 export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> {
   const dateStr = date.toISOString().split('T')[0];
 
+  const weekAgo = new Date(date.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const twoWeeksAgo = new Date(date.getTime() - 14 * 24 * 60 * 60 * 1000);
+
   // Fetch all songwriters with their track stats
   const songwriters = await db.songwriter.findMany({
     include: {
@@ -58,19 +62,22 @@ export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> 
             include: {
               statisticsLatest: true,
               platformStatsDaily: {
-                where: {
-                  date: {
-                    gte: new Date(date.getTime() - 14 * 24 * 60 * 60 * 1000),
-                  },
-                },
+                where: { date: { gte: twoWeeksAgo } },
                 orderBy: { date: 'desc' },
                 take: 14,
               },
               playlistTracks: {
                 include: {
-                  playlist: { select: { followerCount: true, isOfficial: true } },
+                  playlist: {
+                    select: { id: true, name: true, followerCount: true, isOfficial: true },
+                  },
                 },
                 take: 20,
+              },
+              trackAlbums: {
+                include: {
+                  album: { select: { id: true, title: true, releaseDate: true } },
+                },
               },
               trackArtists: {
                 include: { artist: { select: { id: true, name: true, popularity: true } } },
@@ -92,6 +99,12 @@ export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> 
     let officialPlaylistCount = 0;
     let totalUgcViews = 0;
     let maxCollabPopularity = 0;
+
+    // Maps for multi-track presence cluster detection
+    const albumTrackMap = new Map<number, { title: string; trackTitles: string[]; releaseDate: Date | null }>();
+    const playlistTrackMap = new Map<number, { name: string; trackTitles: string[]; followerCount: bigint | null; isOfficial: boolean }>();
+    let weeklyReleaseCount = 0;
+    const weeklyReleaseTitles: string[] = [];
 
     for (const st of sw.tracks) {
       const t = st.track;
@@ -117,6 +130,40 @@ export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> 
         const followers = Number(pt.playlist.followerCount ?? 0);
         totalPlaylistFollowers += followers;
         if (pt.playlist.isOfficial) officialPlaylistCount++;
+
+        // Playlist cluster: track how many songs this creator has per playlist
+        const existing = playlistTrackMap.get(pt.playlist.id);
+        if (existing) {
+          existing.trackTitles.push(t.title);
+        } else {
+          playlistTrackMap.set(pt.playlist.id, {
+            name: pt.playlist.name,
+            trackTitles: [t.title],
+            followerCount: pt.playlist.followerCount,
+            isOfficial: pt.playlist.isOfficial,
+          });
+        }
+      }
+
+      // Album cluster: track how many songs this creator has per album
+      for (const ta of (t as typeof t & { trackAlbums: Array<{ album: { id: number; title: string; releaseDate: Date | null } }> }).trackAlbums) {
+        const alb = ta.album;
+        const existing = albumTrackMap.get(alb.id);
+        if (existing) {
+          existing.trackTitles.push(t.title);
+        } else {
+          albumTrackMap.set(alb.id, {
+            title: alb.title,
+            trackTitles: [t.title],
+            releaseDate: alb.releaseDate,
+          });
+        }
+      }
+
+      // Weekly release burst: tracks released in last 7 days
+      if (t.releaseDate && t.releaseDate >= weekAgo) {
+        weeklyReleaseCount++;
+        weeklyReleaseTitles.push(t.title);
       }
 
       // Collaboration score — highest collaborator popularity
@@ -126,19 +173,55 @@ export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> 
       }
     }
 
-    // Normalise to [0, 1]
+    // ── Multi-track presence score ──────────────────────────────────────
+    //
+    // Signal 1 — Album cluster: credited on ≥2 songs from an album released
+    // this week. The more songs and the more recent the album, the stronger.
+    let maxAlbumClusterTracks = 0;
+    for (const alb of albumTrackMap.values()) {
+      const isNewRelease = alb.releaseDate != null && alb.releaseDate >= weekAgo;
+      if (isNewRelease && alb.trackTitles.length > maxAlbumClusterTracks) {
+        maxAlbumClusterTracks = alb.trackTitles.length;
+      }
+    }
+    const albumClusterScore = softLog(maxAlbumClusterTracks, 12);
+
+    // Signal 2 — Playlist cluster: multiple tracks on the same playlist.
+    // Weight by log-follower count so editorial placement counts more.
+    let maxPlaylistClusterScore = 0;
+    for (const pl of playlistTrackMap.values()) {
+      if (pl.trackTitles.length < 2) continue;
+      const followerWeight = softLog(Number(pl.followerCount ?? 0), 5_000_000);
+      const editorialBonus = pl.isOfficial ? 1.5 : 1.0;
+      const plScore = softLog(pl.trackTitles.length, 10) * (0.5 + 0.5 * followerWeight) * editorialBonus;
+      if (plScore > maxPlaylistClusterScore) maxPlaylistClusterScore = Math.min(1, plScore);
+    }
+
+    // Signal 3 — Weekly release burst: multiple tracks released this week.
+    const weeklyBurstScore = softLog(weeklyReleaseCount, 8);
+
+    const multiTrackPresence = Math.min(
+      1,
+      albumClusterScore * 0.45 +
+      maxPlaylistClusterScore * 0.30 +
+      weeklyBurstScore * 0.25,
+    );
+
+    // Normalise other signals to [0, 1]
     const streamVelocity = softLog(totalStreamVelocity / sw.tracks.length, 200);
     const playlistMomentum = softLog(totalPlaylistFollowers, 10_000_000) * 0.7
       + softLog(officialPlaylistCount, 20) * 0.3;
     const ugcMomentum = softLog(totalUgcViews, 50_000_000);
     const collaborationScore = softLog(maxCollabPopularity, 100);
 
-    // Composite rising score (tuned weights)
+    // Composite rising score — multiTrackPresence at 0.20; other weights
+    // reduced proportionally from prior values so the sum remains 1.0.
     const risingScore =
-      streamVelocity * 0.35 +
-      playlistMomentum * 0.30 +
-      ugcMomentum * 0.25 +
-      collaborationScore * 0.10;
+      streamVelocity * 0.28 +
+      playlistMomentum * 0.24 +
+      ugcMomentum * 0.20 +
+      collaborationScore * 0.08 +
+      multiTrackPresence * 0.20;
 
     // Signed status — infer from album label data if available
     const labelHint = null; // TODO: join to albums.label when ingested
@@ -151,6 +234,7 @@ export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> 
       playlistMomentum: playlistMomentum || null,
       collaborationScore: collaborationScore || null,
       ugcMomentum: ugcMomentum || null,
+      multiTrackPresence: multiTrackPresence > 0 ? multiTrackPresence : null,
       isSigned,
       signedLabel,
       region: 'GLOBAL',
@@ -184,6 +268,7 @@ export async function upsertRisingScores(date: Date): Promise<number> {
         playlistMomentum: s.playlistMomentum,
         collaborationScore: s.collaborationScore,
         ugcMomentum: s.ugcMomentum,
+        multiTrackPresence: s.multiTrackPresence,
         isSigned: s.isSigned,
         signedLabel: s.signedLabel,
         region: s.region,
@@ -194,6 +279,7 @@ export async function upsertRisingScores(date: Date): Promise<number> {
         playlistMomentum: s.playlistMomentum,
         collaborationScore: s.collaborationScore,
         ugcMomentum: s.ugcMomentum,
+        multiTrackPresence: s.multiTrackPresence,
         isSigned: s.isSigned,
         signedLabel: s.signedLabel,
       },

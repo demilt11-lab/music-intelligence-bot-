@@ -1599,6 +1599,7 @@ model WriterProducerRisingScore {
   playlistMomentum   Float?   // rate of new playlist adds across DSPs
   collaborationScore Float?   // network score from co-writers / co-producers
   ugcMomentum        Float?   // TikTok / Instagram UGC velocity on their tracks
+  multiTrackPresence Float?   // signal when credited on multiple songs on same album/playlist/week
   isSigned           Boolean  @default(false)
   signedLabel        String?
   region             String?  @default("GLOBAL")
