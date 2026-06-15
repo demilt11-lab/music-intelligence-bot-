@@ -14,7 +14,7 @@ import type {
 } from './types'
 import { lookupPublisherByIpi } from './proLookup'
 
-function computeRightsComplexity(profile: Omit<RightsProfile, 'rightsComplexityScore'>): number {
+function computeRightsComplexity(profile: Omit<RightsProfile, 'rightsComplexityScore' | 'gaps'>): number {
   let score = 0
 
   // More parties = more complex
