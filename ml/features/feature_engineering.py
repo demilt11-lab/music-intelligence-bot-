@@ -83,6 +83,9 @@ _VIRAL_COLS = [
     # Streaming velocity (early acceleration matters for viral)
     "spotify_stream_velocity_7d",
     "spotify_stream_velocity_30d",
+    # Conversion rate: Spotify streams generated per TikTok view.
+    # Distinguishes genuine demand (high conversion) from noise/bot views.
+    "stream_conversion_rate",
     # Playlist momentum (editorial adds signal label-push)
     "spotify_playlist_count",
     "playlist_adds_7d",
@@ -127,6 +130,9 @@ def build_viral_features(
         "youtube_view_velocity_7d",
     ]:
         out[col] = df[col].clip(-5.0, 20.0)
+
+    # Stream conversion rate: Spotify streams per TikTok view (capped at 0.1 = 10%)
+    out["stream_conversion_rate"] = df["stream_conversion_rate"].clip(0, 0.1)
 
     # Interaction: TikTok video growth × geo spread (viral spread signal)
     out["tiktok_geo_spread"] = (
@@ -323,6 +329,12 @@ def build_combined_features(
         df["tiktok_growth_rate_7d"].clip(0) *
         df["youtube_view_velocity_7d"].clip(0)
     ).clip(0, 50)
+
+    # Conversion rate × stream velocity: tracks where UGC converts AND streams accelerate
+    cross["conversion_stream_momentum"] = (
+        df["stream_conversion_rate"].clip(0, 0.1) *
+        df["spotify_stream_velocity_7d"].clip(0)
+    ).clip(0, 1.0)
 
     X_cross = cross.to_numpy(dtype=float)
     X_cross = np.nan_to_num(X_cross, nan=0.0, posinf=0.0, neginf=0.0)
