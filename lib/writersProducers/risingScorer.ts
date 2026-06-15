@@ -93,7 +93,7 @@ export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> 
               },
               trackAlbums: {
                 include: {
-                  album: { select: { id: true, title: true, releaseDate: true } },
+                  album: { select: { id: true, title: true, releaseDate: true, label: true } },
                 },
               },
               trackArtists: {
@@ -246,8 +246,11 @@ export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> 
     const mlModifier = Math.max(0.85, Math.min(1.15, 1 + 0.15 * (mlProb - 0.5)));
     const risingScore = Math.min(1, Math.max(0, rawRisingScore * mlModifier));
 
-    // Signed status — infer from album label data if available
-    const labelHint = null; // TODO: join to albums.label when ingested
+    // Signed status — infer from the first non-null album label across all tracks.
+    const labelHint = sw.tracks
+      .flatMap((st) => st.track.trackAlbums)
+      .map((ta) => (ta.album as { label?: string | null }).label ?? null)
+      .find((l) => l != null) ?? null;
     const { isSigned, signedLabel } = detectIsSigned(labelHint);
 
     results.push({

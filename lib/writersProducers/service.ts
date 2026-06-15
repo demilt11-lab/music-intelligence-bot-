@@ -101,8 +101,11 @@ async function buildCollaborations(
   for (const link of links) {
     const t = link.track;
 
+    // Note: songwriterId is from the songwriters table; ta.artistId is from the
+    // artists table — they use independent ID sequences and cannot be compared.
+    // There is no reliable way to exclude the songwriter's own artist row without
+    // a separate lookup, so we leave all credited artists in and deduplicate by name.
     const coCreators = t.trackArtists
-      .filter((ta) => ta.artistId !== songwriterId)
       .map((ta) => ({
         id: ta.artist.id,
         name: ta.artist.name,
@@ -297,7 +300,10 @@ export async function getRisingWritersProducers(opts: {
       ...(unsignedOnly ? { isSigned: false } : {}),
     },
     orderBy: { risingScore: 'desc' },
-    take: limit,
+    // Overfetch when type filtering is active: the in-memory creatorType filter
+    // runs after the DB query, so we request extra rows to compensate and then
+    // slice back to the requested limit after filtering.
+    take: type !== 'all' && type !== 'both' ? limit * 3 : limit,
     skip: offset,
     include: {
       songwriter: {
@@ -443,11 +449,13 @@ export async function getRisingWritersProducers(opts: {
       };
     });
 
+    // Exclude the songwriter's own name from collaborators (name match is the
+    // only reliable cross-table signal without a songwriter→artist join).
     const notableCollaborators = Array.from(
       new Set(
         sw.tracks.flatMap((st) =>
           st.track.trackArtists
-            .filter((ta) => ta.artistId !== sw.id)
+            .filter((ta) => ta.artist.name.toLowerCase() !== sw.name.toLowerCase())
             .map((ta) => ta.artist.name),
         ),
       ),
@@ -472,5 +480,5 @@ export async function getRisingWritersProducers(opts: {
       notableCollaborators,
       clusterEvents,
     } satisfies RisingTalentEntry;
-  }).filter(Boolean) as RisingTalentEntry[];
+  }).filter(Boolean).slice(0, limit) as RisingTalentEntry[];
 }

@@ -185,10 +185,10 @@ async function evaluateViralScores(today: Date): Promise<void> {
   // outcome window (ending 60 days after prediction).
   const trackIds = [...new Set(pending.map((p) => p.trackId as number))];
 
-  // Baseline streams: 7 days ending at predictedAt (use evalEnd as upper bound
-  // since all predictions are within the same week-long window)
+  // Baseline: 7 days immediately before the prediction window closes.
+  // Outcome: from prediction window end to today (covers the full 60d window).
   const baselineStart = subDays(evalEnd, 7);
-  const outcomeStart  = subDays(evalEnd, 7 - VIRAL_EVAL_WINDOW_DAYS); // evalEnd + 53d
+  const outcomeStart  = evalEnd;
   const outcomeEnd    = today;
 
   const streamRows = await db.$queryRawUnsafe<

@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(Number(url.searchParams.get('limit') ?? '50'), 100);
     const offset = Number(url.searchParams.get('offset') ?? '0');
 
-    const cacheKey = `writers-producers:rising:${type}:${region}:${unsignedOnly}:${limit}:${offset}`;
+    const cacheKey = `writers-producers:rising:${ctx.tenantId}:${type}:${region}:${unsignedOnly}:${limit}:${offset}`;
     const cached = Cache.get<object>(cacheKey);
     if (cached) {
       return NextResponse.json(cached, { headers: { 'x-cache': 'hit' } });

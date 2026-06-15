@@ -732,6 +732,11 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
     console.log(`[compute_track_signals] Seeded ${platformSignals.size} tracks from chart_rows.`);
   }
 
+  // Derive the universe of track IDs once here — used by all subsequent bulk
+  // queries (creator presence, ML predictions, rights complexity).  Must be
+  // declared BEFORE any query that references it to avoid a TDZ crash.
+  const trackIds = [...new Set([...platformSignals.values()].map((s) => s.trackId))];
+
   // Compute per-signal 95th-percentile for robust normalization.
   // Using p95 rather than max prevents a single viral outlier from squashing
   // the scores of every other track toward zero.
@@ -789,7 +794,6 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
   // Fetch latest ML viral probabilities (30d) for all tracks in scope.
   // These are written by scripts/import_track_trend_predictions.ts after each
   // ml_train.yml run. When no prediction exists the modifier is neutral (1.0).
-  const trackIds = [...new Set([...platformSignals.values()].map((s) => s.trackId))];
   const mlPredRows = trackIds.length > 0
     ? await db.$queryRawUnsafe<{ track_id: number; prob_viral: number }[]>(
         `SELECT DISTINCT ON ("trackId") "trackId" AS track_id, "probViral" AS prob_viral

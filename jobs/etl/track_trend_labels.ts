@@ -104,7 +104,7 @@ async function upsertTrendLabel(args: {
         genre,
         code2,
         label,
-        firstSeenAt: isNewlyActive && label !== "NONE" ? snapshotDate : snapshotDate,
+        firstSeenAt: isNewlyActive && label !== "NONE" ? snapshotDate : null,
         lastSeenAt: snapshotDate,
       },
     });
