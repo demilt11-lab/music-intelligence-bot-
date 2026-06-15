@@ -15,6 +15,7 @@ datasource db {
 model Track {
   id               Int      @id @default(autoincrement())
   isrc             String?  @unique
+  iswc             String?  @unique
   title            String
   durationMs       Int?
   explicit         Boolean  @default(false)
@@ -1577,9 +1578,40 @@ model Songwriter {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tracks SongwriterTrack[]
+  tracks       SongwriterTrack[]
+  risingScores WriterProducerRisingScore[]
 
   @@map("songwriters")
+}
+
+// ─────────────────────────────────────────────
+// Writers & Producers — Rising Talent Intelligence
+// ─────────────────────────────────────────────
+
+// Daily AI/ML rising talent score for a songwriter or producer.
+// Computed by the ETL job from streaming velocity, playlist momentum,
+// and collaboration network signals across DSPs.
+model WriterProducerRisingScore {
+  id                 Int      @id @default(autoincrement())
+  songwriterId       Int
+  date               DateTime @db.Date
+  risingScore        Float    // composite 0-1 score
+  streamVelocity     Float?   // 7-day streaming velocity of their tracks
+  playlistMomentum   Float?   // rate of new playlist adds across DSPs
+  collaborationScore Float?   // network score from co-writers / co-producers
+  ugcMomentum        Float?   // TikTok / Instagram UGC velocity on their tracks
+  multiTrackPresence Float?   // signal when credited on multiple songs on same album/playlist/week
+  mlBreakoutProb30d  Float?   // ML-predicted probability of breakout within 30 days (written by score_writer_producer_daily.py)
+  isSigned           Boolean  @default(false)
+  signedLabel        String?
+  region             String?  @default("GLOBAL")
+  createdAt          DateTime @default(now())
+
+  songwriter Songwriter @relation(fields: [songwriterId], references: [id], onDelete: Cascade)
+
+  @@unique([songwriterId, date])
+  @@index([date, risingScore(sort: Desc)])
+  @@map("writer_producer_rising_scores")
 }
 
 model SongwriterTrack {

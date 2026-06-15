@@ -10,9 +10,22 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function normalize(value: number, max: number): number {
-  if (max <= 0) return 0;
-  return clamp(value / max, 0, 1);
+/**
+ * Robust normalization: divide by the 95th-percentile value rather than the
+ * global maximum. This prevents a single outlier track from compressing every
+ * other track's score toward zero, which is the failure mode of max-normalize.
+ * Values above the 95th percentile are clamped to 1.
+ */
+function computeP95(values: number[]): number {
+  if (!values.length) return 1;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const idx = Math.floor(sorted.length * 0.95);
+  return sorted[Math.min(idx, sorted.length - 1)] || 1;
+}
+
+function robustNorm(value: number, p95: number): number {
+  if (p95 <= 0) return 0;
+  return clamp(value / p95, 0, 1);
 }
 
 // ─────────────────────────────────────────────
@@ -420,6 +433,8 @@ type TrackSignals = {
   accelerationNorm: number;
   youtubeNorm: number;
   organicNorm: number;
+  conversionRateNorm: number;
+  creatorMultiTrackPresence: number;
 
   // Computed scores
   viralScore: number;
@@ -446,6 +461,7 @@ async function fetchPlatformSignals(
   chartVelocity: number;
   playlistAdds7d: number;
   youtubeViews7d: number;
+  spotifyStreams7d: number;
 }>> {
   const day7 = new Date(today);
   day7.setDate(today.getDate() - 7);
@@ -550,6 +566,24 @@ async function fetchPlatformSignals(
     today.toISOString().slice(0, 10),
   );
 
+  // Spotify streams 7d — used to compute the TikTok→Spotify conversion rate
+  const spotifyStreamsRows = await db.$queryRawUnsafe<
+    { track_id: number; streams7d: number }[]
+  >(
+    `
+    SELECT
+      "trackId" AS track_id,
+      SUM(streams) AS streams7d
+    FROM track_platform_stats_daily
+    WHERE date BETWEEN $1::date AND $2::date
+      AND platform = 'spotify'
+      AND streams IS NOT NULL
+    GROUP BY "trackId"
+    `,
+    day7.toISOString().slice(0, 10),
+    today.toISOString().slice(0, 10),
+  );
+
   // Index all by trackId
   const tiktokMap = new Map<number, number>();
   for (const r of tiktokRows) {
@@ -567,6 +601,11 @@ async function fetchPlatformSignals(
   for (const r of youtubeRows) {
     const existing = youtubeMap.get(r.track_id) ?? 0;
     youtubeMap.set(r.track_id, existing + Number(r.video_views7d));
+  }
+
+  const spotifyStreamsMap = new Map<number, number>();
+  for (const r of spotifyStreamsRows) {
+    spotifyStreamsMap.set(r.track_id, Number(r.streams7d));
   }
 
   const chartMap = new Map<
@@ -598,6 +637,7 @@ async function fetchPlatformSignals(
     chartVelocity: number;
     playlistAdds7d: number;
     youtubeViews7d: number;
+    spotifyStreams7d: number;
   }>();
 
   // Start from TikTok rows as they're the most granular per code2
@@ -616,6 +656,7 @@ async function fetchPlatformSignals(
       chartVelocity,
       playlistAdds7d: playlistMap.get(r.track_id) ?? 0,
       youtubeViews7d: youtubeMap.get(r.track_id) ?? 0,
+      spotifyStreams7d: spotifyStreamsMap.get(r.track_id) ?? 0,
     });
   }
 
@@ -631,6 +672,7 @@ async function fetchPlatformSignals(
         chartVelocity: Math.max(0, 100 - chart.minRank),
         playlistAdds7d: playlistMap.get(trackId) ?? 0,
         youtubeViews7d: youtubeMap.get(trackId) ?? 0,
+        spotifyStreams7d: spotifyStreamsMap.get(trackId) ?? 0,
       });
     }
   }
@@ -683,37 +725,75 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
           chartVelocity: 50, // mid-range default so it scores positively
           playlistAdds7d: 0,
           youtubeViews7d: 0,
+          spotifyStreams7d: 0,
         });
       }
     }
     console.log(`[compute_track_signals] Seeded ${platformSignals.size} tracks from chart_rows.`);
   }
 
-  // Compute per-signal global maxima for normalization
-  let maxTiktok = 1;
-  let maxInstagram = 1;
-  let maxChart = 1;
-  let maxPlaylist = 1;
-  let maxYoutube = 1;
-  let maxAccel = 1;
+  // Derive the universe of track IDs once here — used by all subsequent bulk
+  // queries (creator presence, ML predictions, rights complexity).  Must be
+  // declared BEFORE any query that references it to avoid a TDZ crash.
+  const trackIds = [...new Set([...platformSignals.values()].map((s) => s.trackId))];
+
+  // Compute per-signal 95th-percentile for robust normalization.
+  // Using p95 rather than max prevents a single viral outlier from squashing
+  // the scores of every other track toward zero.
+  const signalArrays = {
+    tiktok: [] as number[],
+    instagram: [] as number[],
+    chart: [] as number[],
+    playlist: [] as number[],
+    youtube: [] as number[],
+    spotify: [] as number[],
+  };
 
   for (const s of platformSignals.values()) {
-    if (s.tiktokViews7d > maxTiktok) maxTiktok = s.tiktokViews7d;
-    if (s.instagramViews7d > maxInstagram) maxInstagram = s.instagramViews7d;
-    if (s.chartVelocity > maxChart) maxChart = s.chartVelocity;
-    if (s.playlistAdds7d > maxPlaylist) maxPlaylist = s.playlistAdds7d;
-    if (s.youtubeViews7d > maxYoutube) maxYoutube = s.youtubeViews7d;
+    signalArrays.tiktok.push(s.tiktokViews7d);
+    signalArrays.instagram.push(s.instagramViews7d);
+    signalArrays.chart.push(s.chartVelocity);
+    signalArrays.playlist.push(s.playlistAdds7d);
+    signalArrays.youtube.push(s.youtubeViews7d);
+    signalArrays.spotify.push(s.spotifyStreams7d);
   }
 
-  for (const a of accelerationMap.values()) {
-    const absAccel = Math.abs(a.accelerationScore);
-    if (absAccel > maxAccel) maxAccel = absAccel;
+  const p95Tiktok = computeP95(signalArrays.tiktok);
+  const p95Instagram = computeP95(signalArrays.instagram);
+  const p95Chart = computeP95(signalArrays.chart);
+  const p95Playlist = computeP95(signalArrays.playlist);
+  const p95Youtube = computeP95(signalArrays.youtube);
+  const p95Spotify = computeP95(signalArrays.spotify);
+
+  // Fetch the max multiTrackPresence score across all songwriters credited on
+  // each track.  A high value means one of the track's creators is currently
+  // having a multi-song cluster event (album/playlist/weekly burst), which is
+  // a forward-looking signal the track-level viral model should learn from.
+  const creatorPresenceRows = trackIds.length > 0
+    ? await db.$queryRawUnsafe<{ track_id: number; max_presence: number }[]>(
+        `SELECT DISTINCT ON (st."trackId")
+           st."trackId" AS track_id,
+           MAX(wprs."multiTrackPresence") AS max_presence
+         FROM songwriter_tracks st
+         JOIN writer_producer_rising_scores wprs ON wprs."songwriterId" = st."songwriterId"
+         WHERE st."trackId" = ANY($1::int[])
+           AND wprs.date >= NOW()::date - INTERVAL '3 days'
+           AND wprs."multiTrackPresence" IS NOT NULL
+         GROUP BY st."trackId"`,
+        trackIds,
+      )
+    : [];
+  const creatorPresenceMap = new Map<number, number>();
+  for (const row of creatorPresenceRows) {
+    creatorPresenceMap.set(row.track_id, Number(row.max_presence));
   }
+  console.log(
+    `[compute_track_signals] Creator multi-track presence loaded for ${creatorPresenceMap.size}/${trackIds.length} tracks`,
+  );
 
   // Fetch latest ML viral probabilities (30d) for all tracks in scope.
   // These are written by scripts/import_track_trend_predictions.ts after each
   // ml_train.yml run. When no prediction exists the modifier is neutral (1.0).
-  const trackIds = [...new Set([...platformSignals.values()].map((s) => s.trackId))];
   const mlPredRows = trackIds.length > 0
     ? await db.$queryRawUnsafe<{ track_id: number; prob_viral: number }[]>(
         `SELECT DISTINCT ON ("trackId") "trackId" AS track_id, "probViral" AS prob_viral
@@ -732,6 +812,54 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
     `[compute_track_signals] Loaded ML predictions for ${mlProbMap.size}/${trackIds.length} tracks`,
   );
 
+  // Compute rights complexity score per track from available DB metadata.
+  // Score is 0–1: more parties + missing identifiers = higher complexity.
+  // Used as a signal to flag songs where royalty collection may be unclear.
+  const rightsRows = trackIds.length > 0
+    ? await db.$queryRawUnsafe<{
+        track_id: number;
+        has_isrc: boolean;
+        has_iswc: boolean;
+        has_label: boolean;
+        writer_count: number;
+        ipi_count: number;
+      }[]>(
+        `SELECT
+           t.id AS track_id,
+           (t.isrc IS NOT NULL) AS has_isrc,
+           (t.iswc IS NOT NULL) AS has_iswc,
+           EXISTS(
+             SELECT 1 FROM track_albums ta
+             JOIN albums a ON a.id = ta."albumId"
+             WHERE ta."trackId" = t.id AND a.label IS NOT NULL
+           ) AS has_label,
+           COUNT(DISTINCT st."songwriterId")::int AS writer_count,
+           COUNT(DISTINCT CASE WHEN sw.ipi IS NOT NULL THEN st."songwriterId" END)::int AS ipi_count
+         FROM tracks t
+         LEFT JOIN songwriter_tracks st ON st."trackId" = t.id
+         LEFT JOIN songwriters sw ON sw.id = st."songwriterId"
+         WHERE t.id = ANY($1::int[])
+         GROUP BY t.id, t.isrc, t.iswc`,
+        trackIds,
+      )
+    : [];
+
+  const rightsComplexityMap = new Map<number, number>();
+  for (const row of rightsRows) {
+    let complexity = 0;
+    if (!row.has_isrc) complexity += 0.10;
+    if (!row.has_iswc) complexity += 0.10;
+    if (!row.has_label) complexity += 0.10;
+    // More writers = more parties to track
+    complexity += Math.min(row.writer_count / 5, 0.30);
+    // Missing IPI for registered writers = unverifiable PRO affiliation
+    const missingIpiCount = row.writer_count - row.ipi_count;
+    complexity += Math.min(missingIpiCount / 3, 0.25);
+    // No writers at all = completely unknown ownership
+    if (row.writer_count === 0) complexity += 0.15;
+    rightsComplexityMap.set(row.track_id, Math.min(complexity, 1.0));
+  }
+
   console.log(
     `[compute_track_signals] Normalizing and writing ${platformSignals.size} track signals...`,
   );
@@ -743,11 +871,23 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
     const diffusion = diffusionMap.get(s.trackId);
     const organic = organicMap.get(s.trackId);
 
-    const tiktokNorm = normalize(s.tiktokViews7d, maxTiktok);
-    const instagramNorm = normalize(s.instagramViews7d, maxInstagram);
-    const chartVelocityNorm = normalize(s.chartVelocity, maxChart);
-    const playlistNorm = normalize(s.playlistAdds7d, maxPlaylist);
-    const youtubeNorm = normalize(s.youtubeViews7d, maxYoutube);
+    const tiktokNorm = robustNorm(s.tiktokViews7d, p95Tiktok);
+    const instagramNorm = robustNorm(s.instagramViews7d, p95Instagram);
+    const chartVelocityNorm = robustNorm(s.chartVelocity, p95Chart);
+    const playlistNorm = robustNorm(s.playlistAdds7d, p95Playlist);
+    const youtubeNorm = robustNorm(s.youtubeViews7d, p95Youtube);
+
+    // Conversion rate: Spotify streams driven per TikTok view (UGC→stream efficiency).
+    // Capped at 0.1 (10 streams per TikTok view is extreme), then normalized to 0–1.
+    const rawConversionRate = s.tiktokViews7d > 0
+      ? s.spotifyStreams7d / s.tiktokViews7d
+      : 0;
+    const conversionRateNorm = clamp(rawConversionRate / 0.1, 0, 1);
+
+    // Creator multi-track presence: max signal across all songwriters credited
+    // on this track.  Stored as metadata for the ML training export; it does NOT
+    // directly enter the viral formula (the ML modifier already incorporates it).
+    const creatorMultiTrackPresence = creatorPresenceMap.get(s.trackId) ?? 0;
 
     // Acceleration: map [-2,2] → [0,1] with 0 as neutral 0.5
     const rawAccel = accel?.accelerationScore ?? 0;
@@ -769,6 +909,7 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
       accelerationNorm,
       youtubeNorm,
       organicNorm,
+      conversionRateNorm,
     ].filter((v) => v > 0.4).length;
 
     const synergyMultiplier =
@@ -778,16 +919,19 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
 
     const curveMultiplier = accel?.curveMultiplier ?? 1.0;
 
-    // Deterministic weighted formula (weights sum to 1.0)
+    // Deterministic weighted formula (weights sum to 1.0).
+    // conversionRateNorm measures how efficiently TikTok views translate to
+    // Spotify streams — high conversion indicates genuine demand, not just noise.
     const rawViralScore =
-      0.28 * tiktokNorm +
-      0.18 * instagramNorm +
+      0.25 * tiktokNorm +
+      0.16 * instagramNorm +
       0.16 * chartVelocityNorm +
       0.06 * diffusionNorm +
       0.14 * playlistNorm +
       0.08 * accelerationNorm +
       0.05 * youtubeNorm +
-      0.05 * organicNorm;
+      0.05 * organicNorm +
+      0.05 * conversionRateNorm;
 
     // ML modifier: blend in the model's 30d viral probability as a ±7.5%
     // nudge around the rule-based score. Neutral when no prediction exists.
@@ -812,6 +956,8 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
       accelerationNorm,
       youtubeNorm,
       organicNorm,
+      conversionRateNorm,
+      creatorMultiTrackPresence,
       viralScore,
       accelerationScore: accel?.accelerationScore ?? 0,
       curveShape: accel?.curveShape ?? "DECLINING",
@@ -842,13 +988,14 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
       },
       update: {
         viralScore: sig.viralScore,
+        rightsComplexityScore: rightsComplexityMap.get(sig.trackId) ?? 0,
       },
       create: {
         trackId: sig.trackId,
         code2: sig.code2,
         date: snapshotDate,
         viralScore: sig.viralScore,
-        rightsComplexityScore: 0,
+        rightsComplexityScore: rightsComplexityMap.get(sig.trackId) ?? 0,
       },
     });
 

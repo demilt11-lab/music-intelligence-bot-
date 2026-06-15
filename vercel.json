@@ -7,7 +7,8 @@
     { "path": "/api/cron/etl-artist-trajectory", "schedule": "0 4 * * *" },
     { "path": "/api/cron/ml-retrain", "schedule": "0 6 * * *" },
     { "path": "/api/cron/send-daily-digest", "schedule": "0 13 * * *" },
-    { "path": "/api/cron/check-alert-rules", "schedule": "0 14 * * *" }
+    { "path": "/api/cron/check-alert-rules", "schedule": "0 14 * * *" },
+    { "path": "/api/cron/compute-writer-producer-scores", "schedule": "30 5 * * *" }
   ],
   "headers": [
     {

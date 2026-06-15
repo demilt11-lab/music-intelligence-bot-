@@ -2,10 +2,14 @@
 //
 // Assigns a trend label (VIRAL / TRENDING / POPULAR / NONE) per track for a
 // snapshot date, combining:
-//   - Spotify stream growth (TrackPlatformStatsDaily, 7d vs prior 7d)
+//   - Spotify stream growth AND absolute volume (TrackPlatformStatsDaily, 7d vs prior 7d)
 //   - UGC view growth (UgcTrackMetrics, latest 7d window vs the window 7d earlier)
 //   - genre-level playlist base volume (GenrePlaylistMetrics)
-//   - the viral score from TalentScoutScore
+//
+// IMPORTANT: Labels must NOT use viralScore as an input — viralScore is computed
+// by compute_track_signals.ts and used as a training feature by the ML model.
+// Using it here would create a circular dependency: the model would learn to
+// reproduce viralScore rather than predict breakouts from raw signals.
 //
 // Labels are stored on TrackTrendLabel and used downstream as ML training
 // targets, so growth windows only ever look backward from the snapshot date.
@@ -21,29 +25,33 @@ export function classifyLabel(args: {
   streamsGrowth7d: number;
   ugcViewsGrowth7d: number;
   playlistStreams7d: number;
-  viralScore: number;
+  absoluteStreams7d: number;
 }): string {
-  const { streamsGrowth7d, ugcViewsGrowth7d, playlistStreams7d, viralScore } = args;
+  const { streamsGrowth7d, ugcViewsGrowth7d, playlistStreams7d, absoluteStreams7d } = args;
 
-  // VIRAL: very high short-term growth, high UGC/viralScore
+  // VIRAL: very high short-term growth on BOTH streaming and UGC, plus some
+  // critical mass (UGC doubling again or heavy playlist pull).
+  // Thresholds are deliberately raw/observable — no derived scores allowed here.
   if (
     streamsGrowth7d > 1.0 &&
     ugcViewsGrowth7d > 1.0 &&
-    (viralScore > 0.7 || playlistStreams7d > 50_000)
+    (ugcViewsGrowth7d > 2.0 || playlistStreams7d > 50_000)
   ) {
     return "VIRAL";
   }
 
-  // TRENDING: moderate growth with some UGC or playlists
+  // TRENDING: moderate stream growth with at least one confirming signal
+  // (UGC momentum, playlist traction, or meaningful absolute volume).
   if (
     streamsGrowth7d > 0.3 &&
-    (ugcViewsGrowth7d > 0.2 || playlistStreams7d > 10_000 || viralScore > 0.4)
+    (ugcViewsGrowth7d > 0.2 || playlistStreams7d > 10_000 || absoluteStreams7d > 100_000)
   ) {
     return "TRENDING";
   }
 
-  // POPULAR: large base volume, even if growth is modest
-  if (playlistStreams7d > 200_000 || viralScore > 0.8) {
+  // POPULAR: established catalog tracks with large absolute volume, even if
+  // week-over-week growth is modest.
+  if (playlistStreams7d > 200_000 || absoluteStreams7d > 5_000_000) {
     return "POPULAR";
   }
 
@@ -96,7 +104,7 @@ async function upsertTrendLabel(args: {
         genre,
         code2,
         label,
-        firstSeenAt: isNewlyActive && label !== "NONE" ? snapshotDate : snapshotDate,
+        firstSeenAt: isNewlyActive && label !== "NONE" ? snapshotDate : null,
         lastSeenAt: snapshotDate,
       },
     });
@@ -188,17 +196,7 @@ export async function buildTrackTrendLabels(dateStr: string) {
     playlistByGenre.set(key, Number(p.streams7d));
   }
 
-  // 5) Viral scores at the snapshot date
-  const talentRows = await db.talentScoutScore.findMany({
-    where: { date: snapshotDate },
-    select: { trackId: true, code2: true, viralScore: true },
-  });
-  const viralByTrack = new Map<string, number>();
-  for (const t of talentRows) {
-    viralByTrack.set(`${t.trackId}::${t.code2}`, t.viralScore);
-  }
-
-  // 6) Label every track with any signal this window
+  // 5) Label every track with any signal this window
   const currStreamsByTrack = new Map<number, number>(
     currStreams.map((r) => [r.trackId, Number(r._sum.streams ?? 0n)]),
   );
@@ -219,16 +217,11 @@ export async function buildTrackTrendLabels(dateStr: string) {
       playlistByGenre.get(`${genre ?? "Unknown"}::GLOBAL`) ??
       0;
 
-    const viralScore =
-      viralByTrack.get(`${trackId}::${code2 ?? "GLOBAL"}`) ??
-      viralByTrack.get(`${trackId}::GLOBAL`) ??
-      0;
-
     const label = classifyLabel({
       streamsGrowth7d: pctDelta(streams7d, prev7d),
       ugcViewsGrowth7d: pctDelta(ugcViews7d, ugcPrev7d),
       playlistStreams7d,
-      viralScore,
+      absoluteStreams7d: streams7d,
     });
 
     await upsertTrendLabel({

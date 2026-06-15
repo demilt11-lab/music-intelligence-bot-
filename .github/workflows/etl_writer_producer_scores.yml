@@ -1,0 +1,31 @@
+name: ETL — Writer & Producer Rising Scores
+
+on:
+  schedule:
+    - cron: "30 5 * * *" # 05:30 UTC daily — after streaming stats ingested
+  workflow_dispatch:
+
+jobs:
+  compute-writer-producer-scores:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm install
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Compute rising scores
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: npx tsx jobs/etl/compute_writer_producer_scores.ts $(date -u +%Y-%m-%d)

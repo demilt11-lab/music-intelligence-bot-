@@ -148,6 +148,148 @@ async function evaluateTrendLabels(today: Date): Promise<void> {
 }
 
 // ─────────────────────────────────────────────
+// Evaluate viral_score predictions (60-day retrospective)
+// ─────────────────────────────────────────────
+//
+// For each viral_score prediction made ~60 days ago, we check whether the
+// track's 7d Spotify streams actually grew >250% (3.5× baseline) in the
+// following 60 days. A predicted score >0.7 is treated as a "breakout"
+// call; a score ≤0.7 is "no breakout." Correctness = prediction and
+// outcome agree.
+
+const VIRAL_EVAL_WINDOW_DAYS = 60;
+const BREAKOUT_GROWTH_FACTOR = 3.5; // 250% growth = 3.5× baseline
+const VIRAL_SCORE_THRESHOLD = 0.7;
+
+async function evaluateViralScores(today: Date): Promise<void> {
+  const evalStart = subDays(today, VIRAL_EVAL_WINDOW_DAYS + 7);
+  const evalEnd   = subDays(today, VIRAL_EVAL_WINDOW_DAYS - 7);
+
+  const pending = await db.predictionOutcome.findMany({
+    where: {
+      predictionType: "viral_score",
+      predictedAt:   { gte: evalStart, lte: evalEnd },
+      wasCorrect:    null,
+      trackId:       { not: null },
+    },
+  });
+
+  console.log(
+    `[evaluate_predictions] Evaluating ${pending.length} viral_score outcome(s) from ${evalStart.toISOString().slice(0, 10)} → ${evalEnd.toISOString().slice(0, 10)}.`,
+  );
+
+  if (pending.length === 0) return;
+
+  // Collect all (trackId, predictedAt) pairs and fetch streams in bulk
+  // for two 7-day windows: the baseline (before prediction) and the
+  // outcome window (ending 60 days after prediction).
+  const trackIds = [...new Set(pending.map((p) => p.trackId as number))];
+
+  // Baseline: 7 days immediately before the prediction window closes.
+  // Outcome: from prediction window end to today (covers the full 60d window).
+  const baselineStart = subDays(evalEnd, 7);
+  const outcomeStart  = evalEnd;
+  const outcomeEnd    = today;
+
+  const streamRows = await db.$queryRawUnsafe<
+    { track_id: number; period: string; streams: number }[]
+  >(
+    `
+    SELECT
+      "trackId" AS track_id,
+      CASE
+        WHEN date BETWEEN $1::date AND $2::date THEN 'baseline'
+        WHEN date BETWEEN $3::date AND $4::date THEN 'outcome'
+      END AS period,
+      SUM(streams) AS streams
+    FROM track_platform_stats_daily
+    WHERE "trackId" = ANY($5::int[])
+      AND platform = 'spotify'
+      AND date BETWEEN $1::date AND $4::date
+    GROUP BY "trackId", period
+    `,
+    baselineStart.toISOString().slice(0, 10),
+    evalEnd.toISOString().slice(0, 10),
+    outcomeStart.toISOString().slice(0, 10),
+    outcomeEnd.toISOString().slice(0, 10),
+    trackIds,
+  );
+
+  type StreamSums = { baseline: number; outcome: number };
+  const streamsByTrack = new Map<number, StreamSums>();
+  for (const r of streamRows) {
+    if (!r.period) continue;
+    const entry = streamsByTrack.get(r.track_id) ?? { baseline: 0, outcome: 0 };
+    if (r.period === 'baseline') entry.baseline += Number(r.streams);
+    if (r.period === 'outcome')  entry.outcome  += Number(r.streams);
+    streamsByTrack.set(r.track_id, entry);
+  }
+
+  let correct = 0;
+
+  for (const outcome of pending) {
+    const tid = outcome.trackId as number;
+    const predictedScore = parseFloat(outcome.predictedValue);
+    const predictedBreakout = predictedScore > VIRAL_SCORE_THRESHOLD;
+
+    const sums = streamsByTrack.get(tid);
+    const baseline = sums?.baseline ?? 0;
+    const outcomeStreams = sums?.outcome ?? 0;
+
+    // Growth factor: outcome / baseline (clamped so 0-baseline → 0)
+    const growthFactor = baseline > 0 ? outcomeStreams / baseline : 0;
+    const actualBreakout = growthFactor >= BREAKOUT_GROWTH_FACTOR;
+
+    const wasCorrect = predictedBreakout === actualBreakout;
+    const actualValue = `${growthFactor.toFixed(2)}x_growth`;
+
+    await db.predictionOutcome.update({
+      where: { id: outcome.id },
+      data:  { actualValue, wasCorrect, evaluatedAt: today },
+    });
+
+    if (wasCorrect) correct++;
+  }
+
+  const { accuracy, precision, recall, f1Score } = computeMetrics(correct, pending.length);
+
+  console.log(
+    `[evaluate_predictions] viral_score (60d breakout) accuracy=${(accuracy * 100).toFixed(1)}% (${correct}/${pending.length})`,
+  );
+
+  await db.modelAccuracyReport.upsert({
+    where: {
+      modelName_evaluationDate_windowDays: {
+        modelName:      "compute_track_signals",
+        evaluationDate: today,
+        windowDays:     VIRAL_EVAL_WINDOW_DAYS,
+      },
+    },
+    update: {
+      totalPredictions:   pending.length,
+      correctPredictions: correct,
+      accuracy,
+      precision,
+      recall,
+      f1Score,
+      notes: `viral_score 60d breakout evaluation (threshold=${VIRAL_SCORE_THRESHOLD}, growth=${BREAKOUT_GROWTH_FACTOR}x)`,
+    },
+    create: {
+      modelName:          "compute_track_signals",
+      evaluationDate:     today,
+      windowDays:         VIRAL_EVAL_WINDOW_DAYS,
+      totalPredictions:   pending.length,
+      correctPredictions: correct,
+      accuracy,
+      precision,
+      recall,
+      f1Score,
+      notes: `viral_score 60d breakout evaluation (threshold=${VIRAL_SCORE_THRESHOLD}, growth=${BREAKOUT_GROWTH_FACTOR}x)`,
+    },
+  });
+}
+
+// ─────────────────────────────────────────────
 // Evaluate break_probability predictions
 // ─────────────────────────────────────────────
 
@@ -259,6 +401,7 @@ export async function evaluatePredictions(dateStr: string): Promise<void> {
 
   await evaluateTrendLabels(today);
   await evaluateBreakProbability(today);
+  await evaluateViralScores(today);
 
   console.log(`[evaluate_predictions] Evaluation complete for ${dateStr}.`);
 }
