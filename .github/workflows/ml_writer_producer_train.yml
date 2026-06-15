@@ -1,0 +1,119 @@
+name: ML — Writer & Producer Breakout Predictor
+
+on:
+  # Train weekly (Sunday 06:30 UTC) — after daily scores have accumulated
+  schedule:
+    - cron: "30 6 * * 0"
+  # Score daily (07:00 UTC) — after 05:30 ETL scoring run completes
+  # Triggered as a separate job step below
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "'train' or 'score'"
+        required: false
+        default: score
+
+jobs:
+  # ── Weekly retraining ───────────────────────────────────────────────────────
+  train:
+    if: github.event_name == 'schedule' || github.event.inputs.mode == 'train'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Export writer/producer training data
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python - <<'EOF'
+          import os, psycopg2, psycopg2.extras, pandas as pd
+          from pathlib import Path
+
+          conn = psycopg2.connect(os.environ["DATABASE_URL"])
+          with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+              cur.execute("""
+                  SELECT
+                      wprs."songwriterId"        AS songwriter_id,
+                      wprs.date::text            AS date,
+                      wprs."risingScore"         AS rising_score,
+                      wprs."streamVelocity"      AS stream_velocity,
+                      wprs."playlistMomentum"    AS playlist_momentum,
+                      wprs."collaborationScore"  AS collaboration_score,
+                      wprs."ugcMomentum"         AS ugc_momentum,
+                      wprs."multiTrackPresence"  AS multi_track_presence,
+                      wprs."isSigned"::int       AS is_signed,
+                      -- retrospective label: did any credited track chart top-100
+                      -- within 30 days after this score date?
+                      CASE WHEN EXISTS (
+                          SELECT 1
+                          FROM songwriter_tracks st
+                          JOIN chart_rows cr ON cr."trackId" = st."trackId"
+                          JOIN chart_snapshots cs ON cs.id = cr."snapshotId"
+                          WHERE st."songwriterId" = wprs."songwriterId"
+                            AND cr.rank <= 100
+                            AND cs."snapshotDate" BETWEEN wprs.date
+                                                      AND wprs.date + INTERVAL '30 days'
+                      ) THEN 1 ELSE 0 END       AS was_breakout_30d
+                  FROM writer_producer_rising_scores wprs
+                  ORDER BY wprs.date
+              """)
+              rows = cur.fetchall()
+          conn.close()
+
+          df = pd.DataFrame([dict(r) for r in rows])
+          Path("data").mkdir(exist_ok=True)
+          df.to_parquet("data/writer_producer_training_features.parquet", index=False)
+          print(f"Exported {len(df)} rows  breakout_rate={df['was_breakout_30d'].mean():.3f}")
+          EOF
+
+      - name: Train writer/producer breakout predictor
+        run: python -m ml.training.train_writer_producer_predictor
+
+      - name: Upload trained model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: writer-producer-predictor
+          path: |
+            models/writer_producer_predictor_xgb.json
+            models/writer_producer_predictor_calibrated.joblib
+            logs/metrics/writer_producer_training_metrics.json
+          retention-days: 30
+
+  # ── Daily inference ─────────────────────────────────────────────────────────
+  score:
+    if: github.event_name == 'schedule' || github.event.inputs.mode == 'score'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Download latest model artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true  # graceful degradation when no model trained yet
+        with:
+          name: writer-producer-predictor
+          path: models/
+
+      - name: Score writer/producer breakout probabilities
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python ml/score_writer_producer_daily.py $(date -u +%Y-%m-%d)

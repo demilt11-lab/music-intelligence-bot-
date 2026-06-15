@@ -464,6 +464,7 @@ export async function getRisingWritersProducers(opts: {
       collaborationScore: s.collaborationScore,
       ugcMomentum: s.ugcMomentum,
       multiTrackPresence: s.multiTrackPresence,
+      mlBreakoutProb30d: s.mlBreakoutProb30d,
       isSigned: s.isSigned,
       signedLabel: s.signedLabel,
       region: s.region ?? 'GLOBAL',

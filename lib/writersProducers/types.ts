@@ -102,6 +102,7 @@ export interface RisingTalentEntry {
   collaborationScore: number | null;
   ugcMomentum: number | null;
   multiTrackPresence: number | null;
+  mlBreakoutProb30d: number | null;
   isSigned: boolean;
   signedLabel: string | null;
   region: string;

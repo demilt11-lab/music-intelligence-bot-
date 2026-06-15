@@ -104,6 +104,14 @@ export function RisingTalentCard({ entry, rank, onSelect }: RisingTalentCardProp
     const playlistCluster = entry.clusterEvents.find((e) => e.type === 'playlist')
     const weeklyBurst = entry.clusterEvents.find((e) => e.type === 'weekly_release')
 
+    const mlProb = entry.mlBreakoutProb30d
+    if (mlProb != null && mlProb > 0.75) {
+      return {
+        text: `ML model gives ${Math.round(mlProb * 100)}% breakout probability within 30 days — one of our highest confidence signals this week.`,
+        type: 'insight',
+      }
+    }
+
     if (albumCluster) {
       return {
         text: `Credited on ${albumCluster.trackCount} songs from "${albumCluster.name}" — new-album concentration is a strong pipeline signal.`,
@@ -195,6 +203,11 @@ export function RisingTalentCard({ entry, rank, onSelect }: RisingTalentCardProp
               {entry.region && entry.region !== 'GLOBAL' && (
                 <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-400">
                   {entry.region}
+                </span>
+              )}
+              {entry.mlBreakoutProb30d != null && entry.mlBreakoutProb30d > 0.6 && (
+                <span className="rounded-full border border-indigo-400/25 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-indigo-300">
+                  ML {Math.round(entry.mlBreakoutProb30d * 100)}%
                 </span>
               )}
             </div>

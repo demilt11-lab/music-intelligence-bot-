@@ -86,6 +86,10 @@ _VIRAL_COLS = [
     # Conversion rate: Spotify streams generated per TikTok view.
     # Distinguishes genuine demand (high conversion) from noise/bot views.
     "stream_conversion_rate",
+    # Creator cluster signal: max multi-track presence score across the track's
+    # credited writers/producers.  High = one of their collaborators is on a
+    # hot new album or multiple editorial playlists this week.
+    "creator_multi_track_presence",
     # Playlist momentum (editorial adds signal label-push)
     "spotify_playlist_count",
     "playlist_adds_7d",
@@ -133,6 +137,14 @@ def build_viral_features(
 
     # Stream conversion rate: Spotify streams per TikTok view (capped at 0.1 = 10%)
     out["stream_conversion_rate"] = df["stream_conversion_rate"].clip(0, 0.1)
+
+    # Creator multi-track presence: did any of this track's songwriters/producers
+    # have a cluster event this week (multiple songs on same album/playlist)?
+    # Acts as a forward-looking signal — the artist's collaborators are hot.
+    if "creator_multi_track_presence" in df.columns:
+        out["creator_multi_track_presence"] = df["creator_multi_track_presence"].fillna(0).clip(0, 1)
+    else:
+        out["creator_multi_track_presence"] = 0.0
 
     # Interaction: TikTok video growth × geo spread (viral spread signal)
     out["tiktok_geo_spread"] = (

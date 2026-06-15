@@ -434,6 +434,7 @@ type TrackSignals = {
   youtubeNorm: number;
   organicNorm: number;
   conversionRateNorm: number;
+  creatorMultiTrackPresence: number;
 
   // Computed scores
   viralScore: number;
@@ -759,6 +760,32 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
   const p95Youtube = computeP95(signalArrays.youtube);
   const p95Spotify = computeP95(signalArrays.spotify);
 
+  // Fetch the max multiTrackPresence score across all songwriters credited on
+  // each track.  A high value means one of the track's creators is currently
+  // having a multi-song cluster event (album/playlist/weekly burst), which is
+  // a forward-looking signal the track-level viral model should learn from.
+  const creatorPresenceRows = trackIds.length > 0
+    ? await db.$queryRawUnsafe<{ track_id: number; max_presence: number }[]>(
+        `SELECT DISTINCT ON (st."trackId")
+           st."trackId" AS track_id,
+           MAX(wprs."multiTrackPresence") AS max_presence
+         FROM songwriter_tracks st
+         JOIN writer_producer_rising_scores wprs ON wprs."songwriterId" = st."songwriterId"
+         WHERE st."trackId" = ANY($1::int[])
+           AND wprs.date >= NOW()::date - INTERVAL '3 days'
+           AND wprs."multiTrackPresence" IS NOT NULL
+         GROUP BY st."trackId"`,
+        trackIds,
+      )
+    : [];
+  const creatorPresenceMap = new Map<number, number>();
+  for (const row of creatorPresenceRows) {
+    creatorPresenceMap.set(row.track_id, Number(row.max_presence));
+  }
+  console.log(
+    `[compute_track_signals] Creator multi-track presence loaded for ${creatorPresenceMap.size}/${trackIds.length} tracks`,
+  );
+
   // Fetch latest ML viral probabilities (30d) for all tracks in scope.
   // These are written by scripts/import_track_trend_predictions.ts after each
   // ml_train.yml run. When no prediction exists the modifier is neutral (1.0).
@@ -804,6 +831,11 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
       ? s.spotifyStreams7d / s.tiktokViews7d
       : 0;
     const conversionRateNorm = clamp(rawConversionRate / 0.1, 0, 1);
+
+    // Creator multi-track presence: max signal across all songwriters credited
+    // on this track.  Stored as metadata for the ML training export; it does NOT
+    // directly enter the viral formula (the ML modifier already incorporates it).
+    const creatorMultiTrackPresence = creatorPresenceMap.get(s.trackId) ?? 0;
 
     // Acceleration: map [-2,2] → [0,1] with 0 as neutral 0.5
     const rawAccel = accel?.accelerationScore ?? 0;
@@ -873,6 +905,7 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
       youtubeNorm,
       organicNorm,
       conversionRateNorm,
+      creatorMultiTrackPresence,
       viralScore,
       accelerationScore: accel?.accelerationScore ?? 0,
       curveShape: accel?.curveShape ?? "DECLINING",

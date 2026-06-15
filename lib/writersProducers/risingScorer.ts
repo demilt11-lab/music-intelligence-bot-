@@ -14,6 +14,7 @@ interface ScoredCreator {
   collaborationScore: number | null;
   ugcMomentum: number | null;
   multiTrackPresence: number | null;
+  mlBreakoutProb30d: number | null;
   isSigned: boolean;
   signedLabel: string | null;
   region: string;
@@ -52,6 +53,22 @@ export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> 
 
   const weekAgo = new Date(date.getTime() - 7 * 24 * 60 * 60 * 1000);
   const twoWeeksAgo = new Date(date.getTime() - 14 * 24 * 60 * 60 * 1000);
+  const yesterday = new Date(date.getTime() - 24 * 60 * 60 * 1000);
+
+  // Load yesterday's ML predictions so we can apply them as a ±7.5% modifier
+  // to today's raw rising score (same pattern as compute_track_signals.ts).
+  // score_writer_producer_daily.py writes these after the scorer runs each day.
+  const mlPredRows = await db.writerProducerRisingScore.findMany({
+    where: { date: yesterday, mlBreakoutProb30d: { not: null } },
+    select: { songwriterId: true, mlBreakoutProb30d: true },
+  });
+  const mlProbMap = new Map<number, number>();
+  for (const r of mlPredRows) {
+    if (r.mlBreakoutProb30d != null) mlProbMap.set(r.songwriterId, r.mlBreakoutProb30d);
+  }
+  console.log(
+    `[rising-scorer] Loaded ML predictions for ${mlProbMap.size} songwriters from ${yesterday.toISOString().slice(0, 10)}`
+  );
 
   // Fetch all songwriters with their track stats
   const songwriters = await db.songwriter.findMany({
@@ -214,14 +231,20 @@ export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> 
     const ugcMomentum = softLog(totalUgcViews, 50_000_000);
     const collaborationScore = softLog(maxCollabPopularity, 100);
 
-    // Composite rising score — multiTrackPresence at 0.20; other weights
+    // Composite raw rising score — multiTrackPresence at 0.20; other weights
     // reduced proportionally from prior values so the sum remains 1.0.
-    const risingScore =
+    const rawRisingScore =
       streamVelocity * 0.28 +
       playlistMomentum * 0.24 +
       ugcMomentum * 0.20 +
       collaborationScore * 0.08 +
       multiTrackPresence * 0.20;
+
+    // ML modifier: blend in yesterday's breakout probability as a ±7.5% nudge.
+    // Neutral (1.0) when no prediction exists yet (first run or model not trained).
+    const mlProb = mlProbMap.get(sw.id) ?? 0.5;
+    const mlModifier = Math.max(0.85, Math.min(1.15, 1 + 0.15 * (mlProb - 0.5)));
+    const risingScore = Math.min(1, Math.max(0, rawRisingScore * mlModifier));
 
     // Signed status — infer from album label data if available
     const labelHint = null; // TODO: join to albums.label when ingested
@@ -229,12 +252,13 @@ export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> 
 
     results.push({
       songwriterId: sw.id,
-      risingScore: Math.min(1, Math.max(0, risingScore)),
+      risingScore,
       streamVelocity: streamVelocity || null,
       playlistMomentum: playlistMomentum || null,
       collaborationScore: collaborationScore || null,
       ugcMomentum: ugcMomentum || null,
       multiTrackPresence: multiTrackPresence > 0 ? multiTrackPresence : null,
+      mlBreakoutProb30d: mlProbMap.get(sw.id) ?? null,
       isSigned,
       signedLabel,
       region: 'GLOBAL',
@@ -269,6 +293,7 @@ export async function upsertRisingScores(date: Date): Promise<number> {
         collaborationScore: s.collaborationScore,
         ugcMomentum: s.ugcMomentum,
         multiTrackPresence: s.multiTrackPresence,
+        mlBreakoutProb30d: s.mlBreakoutProb30d,
         isSigned: s.isSigned,
         signedLabel: s.signedLabel,
         region: s.region,
@@ -280,6 +305,7 @@ export async function upsertRisingScores(date: Date): Promise<number> {
         collaborationScore: s.collaborationScore,
         ugcMomentum: s.ugcMomentum,
         multiTrackPresence: s.multiTrackPresence,
+        mlBreakoutProb30d: s.mlBreakoutProb30d,
         isSigned: s.isSigned,
         signedLabel: s.signedLabel,
       },
