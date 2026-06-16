@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { PageShell } from '@/components/ui/PageShell'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
+import { safeDisplayName } from '@/lib/shared/text'
 
 type SearchType =
   | 'all'
@@ -78,10 +79,17 @@ function getHref(bucket: string, item: any) {
 }
 
 function ResultRow({ item, bucket }: { item: any; bucket: string }) {
-  const name = item.name ?? item.title ?? item.id ?? '—'
+  // Last-resort render guard: even if a corrupt row reaches the client, never
+  // paint raw markdown/URL fragments as a name. Server normalisation already
+  // sanitises these, but other surfaces feed this component too.
+  const fallback = bucket === 'artists' ? 'Unknown Artist' : '—'
+  const rawName = item.name ?? item.title ?? item.id ?? '—'
+  const name = safeDisplayName(rawName, fallback)
   const sub =
     bucket === 'tracks'
-      ? item.artists?.map((a: any) => a.name).join(', ')
+      ? item.artists
+          ?.map((a: any) => safeDisplayName(a.name, 'Unknown Artist'))
+          .join(', ')
       : item.description ?? item.genre ?? null
   const href = getHref(bucket, item)
 

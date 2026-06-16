@@ -16,6 +16,11 @@
 import { db } from '@/lib/db';
 import { scrapeUrl } from '@/lib/firecrawl/client';
 import { runTrackedJob } from '@/lib/jobs/tracker';
+import {
+  stripMarkdown,
+  looksLikeMarkdownJunk,
+  sanitizeNameForStorage,
+} from '@/lib/shared/text';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -51,23 +56,24 @@ interface BillboardEntry {
   weeksOnChart?: number;
 }
 
-// Lines that are metadata/nav noise, never a song title or artist name
-const METADATA_RE = /^(LW|PK|WOC|NEW|RE-?ENTRY|Award|Peak|Chart|Date|Debut|Hot|Billboard|spotify|apple|amazon|youtube|tidal|pandora|trending|airplay|radio|sales|streaming|Skip to|Toggle|Share|Award Badge|[|#\-–—]+|\d+)$/i;
+// Lines that are metadata/nav noise, never a song title or artist name.
+// Includes social-share / nav labels: a share widget such as
+// "[Twitter](https://twitter.com/intent/tweet?…)" strips down to the bare word
+// "Twitter", which must not be mistaken for an artist name.
+const METADATA_RE = /^(LW|PK|WOC|NEW|RE-?ENTRY|Award|Peak|Chart|Date|Debut|Hot|Billboard|spotify|apple|amazon|youtube|tidal|pandora|trending|airplay|radio|sales|streaming|Skip to|Toggle|Share|Award Badge|Twitter|Facebook|Instagram|Pinterest|Reddit|Tumblr|TikTok|Snapchat|LinkedIn|WhatsApp|Threads|Email|Copy(?: Link)?|Embed|Print|Flipboard|Gift|Comments?|Subscribe|Newsletter|Advertise|Log ?In|Sign ?In|Sign ?Up|Menu|Search|Home|[|#\-–—]+|\d+)$/i;
 
+// Replace the bespoke cleaner with the shared markdown stripper, which also
+// drops image syntax (![](…)) and broken share-link fragments (text](…)) that
+// the previous regex let through and persisted as artist/title names.
 function cleanLine(l: string): string {
-  return l
-    .replace(/\*+/g, '')          // strip bold/italic markers
-    .replace(/#+/g, '')           // strip heading hashes
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // markdown links → text
-    .replace(/`+/g, '')
-    .trim();
+  return stripMarkdown(l);
 }
 
 function isUsableLine(l: string): boolean {
   if (l.length < 2) return false;
   if (METADATA_RE.test(l)) return false;
   if (/^[\d\s\-–|.,]+$/.test(l)) return false;  // pure numbers/punctuation
-  if (/^https?:\/\//.test(l)) return false;
+  if (looksLikeMarkdownJunk(l)) return false;    // residual URL / link fragment
   return true;
 }
 
@@ -159,8 +165,18 @@ interface ResolvedTrack {
 }
 
 async function resolveBillboardTrack(entry: BillboardEntry): Promise<ResolvedTrack> {
-  const normTitle = normalise(entry.title);
-  const normArtist = normalise(entry.artist);
+  // Final write-time guard: never persist a markdown/URL fragment as a name.
+  // Entries that don't yield a clean title AND artist are skipped, not stored.
+  const cleanTitle = sanitizeNameForStorage(entry.title);
+  const cleanArtist = sanitizeNameForStorage(entry.artist);
+  if (!cleanTitle || !cleanArtist) {
+    throw new Error(
+      `unusable title/artist after sanitisation (title=${JSON.stringify(entry.title)}, artist=${JSON.stringify(entry.artist)})`,
+    );
+  }
+
+  const normTitle = normalise(cleanTitle);
+  const normArtist = normalise(cleanArtist);
 
   // 1. Fuzzy title + artist match against existing tracks
   if (normTitle && normArtist) {
@@ -178,22 +194,22 @@ async function resolveBillboardTrack(entry: BillboardEntry): Promise<ResolvedTra
     }
   }
 
-  // 2. Create stub track + artist
+  // 2. Create stub track + artist (using sanitised names)
   let artist = await db.artist.findFirst({
-    where: { name: { equals: entry.artist, mode: 'insensitive' } },
+    where: { name: { equals: cleanArtist, mode: 'insensitive' } },
   });
   if (!artist) {
-    artist = await db.artist.create({ data: { name: entry.artist } });
+    artist = await db.artist.create({ data: { name: cleanArtist } });
   }
 
   const track = await db.track.create({
     data: {
-      title: entry.title,
+      title: cleanTitle,
       trackArtists: { create: { artistId: artist.id, role: 'primary' } },
     },
   });
 
-  console.log(`[billboard] Created stub track id=${track.id} "${entry.title}" by "${entry.artist}"`);
+  console.log(`[billboard] Created stub track id=${track.id} "${cleanTitle}" by "${cleanArtist}"`);
   return { trackId: track.id, isNew: true };
 }
 
@@ -281,7 +297,8 @@ async function main(): Promise<void> {
 
   console.log('[billboard] Starting Billboard chart ingestion…');
 
-  // Clean up any stub tracks written by a previous broken parse run
+  // Clean up any stub tracks written by a previous broken parse run, including
+  // rows whose title leaked markdown/URL fragments (![…], …](…), http…).
   const deleted = await db.track.deleteMany({
     where: {
       OR: [
@@ -289,6 +306,9 @@ async function main(): Promise<void> {
         { title: { startsWith: '###' } },
         { title: { contains: 'Peak Chart Date' } },
         { title: { contains: 'billboard.com' } },
+        { title: { contains: '](' } },
+        { title: { contains: '![' } },
+        { title: { contains: 'http' } },
         { title: { in: ['LW', 'PK', 'WOC', 'NEW', 'RE-ENTRY', 'Award'] } },
       ],
       externalIds: { none: { platform: { not: 'billboard' } } },
@@ -296,6 +316,24 @@ async function main(): Promise<void> {
   });
   if (deleted.count > 0) {
     console.log(`[billboard] Cleaned up ${deleted.count} bad stub tracks from prior broken parse`);
+  }
+
+  // Clean up stub artists whose name leaked markdown/URL fragments. Only stub
+  // artists (no external platform IDs) are touched, so real artists ingested
+  // from Spotify/etc. are never deleted. The cascade on track_artists removes
+  // their now-dangling links.
+  const deletedArtists = await db.artist.deleteMany({
+    where: {
+      OR: [
+        { name: { contains: '](' } },
+        { name: { contains: '![' } },
+        { name: { contains: 'http' } },
+      ],
+      externalIds: { none: {} },
+    },
+  });
+  if (deletedArtists.count > 0) {
+    console.log(`[billboard] Cleaned up ${deletedArtists.count} bad stub artists from prior broken parse`);
   }
 
   const snapshotDate = toDateOnly(new Date());

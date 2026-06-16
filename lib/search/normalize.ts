@@ -1,4 +1,5 @@
 import { toBigIntString } from '@/lib/shared/bigint';
+import { safeDisplayName } from '@/lib/shared/text';
 import {
   SearchArtistResult,
   SearchTrackResult,
@@ -53,7 +54,7 @@ export function normalizeArtist(row: Record<string, unknown>): SearchArtistResul
 
   return {
     id: Number(row.id),
-    name: String(row.name ?? ''),
+    name: safeDisplayName(row.name, 'Unknown Artist'),
     imageUrl: nullableString(row.imageUrl ?? row.image_url),
     code2: nullableString(row.code2 ?? row.country_code),
     spotifyFollowers,
@@ -75,12 +76,12 @@ export function normalizeTrack(row: Record<string, unknown>): SearchTrackResult 
 
   const artists = trackArtists.map((ta) => {
     const artist = (ta.artist as Record<string, unknown> | undefined) ?? ta;
-    return { id: Number(artist.id), name: String(artist.name ?? '') };
+    return { id: Number(artist.id), name: safeDisplayName(artist.name, 'Unknown Artist') };
   });
 
   return {
     id: Number(row.id),
-    name: String(row.name ?? row.title ?? ''),
+    name: safeDisplayName(row.name ?? row.title, 'Untitled Track'),
     isrc: nullableString(row.isrc),
     imageUrl: nullableString(row.imageUrl ?? row.image_url),
     artists,
@@ -114,13 +115,13 @@ export function normalizePlaylist(row: Record<string, unknown>): SearchPlaylistR
 
   return {
     id: Number(row.id),
-    name: String(row.name ?? ''),
+    name: safeDisplayName(row.name, 'Untitled Playlist'),
     imageUrl: nullableString(row.imageUrl ?? row.image_url),
     platform: String(row.platform ?? row.platformName ?? ''),
     followers: toBigIntString(
       rawFollowers as bigint | number | null | undefined,
     ),
-    ownerName,
+    ownerName: ownerName ? safeDisplayName(ownerName, 'Unknown') : null,
   };
 }
 
@@ -139,7 +140,7 @@ export function normalizeCurator(row: Record<string, unknown>): SearchCuratorRes
 
   return {
     id: Number(row.id),
-    name: String(row.name ?? ''),
+    name: safeDisplayName(row.name, 'Unknown Curator'),
     imageUrl: nullableString(row.imageUrl ?? row.image_url),
     platform: String(row.platform ?? row.platformName ?? ''),
     numPlaylists,
@@ -163,7 +164,7 @@ export function normalizeAlbum(row: Record<string, unknown>): SearchAlbumResult 
 
   const artists = trackArtists.map((ta) => {
     const artist = (ta.artist as Record<string, unknown> | undefined) ?? ta;
-    return { id: Number(artist.id), name: String(artist.name ?? '') };
+    return { id: Number(artist.id), name: safeDisplayName(artist.name, 'Unknown Artist') };
   });
 
   // UPC can come from externalIds or a direct field
@@ -178,7 +179,7 @@ export function normalizeAlbum(row: Record<string, unknown>): SearchAlbumResult 
 
   return {
     id: Number(row.id),
-    name: String(row.name ?? row.title ?? ''),
+    name: safeDisplayName(row.name ?? row.title, 'Untitled Album'),
     imageUrl: nullableString(row.imageUrl ?? row.image_url),
     upc,
     releaseDate: toDateString(row.releaseDate ?? row.release_date),
@@ -198,7 +199,7 @@ export function normalizeStation(row: Record<string, unknown>): SearchStationRes
 
   return {
     id: Number(row.id),
-    name: String(row.name ?? ''),
+    name: safeDisplayName(row.name, 'Unknown Station'),
     country: nullableString(row.country ?? radio?.country),
     genre: nullableString(row.genre ?? radio?.genre),
     imageUrl: nullableString(row.imageUrl ?? row.image_url),
@@ -213,7 +214,7 @@ export function normalizeStation(row: Record<string, unknown>): SearchStationRes
 export function normalizeCity(row: Record<string, unknown>): SearchCityResult {
   return {
     id: Number(row.id),
-    name: String(row.name ?? ''),
+    name: safeDisplayName(row.name, 'Unknown City'),
     code2: nullableString(row.code2 ?? row.country_code),
     country: nullableString(row.country ?? row.country_name),
     isTrigger: Boolean(row.isTrigger ?? row.is_trigger ?? false),
@@ -229,7 +230,7 @@ export function normalizeCity(row: Record<string, unknown>): SearchCityResult {
 export function normalizeSongwriter(row: Record<string, unknown>): SearchSongwriterResult {
   return {
     id: Number(row.id),
-    name: String(row.name ?? ''),
+    name: safeDisplayName(row.name, 'Unknown Songwriter'),
     imageUrl: nullableString(row.imageUrl ?? row.image_url),
   };
 }
