@@ -2,7 +2,14 @@
 //
 // Aggregates per-genre momentum metrics for the genre breakout detector:
 //   UgcGenreMetrics      <- UgcTrackMetrics (TikTok UGC)
-//   GenrePlaylistMetrics <- TrackPlatformStatsDaily (Spotify streams/adds)
+//   GenrePlaylistMetrics <- ChartRow/ChartSnapshot, Spotify per-market charts
+//                           (playlistType='chart' — see aggregateChartGenre)
+//                        <- TrackPlatformStatsDaily Spotify streams/adds
+//                           (playlistType='all' — see BUG-005: dormant today,
+//                           since no ingest job writes platform='spotify' rows
+//                           to that table; left in place so it activates on
+//                           its own if real per-track streaming volume ever
+//                           starts flowing there)
 //   GenreAirplayMetrics  <- LuminateAirplay (US radio)
 //
 // A track's genre comes from real associations only: TrackTag(category=genre)
@@ -14,6 +21,20 @@ import { runTrackedJob } from '@/lib/jobs/tracker';
 const GLOBAL = 'GLOBAL';
 const ALL_FORMATS = 'ALL';
 const SEP = '::';
+
+// Search-based chart ingestion (jobs/ingest/spotify.ts) never sets
+// ChartRow.streamsToday, so true stream volume isn't available from charts —
+// presence and rank are. CHART_DEPTH caps the inverse-rank weight so a rank-1
+// finish on a top-50 chart scores 50 and a rank-50 finish scores 1.
+const CHART_DEPTH = 50;
+
+export function chartRankWeight(rank: number, depth: number = CHART_DEPTH): number {
+  return Math.max(0, depth + 1 - rank);
+}
+
+export function normalizeChartCountry(code: string | null): string {
+  return (code ?? GLOBAL).toUpperCase();
+}
 
 function utcDateOnly(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -72,6 +93,7 @@ export async function runGenreEtl(referenceDate?: string) {
 
   await aggregateUgcGenre(date);
   await aggregatePlaylistGenre(date, sevenDaysAgo, fourteenDaysAgo);
+  await aggregateChartGenre(date, sevenDaysAgo, fourteenDaysAgo);
   await aggregateAirplayGenre(date, sevenDaysAgo, fourteenDaysAgo);
 }
 
@@ -193,6 +215,86 @@ async function aggregatePlaylistGenre(
   }
 
   console.log(`[genre-etl] playlist rollup wrote ${currByGenre.size} genre rows`);
+}
+
+/**
+ * Spotify per-market chart presence, rolled up to genre level. This is the
+ * Spotify-derived source that actually has data flowing today (BUG-005):
+ * jobs/ingest/spotify.ts's ingestTopCharts() writes ChartSnapshot/ChartRow
+ * per market via search-based ingestion, independent of the dormant
+ * TrackPlatformStatsDaily(platform='spotify') path above.
+ */
+async function aggregateChartGenre(
+  date: Date,
+  sevenDaysAgo: Date,
+  fourteenDaysAgo: Date,
+) {
+  const loadWindow = (gte: Date, lt: Date) =>
+    db.chartRow.findMany({
+      where: { snapshot: { platform: 'spotify', snapshotDate: { gte, lt } } },
+      select: {
+        trackId: true,
+        rank: true,
+        snapshot: { select: { countryCode: true } },
+      },
+    });
+
+  const [current, previous] = await Promise.all([
+    loadWindow(sevenDaysAgo, date),
+    loadWindow(fourteenDaysAgo, sevenDaysAgo),
+  ]);
+
+  if (!current.length) {
+    console.log('[genre-etl] no Spotify chart rows in window - skipping chart rollup');
+    return;
+  }
+
+  const genreByTrack = await loadTrackGenres(
+    Array.from(new Set(current.map((r) => r.trackId))),
+  );
+
+  type Agg = { genre: string; country: string; tracks: Set<number>; weight: number };
+  const sumRows = (rows: typeof current): Map<string, Agg> => {
+    const m = new Map<string, Agg>();
+    for (const r of rows) {
+      const genre = genreByTrack.get(r.trackId) ?? 'Unknown';
+      const country = normalizeChartCountry(r.snapshot.countryCode);
+      const key = `${genre}${SEP}${country}`;
+      const agg = m.get(key) ?? { genre, country, tracks: new Set<number>(), weight: 0 };
+      agg.tracks.add(r.trackId);
+      agg.weight += chartRankWeight(r.rank);
+      m.set(key, agg);
+    }
+    return m;
+  };
+
+  const currByKey = sumRows(current);
+  const prevByKey = sumRows(previous);
+
+  for (const [key, agg] of currByKey.entries()) {
+    const prev = prevByKey.get(key);
+
+    const data = {
+      streams7d: BigInt(Math.round(agg.weight)),
+      streams7dGrowth: pctGrowthNum(agg.weight, prev?.weight ?? 0),
+      adds7d: agg.tracks.size,
+    };
+
+    await db.genrePlaylistMetrics.upsert({
+      where: {
+        genre_country_date_playlistType: {
+          genre: agg.genre,
+          country: agg.country,
+          date,
+          playlistType: 'chart',
+        },
+      },
+      update: data,
+      create: { genre: agg.genre, country: agg.country, date, playlistType: 'chart', ...data },
+    });
+  }
+
+  console.log(`[genre-etl] chart rollup wrote ${currByKey.size} genre rows`);
 }
 
 /** US radio spins/audience per genre from Luminate airplay facts. */

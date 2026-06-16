@@ -36,38 +36,109 @@ type GenreTrendOptions = {
   usCode2?: string
 }
 
+export type GenreSourceCoverage = {
+  date: string | null
+  ugc: boolean
+  spotifyCharts: boolean
+  usRadio: boolean
+}
+
+/**
+ * Most recent date with a row in any genre-signal table, or null if all
+ * three are empty. Without this, an unset `date` meant "no date filter" —
+ * computeGenreBreakouts would sum every row ever written across every date
+ * (BUG-005), inflating without bound as the ETL accumulates daily snapshots
+ * instead of reflecting current momentum.
+ */
+async function resolveEffectiveDate(explicit?: string): Promise<Date | null> {
+  if (explicit) return new Date(explicit)
+
+  const [latestUgc, latestPlaylist, latestAirplay] = await Promise.all([
+    db.ugcGenreMetrics.findFirst({ orderBy: { date: 'desc' }, select: { date: true } }),
+    db.genrePlaylistMetrics.findFirst({ orderBy: { date: 'desc' }, select: { date: true } }),
+    db.genreAirplayMetrics.findFirst({ orderBy: { date: 'desc' }, select: { date: true } }),
+  ])
+
+  const dates = [latestUgc?.date, latestPlaylist?.date, latestAirplay?.date].filter(
+    (d): d is Date => d != null,
+  )
+  if (!dates.length) return null
+  return new Date(Math.max(...dates.map((d) => d.getTime())))
+}
+
+/** Which genre-signal sources have data for the effective date, for transparent empty states. */
+export async function getGenreSourceCoverage(explicitDate?: string): Promise<GenreSourceCoverage> {
+  const date = await resolveEffectiveDate(explicitDate)
+  if (!date) return { date: null, ugc: false, spotifyCharts: false, usRadio: false }
+
+  const [ugcCount, chartCount, radioCount] = await Promise.all([
+    db.ugcGenreMetrics.count({ where: { date } }),
+    db.genrePlaylistMetrics.count({ where: { date, playlistType: 'chart' } }),
+    db.genreAirplayMetrics.count({ where: { date } }),
+  ])
+
+  return {
+    date: date.toISOString().slice(0, 10),
+    ugc: ugcCount > 0,
+    spotifyCharts: chartCount > 0,
+    usRadio: radioCount > 0,
+  }
+}
+
 export async function computeGenreBreakouts(
   opts: GenreTrendOptions = {}
 ): Promise<GenreBreakoutSignal[]> {
   const usCode2 = opts.usCode2 ?? 'US'
+  const date = await resolveEffectiveDate(opts.date)
+  if (!date) return []
 
-  const ugcRows = await db.ugcGenreMetrics.findMany({
-    where: {
-      date: opts.date ? new Date(opts.date) : undefined,
-    },
-  })
+  const [ugcRows, intlRows, usStreamRows, radioRows] = await Promise.all([
+    db.ugcGenreMetrics.findMany({ where: { date } }),
+    db.genrePlaylistMetrics.findMany({ where: { country: { not: usCode2 }, date } }),
+    db.genrePlaylistMetrics.findMany({ where: { country: usCode2, date } }),
+    db.genreAirplayMetrics.findMany({ where: { country: usCode2, date } }),
+  ])
 
-  const intlRows = await db.genrePlaylistMetrics.findMany({
-    where: {
-      country: { not: usCode2 },
-      date: opts.date ? new Date(opts.date) : undefined,
-    },
-  })
+  return reduceGenreSignals(ugcRows, intlRows, usStreamRows, radioRows, usCode2)
+}
 
-  const usStreamRows = await db.genrePlaylistMetrics.findMany({
-    where: {
-      country: usCode2,
-      date: opts.date ? new Date(opts.date) : undefined,
-    },
-  })
+type UgcGenreRow = {
+  genre: string
+  videos7d: number
+  videos7dGrowth: number
+  views7d: bigint
+  views7dGrowth: number
+  leadCountry: string | null
+}
 
-  const radioRows = await db.genreAirplayMetrics.findMany({
-    where: {
-      country: usCode2,
-      date: opts.date ? new Date(opts.date) : undefined,
-    },
-  })
+type PlaylistGenreRow = {
+  genre: string
+  country: string
+  streams7d: bigint
+  streams7dGrowth: number
+}
 
+type AirplayGenreRow = {
+  genre: string
+  spins7d: number
+  spins7dGrowth: number
+  formatId: string | null
+}
+
+/**
+ * Pure reducer: folds already-fetched rows from all sources into ranked
+ * genre signals. Rows are summed (not overwritten) per genre — e.g. a
+ * "chart"-derived row and a legacy "all" row for the same genre/country/date,
+ * or multiple radio formats — so one source can no longer silently clobber
+ * another's contribution for the same key (BUG-005).
+ */
+export function reduceGenreSignals(
+  ugcRows: UgcGenreRow[],
+  intlRows: PlaylistGenreRow[],
+  usStreamRows: PlaylistGenreRow[],
+  radioRows: AirplayGenreRow[],
+  usCode2: string,
+): GenreBreakoutSignal[] {
   const byGenre: Map<string, GenreBreakoutSignal> = new Map()
 
   const ensureGenre = (genre: string): GenreBreakoutSignal => {
@@ -118,14 +189,14 @@ export async function computeGenreBreakouts(
 
   usStreamRows.forEach((row) => {
     const g = ensureGenre(row.genre)
-    g.usStreams7d = Number(row.streams7d ?? 0)
-    g.usStreams7dGrowth = Number(row.streams7dGrowth ?? 0)
+    g.usStreams7d += Number(row.streams7d ?? 0)
+    g.usStreams7dGrowth += Number(row.streams7dGrowth ?? 0)
   })
 
   radioRows.forEach((row) => {
     const g = ensureGenre(row.genre)
-    g.usSpins7d = Number(row.spins7d ?? 0)
-    g.usSpins7dGrowth = Number(row.spins7dGrowth ?? 0)
+    g.usSpins7d += Number(row.spins7d ?? 0)
+    g.usSpins7dGrowth += Number(row.spins7dGrowth ?? 0)
 
     if (!g.leadFormat || row.spins7d > 0) {
       g.leadFormat = row.formatId
@@ -147,6 +218,12 @@ function computeGenreBreakoutScore(g: GenreBreakoutSignal): number {
 
   const intlMomentum = growthScore(g.intlStreams7dGrowth) * 0.2
 
+  // usStreams7d was always 0 before BUG-005 (its only source was a dead
+  // ETL branch), so this term had no observable effect and was missing —
+  // weighted the same as intlMomentum since both represent chart/streaming
+  // growth, just on opposite sides of the US/international split.
+  const usMomentum = growthScore(g.usStreams7dGrowth) * 0.2
+
   const usGap =
     g.intlStreams7d > 0 && g.usStreams7d < g.intlStreams7d
       ? (g.intlStreams7d - g.usStreams7d) / (g.intlStreams7d + 1)
@@ -154,7 +231,7 @@ function computeGenreBreakoutScore(g: GenreBreakoutSignal): number {
 
   const radioSignal = growthScore(g.usSpins7dGrowth) * 0.1
 
-  return ugcMomentum + intlMomentum + usGap * 0.2 + radioSignal
+  return ugcMomentum + intlMomentum + usMomentum + usGap * 0.2 + radioSignal
 }
 
 function growthScore(delta: number): number {

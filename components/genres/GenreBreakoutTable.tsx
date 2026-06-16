@@ -19,13 +19,26 @@ type GenreSignal = {
   commentary: string;
 };
 
+type SourceCoverage = {
+  ugc: boolean;
+  spotifyCharts: boolean;
+  usRadio: boolean;
+};
+
+const SOURCE_LABELS: Record<keyof SourceCoverage, string> = {
+  ugc: 'TikTok UGC',
+  spotifyCharts: 'Spotify charts',
+  usRadio: 'US radio airplay',
+};
+
 type ApiResponse = {
   obj: GenreSignal[];
-  meta: { date?: string; usCode2: string };
+  meta: { date: string | null; usCode2: string; sources?: SourceCoverage };
 };
 
 export function GenreBreakoutTable() {
   const [data, setData] = React.useState<GenreSignal[]>([]);
+  const [meta, setMeta] = React.useState<ApiResponse['meta'] | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [usCode2, setUsCode2] = React.useState('US');
   const [limit, setLimit] = React.useState('5');
@@ -46,10 +59,12 @@ export function GenreBreakoutTable() {
       }
       const json: ApiResponse = await res.json();
       setData(json.obj);
+      setMeta(json.meta ?? null);
     } catch (err: any) {
       console.error(err);
       setError(err.message ?? 'Failed to load genre breakouts.');
       setData([]);
+      setMeta(null);
     } finally {
       setIsLoading(false);
     }
@@ -58,6 +73,28 @@ export function GenreBreakoutTable() {
   React.useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  const emptyMessage = React.useMemo(() => {
+    const sources = meta?.sources;
+    if (!sources) return 'No strong breakout signals yet for the selected market.';
+
+    const live = (Object.keys(sources) as Array<keyof SourceCoverage>).filter(
+      (key) => sources[key],
+    );
+
+    if (live.length === 0) {
+      return (
+        'No genre momentum sources have data yet — TikTok UGC, Spotify charts, ' +
+        'and US radio airplay are all pending. Check the Analytics page for ' +
+        'pipeline freshness, then re-run etl:genres once a source has ingested.'
+      );
+    }
+
+    return (
+      `No genre cleared the breakout threshold for ${meta!.usCode2} using the ` +
+      `signal(s) currently available: ${live.map((key) => SOURCE_LABELS[key]).join(', ')}.`
+    );
+  }, [meta]);
 
   const columns = [
     {
@@ -192,7 +229,7 @@ export function GenreBreakoutTable() {
         columns={columns as any}
         data={data}
         isLoading={isLoading}
-        emptyMessage="No strong breakout signals yet for the selected market."
+        emptyMessage={emptyMessage}
         caption="Ranked list of genres with UGC, streaming, and radio breakout signals."
       />
     </section>
