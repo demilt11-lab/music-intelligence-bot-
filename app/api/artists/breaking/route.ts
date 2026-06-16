@@ -7,15 +7,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { Cache, TTL } from "@/lib/cache";
+import { ARTIST_TRAJECTORY_STATUSES } from "@/lib/shared/artist-status";
 
 export const dynamic = "force-dynamic";
 
-const VALID_STATUSES = new Set([
-  "ABOUT_TO_BREAK",
-  "GROWING",
-  "STABLE",
-  "DECLINING",
-]);
+const VALID_STATUSES = new Set<string>(ARTIST_TRAJECTORY_STATUSES);
 
 type LeaderboardRow = {
   artistId: number;

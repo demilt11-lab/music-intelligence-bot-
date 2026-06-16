@@ -139,6 +139,15 @@ export default function ArtistsDashboardPage() {
   }, [status, genre, code2, refreshKey])
 
   const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.STABLE
+  const hasSubFilters = Boolean(genre || code2)
+
+  // Empty results mean different things depending on whether the user has
+  // narrowed by genre/region. With no sub-filters applied, an empty status
+  // cohort points at the data pipeline, not the filters — so don't tell the
+  // user to "widen the lens" they never narrowed.
+  const emptyMessage = hasSubFilters
+    ? `No ${cfg.label.toLowerCase()} artists match the current genre/region filters. Clear them to see the full cohort.`
+    : `No artists are currently classified as ${cfg.label.toLowerCase()}. If you expect results here, the artist-signals pipeline may not have completed a full run yet — check the latest run on the Analytics page.`
 
   const summary = useMemo(() => {
     const highBreak = data.filter((artist) => (artist.breakProbability ?? 0) >= 0.7).length
@@ -177,7 +186,7 @@ export default function ArtistsDashboardPage() {
                         {loading
                           ? 'Scanning artist trajectories across streaming, playlist, and audience growth signals.'
                           : total === 0
-                            ? 'No artists match the current filter set. Widen the lens to surface more opportunities.'
+                            ? emptyMessage
                             : `Tracking ${total} artist${total !== 1 ? 's' : ''} in this cohort. ${cfg.summary}`}
                       </p>
                     </div>
@@ -295,21 +304,23 @@ export default function ArtistsDashboardPage() {
                   </div>
                   <div className="space-y-2">
                     <p className="text-sm font-medium text-zinc-200">
-                      No artists found for these filters
+                      {hasSubFilters
+                        ? `No ${cfg.label.toLowerCase()} artists match these filters`
+                        : `No artists classified as ${cfg.label.toLowerCase()} yet`}
                     </p>
-                    <p className="text-sm text-zinc-500">
-                      Try broadening the status, genre, or region lens.
-                    </p>
+                    <p className="max-w-md text-sm text-zinc-500">{emptyMessage}</p>
                   </div>
-                  <button
-                    onClick={() => {
-                      setGenre('')
-                      setCode2('')
-                    }}
-                    className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-300 transition hover:bg-cyan-500/20"
-                  >
-                    Clear filters
-                  </button>
+                  {hasSubFilters ? (
+                    <button
+                      onClick={() => {
+                        setGenre('')
+                        setCode2('')
+                      }}
+                      className="rounded-full border border-cyan-400/20 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-300 transition hover:bg-cyan-500/20"
+                    >
+                      Clear filters
+                    </button>
+                  ) : null}
                 </div>
               ) : (
                 <div className="overflow-hidden rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.78),rgba(10,10,11,0.9))]">

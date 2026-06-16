@@ -3,8 +3,9 @@ import { buildRequestContext, requireScope } from '@/lib/platform/context';
 import { enforceRateLimit } from '@/lib/platform/rate-limit';
 import { logRequest } from '@/lib/platform/logging';
 import { db } from '@/lib/db';
+import { ARTIST_TRAJECTORY_STATUSES } from '@/lib/shared/artist-status';
 
-const VALID_STATUSES = ['ABOUT_TO_BREAK', 'GROWING', 'STABLE', 'DECLINING'];
+const VALID_STATUSES: readonly string[] = ARTIST_TRAJECTORY_STATUSES;
 const endpoint = '/api/v1/artists/breaking';
 
 export async function GET(req: NextRequest) {

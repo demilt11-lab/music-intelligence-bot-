@@ -2,6 +2,7 @@
 // Feature engineering ETL: compute artist-level signals from aggregated track signals.
 import { db } from "@/lib/db";
 import { runTrackedJob } from '@/lib/jobs/tracker';
+import type { ArtistTrajectoryStatus } from "@/lib/shared/artist-status";
 
 // ─── Math helpers ─────────────────────────────────────────────────────────────
 
@@ -181,12 +182,15 @@ async function loadRadioSpinGrowth(today: Date): Promise<Map<number, number>> {
 
 // ─── Classify artist status ───────────────────────────────────────────────────
 
-function classifyArtistStatus(
+// Returns one of the canonical ArtistTrajectoryStatus values. The return type
+// is enforced so a non-canonical status (the "ESTABLISHED" that caused BUG-004)
+// can no longer be introduced without a compile error.
+export function classifyArtistStatus(
   streams7dDelta: number,
   tiktokVelocityScore: number,
   maxTrackProbViral: number,
   maxWeeksOnChart: number,
-): string {
+): ArtistTrajectoryStatus {
   if (
     streams7dDelta > 0.5 &&
     tiktokVelocityScore > 0.3 &&
@@ -194,7 +198,12 @@ function classifyArtistStatus(
   ) {
     return "ABOUT_TO_BREAK";
   }
-  if (maxWeeksOnChart >= 4) return "ESTABLISHED";
+  // A chart veteran (>= 4 weeks on chart) that isn't accelerating or declining
+  // is holding its position — STABLE in the canonical vocabulary. This branch
+  // previously returned a non-canonical "ESTABLISHED", which made every such
+  // artist invisible to the status-filtered /artists view and analytics cohorts
+  // and out-of-vocabulary for the trajectory model (BUG-004).
+  if (maxWeeksOnChart >= 4) return "STABLE";
   if (streams7dDelta > 0.15 || tiktokVelocityScore > 0.2) return "GROWING";
   if (streams7dDelta < -0.2) return "DECLINING";
   return "STABLE";
