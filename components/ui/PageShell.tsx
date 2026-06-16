@@ -60,6 +60,26 @@ export function PageShell({
           <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/50 to-transparent" />
 
           <div className="relative flex flex-col gap-6 px-5 py-5 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
+            <nav aria-label="Breadcrumb">
+              <ol className="flex flex-wrap items-center gap-2 text-xs">
+                <li>
+                  <Link
+                    href="/"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 font-medium text-zinc-300 transition hover:border-emerald-400/20 hover:bg-white/10 hover:text-white"
+                  >
+                    <span aria-hidden="true">←</span>
+                    Home
+                  </Link>
+                </li>
+                <li aria-hidden="true" className="text-zinc-600">
+                  /
+                </li>
+                <li aria-current="page" className="truncate font-medium text-zinc-400">
+                  {title}
+                </li>
+              </ol>
+            </nav>
+
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-4">
                 <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
@@ -81,12 +101,6 @@ export function PageShell({
               </div>
 
               <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center xl:justify-end">
-                <Link
-                  href="/"
-                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-zinc-300 transition hover:bg-white/10"
-                >
-                  Home
-                </Link>
                 {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
                 <SessionChip />
               </div>

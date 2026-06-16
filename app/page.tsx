@@ -2,15 +2,9 @@ import Link from 'next/link'
 import { db } from '@/lib/db'
 import { BuddyCharacter } from '@/components/buddy/BuddyCharacter'
 import { CommandBar } from '@/components/buddy/CommandBar'
+import { QuickTaskChips } from '@/components/buddy/QuickTaskChips'
 
 export const dynamic = 'force-dynamic'
-
-const QUICK_TASKS = [
-  { label: 'Scout early UGC breakouts', href: '/talent-scout' },
-  { label: 'Review breaking artists', href: '/artists' },
-  { label: 'Check genre momentum', href: '/genres' },
-  { label: 'Open my watchlist', href: '/watchlist' },
-]
 
 const NAV_ITEMS: { label: string; href: string }[] = [
   { label: 'Home', href: '/' },
@@ -177,17 +171,7 @@ export default async function HomePage() {
 
                     <CommandBar />
 
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {QUICK_TASKS.map((task) => (
-                        <Link
-                          key={task.label}
-                          href={task.href}
-                          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-zinc-300 transition hover:bg-white/10"
-                        >
-                          {task.label}
-                        </Link>
-                      ))}
-                    </div>
+                    <QuickTaskChips />
                   </div>
                 </div>
 
