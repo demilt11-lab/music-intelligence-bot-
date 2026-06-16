@@ -311,12 +311,21 @@ export async function hydrateInternalStreaming(
 
   const statsRows = await db.trackStatisticsLatest.findMany({
     where: { trackId: { in: trackIds } },
-    select: { trackId: true, youtubeViews: true },
+    select: { trackId: true, youtubeViews: true, spotifyPopularity: true },
   })
 
   const youtubeByTrack = new Map<number, string>()
+  // Spotify popularity is ingested by jobs/ingest/spotify.ts into
+  // TrackStatisticsLatest, but nothing surfaced it at display time — so the
+  // card's Spotify row was hardcoded to "—" for every track even when the
+  // data existed (BUG-006). Hydrate it here alongside the other internal
+  // streaming stats.
+  const spotifyPopularityByTrack = new Map<number, number>()
   for (const r of statsRows) {
     if (r.youtubeViews != null) youtubeByTrack.set(r.trackId, String(r.youtubeViews))
+    if (r.spotifyPopularity != null) {
+      spotifyPopularityByTrack.set(r.trackId, r.spotifyPopularity)
+    }
   }
 
   const instagramRows = await db.trackPlatformStatsDaily.groupBy({
@@ -336,6 +345,7 @@ export async function hydrateInternalStreaming(
     ...t,
     youtubeViews: youtubeByTrack.get(t.trackId) ?? t.youtubeViews,
     instagramPlays: instagramByTrack.get(t.trackId) ?? t.instagramPlays,
+    spotifyPopularity: spotifyPopularityByTrack.get(t.trackId) ?? t.spotifyPopularity,
   }))
 }
 

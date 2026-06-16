@@ -6,6 +6,8 @@ interface PlatformBarProps {
   secondaryValue?: string | null
   maxValue?: number
   className?: string
+  /** Shown when no signal value is present, instead of a bare dash (BUG-006). */
+  emptyLabel?: string
 }
 
 const PLATFORM_CONFIG = {
@@ -47,8 +49,10 @@ const PLATFORM_CONFIG = {
   },
 } as const
 
-function formatValue(v: string | number | null): string {
-  if (v == null || v === '' || v === '0' || v === 0) return '—'
+const NO_DATA = '—'
+
+export function formatValue(v: string | number | null): string {
+  if (v == null || v === '' || v === '0' || v === 0) return NO_DATA
 
   const n = Number(v)
   if (Number.isNaN(n)) return String(v)
@@ -58,6 +62,20 @@ function formatValue(v: string | number | null): string {
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
 
   return n.toLocaleString()
+}
+
+/**
+ * Resolve what a platform row should render. When there's no signal we return
+ * an explicit label (default "No signal") rather than a bare dash, so an empty
+ * row reads as an honest status instead of a broken-looking cell (BUG-006).
+ */
+export function platformDisplay(
+  value: string | number | null,
+  emptyLabel = 'No signal',
+): { text: string; hasData: boolean } {
+  const formatted = formatValue(value)
+  const hasData = formatted !== NO_DATA
+  return { text: hasData ? formatted : emptyLabel, hasData }
 }
 
 function barWidth(v: string | number | null, max: number): number {
@@ -73,10 +91,12 @@ export function PlatformBar({
   secondaryValue,
   maxValue = 10_000_000,
   className = '',
+  emptyLabel = 'No signal',
 }: PlatformBarProps) {
   const cfg = PLATFORM_CONFIG[platform]
-  const display = formatValue(value)
-  const hasData = display !== '—'
+  // A bare "—" reads as a layout glitch; name the absence explicitly so an
+  // empty platform row is an honest status, not a broken-looking cell (BUG-006).
+  const { text: display, hasData } = platformDisplay(value, emptyLabel)
   const width = hasData ? barWidth(value, maxValue) : 0
   const velocity =
     secondaryValue != null && secondaryValue !== '0' ? Number(secondaryValue) : null
