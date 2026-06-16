@@ -16,6 +16,7 @@ const BASE_NAV_ITEMS = [
 
 const ADMIN_NAV_ITEMS = [
   { href: '/settings/api-keys', label: 'API Keys', icon: '⚿', hot: false },
+  { href: '/admin/pipeline', label: 'Pipeline runs', icon: '⚙', hot: false },
 ]
 
 export function SidebarNav() {

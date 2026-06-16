@@ -8,19 +8,19 @@ const Z_THRESHOLD_HIGH = 4.0;
 
 interface MetricPoint { trackId: number; value: number; date: Date }
 
-function zScore(value: number, mean: number, std: number): number {
+export function zScore(value: number, mean: number, std: number): number {
   if (std < 0.001) return 0;
   return (value - mean) / std;
 }
 
-function stats(values: number[]): { mean: number; std: number } {
+export function stats(values: number[]): { mean: number; std: number } {
   if (values.length === 0) return { mean: 0, std: 0 };
   const mean = values.reduce((a, b) => a + b, 0) / values.length;
   const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length;
   return { mean, std: Math.sqrt(variance) };
 }
 
-function severity(z: number): 'low' | 'medium' | 'high' | null {
+export function severity(z: number): 'low' | 'medium' | 'high' | null {
   const abs = Math.abs(z);
   if (abs >= Z_THRESHOLD_HIGH) return 'high';
   if (abs >= Z_THRESHOLD_MED) return 'medium';
@@ -53,13 +53,10 @@ async function detectMetricAnomalies(
     const sev = severity(z);
     if (!sev) continue;
 
-    await (db as any).anomalyLog.upsert({
-      where: {
-        // no unique constraint — just create
-        id: -1,
-      },
-      update: {},
-      create: {
+    // AnomalyLog has no natural unique key (a track can have multiple
+    // anomalies for the same metric over time) — every detection is a new row.
+    await db.anomalyLog.create({
+      data: {
         trackId,
         metric,
         zScore: z,
@@ -69,20 +66,7 @@ async function detectMetricAnomalies(
         severity: sev,
         detectedAt: today,
       },
-    }).catch(() =>
-      (db as any).anomalyLog.create({
-        data: {
-          trackId,
-          metric,
-          zScore: z,
-          currentValue: todayPoint.value,
-          baselineMean: mean,
-          baselineStd: std,
-          severity: sev,
-          detectedAt: today,
-        },
-      }),
-    );
+    });
 
     detected++;
 
@@ -122,10 +106,10 @@ async function main() {
   console.log(`[anomaly] Running detection for ${today.toISOString().slice(0, 10)}`);
 
   // TikTok views velocity
-  const ugcRows = await (db as any).ugcTrackMetric.findMany({
+  const ugcRows = await db.ugcTrackMetrics.findMany({
     where: { date: { gte: cutoff } },
     select: { trackId: true, views7d: true, date: true },
-  }) as Array<{ trackId: number; views7d: bigint | number; date: Date }>;
+  });
 
   const ugcPoints: MetricPoint[] = ugcRows.map((r) => ({
     trackId: r.trackId,
@@ -161,10 +145,10 @@ async function main() {
   await detectMetricAnomalies('chart_rank_inverted', chartPoints, today);
 
   // Viral score spikes
-  const vsRows = await (db as any).talentScoutScore.findMany({
+  const vsRows = await db.talentScoutScore.findMany({
     where: { date: { gte: cutoff }, code2: 'GLOBAL' },
     select: { trackId: true, viralScore: true, date: true },
-  }) as Array<{ trackId: number; viralScore: number; date: Date }>;
+  });
 
   await detectMetricAnomalies('viral_score', vsRows.map((r) => ({
     trackId: r.trackId, value: r.viralScore, date: r.date,
@@ -173,4 +157,6 @@ async function main() {
   console.log('[anomaly] Detection complete');
 }
 
-runTrackedJob('etl:anomaly', main).catch((e) => { console.error(e); process.exit(1); });
+if (require.main === module) {
+  runTrackedJob('etl:anomaly', main).catch((e) => { console.error(e); process.exit(1); });
+}

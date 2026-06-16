@@ -19,28 +19,6 @@ type WorkspaceStats = {
   latestChartDate: Date | null
 }
 
-type JobRunSummary = {
-  jobName: string
-  status: string
-  startedAt: Date
-  durationMs: number | null
-  rowsWritten: number | null
-}
-
-async function loadJobRuns(): Promise<JobRunSummary[]> {
-  try {
-    return await db.$queryRawUnsafe<JobRunSummary[]>(
-      `SELECT DISTINCT ON ("jobName")
-         "jobName", status, "startedAt", "durationMs", "rowsWritten"
-       FROM job_runs
-       ORDER BY "jobName", "startedAt" DESC
-       LIMIT 30`,
-    )
-  } catch {
-    return []
-  }
-}
-
 async function loadWorkspaceStats(): Promise<WorkspaceStats | null> {
   try {
     const [
@@ -145,7 +123,7 @@ function AnalyticsHeroActions() {
 }
 
 export default async function AnalyticsPage() {
-  const [stats, jobRuns] = await Promise.all([loadWorkspaceStats(), loadJobRuns()])
+  const stats = await loadWorkspaceStats()
 
   const kpis = stats
     ? [
@@ -288,52 +266,6 @@ export default async function AnalyticsPage() {
         </div>
 
         <aside className="space-y-5">
-          <section className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,11,0.96))] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-              Pipeline runs
-            </p>
-            <p className="mt-2 text-xs leading-5 text-zinc-500">
-              Latest execution per job, recorded by the run tracker.
-            </p>
-            <div className="mt-4 space-y-2">
-              {jobRuns.length === 0 ? (
-                <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-6 text-zinc-400">
-                  No job runs recorded yet — they appear as soon as any ingest or
-                  ETL job executes.
-                </p>
-              ) : (
-                jobRuns.map((run) => (
-                  <div
-                    key={run.jobName}
-                    className="flex items-center justify-between gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-medium text-zinc-300">
-                        {run.jobName}
-                      </p>
-                      <p className="text-[11px] text-zinc-500">
-                        {new Date(run.startedAt).toISOString().slice(0, 16).replace('T', ' ')}
-                        {run.rowsWritten != null ? ` · ${run.rowsWritten} rows` : ''}
-                        {run.durationMs != null ? ` · ${(run.durationMs / 1000).toFixed(1)}s` : ''}
-                      </p>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${
-                        run.status === 'success'
-                          ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300'
-                          : run.status === 'failed'
-                            ? 'border-rose-400/20 bg-rose-500/10 text-rose-300'
-                            : 'border-amber-400/20 bg-amber-500/10 text-amber-300'
-                      }`}
-                    >
-                      {run.status}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
           <section className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.92),rgba(10,10,11,0.96))] p-5 shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
               Quick access
