@@ -3,6 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { SectionNav } from '@/components/layout/SectionNav'
 
 type PageShellProps = {
   title: string
@@ -104,6 +105,10 @@ export function PageShell({
                 {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
                 <SessionChip />
               </div>
+            </div>
+
+            <div className="border-t border-white/10 pt-5">
+              <SectionNav />
             </div>
           </div>
         </section>

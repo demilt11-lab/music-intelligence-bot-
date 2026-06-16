@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { SectionNav } from '@/components/layout/SectionNav';
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -27,13 +28,7 @@ export function AppShell({ children, nav }: AppShellProps) {
               Music Intelligence
             </span>
           </Link>
-          {nav ?? (
-            <nav aria-label="Primary" className="flex gap-4 text-sm text-slate-300">
-              <Link href="/search" className="hover:text-white">Search</Link>
-              <Link href="/tracks" className="hover:text-white">Tracks</Link>
-              <Link href="/songwriters" className="hover:text-white">Songwriters</Link>
-            </nav>
-          )}
+          {nav ?? <SectionNav />}
         </div>
       </header>
 

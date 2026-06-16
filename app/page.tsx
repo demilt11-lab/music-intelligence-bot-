@@ -3,19 +3,9 @@ import { db } from '@/lib/db'
 import { BuddyCharacter } from '@/components/buddy/BuddyCharacter'
 import { CommandBar } from '@/components/buddy/CommandBar'
 import { QuickTaskChips } from '@/components/buddy/QuickTaskChips'
+import { PRIMARY_NAV } from '@/components/layout/navItems'
 
 export const dynamic = 'force-dynamic'
-
-const NAV_ITEMS: { label: string; href: string }[] = [
-  { label: 'Home', href: '/' },
-  { label: 'Talent Scout', href: '/talent-scout' },
-  { label: 'Artists', href: '/artists' },
-  { label: 'Songwriters', href: '/songwriters' },
-  { label: 'Genres', href: '/genres' },
-  { label: 'Playlists', href: '/playlists' },
-  { label: 'Watchlist', href: '/watchlist' },
-  { label: 'Analytics', href: '/analytics' },
-]
 
 type QueueStats = {
   scoutSignals: number | null
@@ -87,7 +77,7 @@ export default async function HomePage() {
             </div>
 
             <nav className="mt-8 space-y-2">
-              {NAV_ITEMS.map((item, index) => (
+              {PRIMARY_NAV.map((item, index) => (
                 <Link
                   key={item.label}
                   href={item.href}
