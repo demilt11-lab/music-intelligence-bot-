@@ -4,6 +4,7 @@ import React from 'react'
 import { ScoreRing } from '@/components/ui/ScoreRing'
 import { PlatformBar } from '@/components/ui/PlatformBar'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
+import { safeDisplayName } from '@/lib/shared/text'
 
 export type ScoutTrack = {
   trackId: number
@@ -105,6 +106,14 @@ export function ScoutTrackCard({
     Math.max(0, Math.min(1, track.totalScore)) * 100
   )
 
+  // Render-layer guard against any scraper markdown/URL junk that reaches the
+  // card (see BUG-003): clean the displayed name and artist list.
+  const displayName = safeDisplayName(track.name, 'Untitled track')
+  const displayArtists = (track.artists ?? [])
+    .map((a) => safeDisplayName(a, ''))
+    .filter((a) => a.length > 0)
+  const artistLabel = displayArtists.join(', ') || 'Unknown Artist'
+
   return (
     <article
       className={[
@@ -114,7 +123,7 @@ export function ScoutTrackCard({
         heatStyle.glow,
         className,
       ].join(' ')}
-      aria-label={`Rank ${rank}: ${track.name}${track.artists?.length ? ` by ${track.artists.join(', ')}` : ''}`}
+      aria-label={`Rank ${rank}: ${displayName}${displayArtists.length ? ` by ${displayArtists.join(', ')}` : ''}`}
     >
       <div
         className={`pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b ${heatStyle.accent}`}
@@ -148,11 +157,11 @@ export function ScoutTrackCard({
             </div>
 
             <h3 className="mt-3 truncate text-base font-semibold tracking-[-0.02em] text-white">
-              {track.name}
+              {displayName}
             </h3>
 
             <p className="mt-1 truncate text-sm text-zinc-400">
-              {track.artists?.join(', ') || 'Unknown Artist'}
+              {artistLabel}
             </p>
 
             <p className="mt-3 text-xs leading-5 text-zinc-300">

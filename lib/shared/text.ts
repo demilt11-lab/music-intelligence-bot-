@@ -46,6 +46,10 @@ export function looksLikeMarkdownJunk(input: string): boolean {
 export function stripMarkdown(input: string): string {
   let s = input;
 
+  // 0. Markdown escape backslashes ("\!", "\[", or a stray "\") — never part of
+  //    a real entity name; drop them before anything else so "Drake\" → "Drake"
+  //    and a lone "\" collapses to empty (and thus falls back).
+  s = s.replace(/\\/g, ' ');
   // 1. Images: ![alt](url) — drop entirely (alt text is rarely an entity name)
   s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, ' ');
   // 2. Links: [text](url) → text

@@ -66,3 +66,27 @@ test('sanitizeNameForStorage returns null for junk, clean string otherwise', () 
   assert.equal(sanitizeNameForStorage('Drake'), 'Drake');
   assert.equal(sanitizeNameForStorage('[Drake](https://x)'), 'Drake');
 });
+
+// Guards BUG-003: the Talent Scout NOTE interpolated a contaminated top track,
+// rendering "Top priority right now is \ by Twitter](https://...)". The track
+// name was a stray backslash and the artist was an orphan share fragment.
+test('stripMarkdown drops backslash escape artifacts', () => {
+  assert.equal(stripMarkdown('\\'), '');
+  assert.equal(stripMarkdown('Drake\\'), 'Drake');
+  assert.equal(stripMarkdown('\\\\'), '');
+});
+
+test('a lone backslash name falls back; a recoverable name is salvaged', () => {
+  // The exact NOTE-failure case: name is "\", artist is the share fragment.
+  assert.equal(safeDisplayName('\\', 'this track'), 'this track');
+  assert.equal(safeDisplayName('Drake\\', 'Unknown Artist'), 'Drake');
+  assert.equal(sanitizeNameForStorage('\\'), null);
+  // The share-link artist fragment from the NOTE must not survive.
+  assert.equal(
+    safeDisplayName(
+      'Twitter](https://twitter.com/intent/tweet?url=https%3A%2F%2Fwww.billboard.com)',
+      'Unknown Artist',
+    ),
+    'Unknown Artist',
+  );
+});

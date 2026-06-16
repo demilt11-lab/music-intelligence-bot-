@@ -1,5 +1,6 @@
 // lib/talentScout/sources.ts
 import { db } from '@/lib/db'
+import { safeDisplayName, sanitizeNameForStorage } from '@/lib/shared/text'
 
 /**
  * Provenance of a scout result batch. The UI and API surface this so
@@ -264,11 +265,6 @@ const SAMPLE_TRACKS: Array<{ name: string; artists: string[] }> = [
   { name: 'Sample Track E', artists: ['Demo Artist Five'] },
 ]
 
-/** Reject artist names that are raw URLs (e.g. stray Twitter/social profile links). */
-function isUrl(s: string): boolean {
-  return /^https?:\/\//i.test(s.trim())
-}
-
 async function loadTrackMeta(trackIds: number[]) {
   if (!trackIds.length) return new Map<number, { name: string; artists: string[] }>()
 
@@ -277,14 +273,18 @@ async function loadTrackMeta(trackIds: number[]) {
     include: { trackArtists: { include: { artist: true } } },
   })
 
+  // Some rows leaked raw scraper markdown (image embeds, "Twitter](url)" share
+  // fragments, bare URLs, stray backslashes) into the title/name. Sanitise here
+  // — the single chokepoint feeding every scout source — so contaminated values
+  // never reach the ranker, NOTE template, or track cards (see BUG-003).
   return new Map(
     tracks.map((t) => [
       t.id,
       {
-        name: t.title,
+        name: safeDisplayName(t.title, 'Untitled track'),
         artists: t.trackArtists
-          .map((ta) => ta.artist.name)
-          .filter((name) => !isUrl(name)),
+          .map((ta) => sanitizeNameForStorage(ta.artist.name))
+          .filter((name): name is string => name != null),
       },
     ])
   )

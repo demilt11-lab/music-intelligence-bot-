@@ -5,6 +5,7 @@ import { CompanionHeader } from './CompanionHeader'
 import { ScoutTrackCard, type ScoutTrack } from './ScoutTrackCard'
 import { TrackCardSkeleton } from '@/components/ui/Skeleton'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
+import { safeDisplayName } from '@/lib/shared/text'
 
 type ApiResponse = {
   obj: ScoutTrack[]
@@ -86,6 +87,16 @@ export function DailyTalentScout() {
     : null
   const topTrack = data[0]
   const sourceNote = dataSource ? SOURCE_NOTES[dataSource] : undefined
+
+  // Render-layer guard: even though the API sanitises names, never interpolate
+  // a raw value into the NOTE template. Junk (markdown, URLs, "](" fragments,
+  // backslashes) collapses to a safe fallback instead of rendering verbatim.
+  const topTrackName = topTrack
+    ? safeDisplayName(topTrack.name, 'this track')
+    : null
+  const topTrackArtists = (topTrack?.artists ?? [])
+    .map((a) => safeDisplayName(a, ''))
+    .filter((a) => a.length > 0)
 
   return (
     <section
@@ -169,9 +180,9 @@ export function DailyTalentScout() {
                     type="info"
                     message={
                       topTrack && isSignalBacked
-                        ? 'Top priority right now is ' + topTrack.name + (topTrack.artists.length ? ' by ' + topTrack.artists.join(', ') : '') + '. It is leading this scan based on combined momentum signals and should be reviewed first for A&R follow-up.'
+                        ? 'Top priority right now is ' + topTrackName + (topTrackArtists.length ? ' by ' + topTrackArtists.join(', ') : '') + '. It is leading this scan based on combined momentum signals and should be reviewed first for A&R follow-up.'
                         : topTrack
-                          ? "I'm showing " + topTrack.name + ' and other tracks from fallback data while live breakout signals are unavailable for this market.'
+                          ? "I'm showing " + topTrackName + ' and other tracks from fallback data while live breakout signals are unavailable for this market.'
                           : "I'm standing by with the latest scout pass. Once signals load in, I'll highlight the best breakout opportunities for immediate review."
                     }
                   />
