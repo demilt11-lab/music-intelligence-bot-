@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { Cache, TTL } from '@/lib/cache'
+import { safeDisplayName } from '@/lib/shared/text'
 
 export const dynamic = 'force-dynamic'
 
@@ -128,7 +129,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ artistId
         orderBy: { date: 'desc' },
       }),
       db.artistDailyStats.findMany({
-        where: { artistId },
+        where: { artistId: BigInt(artistId) },
         orderBy: { date: 'desc' },
         take: 120,
       }),
@@ -157,7 +158,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ artistId
       obj: {
         artist: {
           id: artist.id.toString(),
-          name: artist.name,
+          name: safeDisplayName(artist.name, 'Unknown Artist'),
           code2: artist.country ?? null,
         },
         snapshot: snapshot

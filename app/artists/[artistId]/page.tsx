@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, use } from 'react';
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
 import { SkeletonBox } from '@/components/ui/Skeleton'
 import { TrendSparkline } from '@/components/ui/TrendSparkline'
+import { safeDisplayName } from '@/lib/shared/text'
 
 type Artist = {
   id: string
@@ -296,11 +297,11 @@ export default function ArtistPage(
 
                 <div className="space-y-2">
                   <h1 className="text-2xl font-semibold tracking-[-0.04em] text-white sm:text-3xl">
-                    {artist.name}
+                    {safeDisplayName(artist.name, 'Unknown Artist')}
                   </h1>
                   <p className="text-sm text-zinc-400 sm:text-[15px]">
-                    {snapshot?.primaryGenre || 'Genre unavailable'} ·{' '}
-                    {snapshot?.primaryCode2 || artist.code2 || 'Region unavailable'}
+                    {snapshot?.primaryGenre || '—'} ·{' '}
+                    {snapshot?.primaryCode2 || artist.code2 || '—'}
                   </p>
                   <p className="max-w-3xl text-sm leading-6 text-zinc-300">
                     Buddy is reading this artist across breakout probability, stream movement,
@@ -483,7 +484,13 @@ export default function ArtistPage(
                     </tr>
                   </thead>
                   <tbody>
-                    {history.map((h) => (
+                    {history.length === 0 ? (
+                      <tr className="border-t border-white/10">
+                        <td colSpan={4} className="px-4 py-6 text-center text-sm text-zinc-500">
+                          No daily history available yet for this artist.
+                        </td>
+                      </tr>
+                    ) : history.map((h) => (
                       <tr
                         key={`${h.artistId}-${h.date}`}
                         className="border-t border-white/10 text-zinc-300"
@@ -524,7 +531,13 @@ export default function ArtistPage(
                     </tr>
                   </thead>
                   <tbody>
-                    {releases.map((r) => (
+                    {releases.length === 0 ? (
+                      <tr className="border-t border-white/10">
+                        <td colSpan={4} className="px-4 py-6 text-center text-sm text-zinc-500">
+                          No linked releases found for this artist.
+                        </td>
+                      </tr>
+                    ) : releases.map((r) => (
                       <tr
                         key={r.id}
                         className="border-t border-white/10 text-zinc-300"
@@ -554,7 +567,7 @@ export default function ArtistPage(
               <div className="mt-4 space-y-3">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <p className="text-xs font-medium text-zinc-400">Artist</p>
-                  <p className="mt-1 text-sm font-semibold text-white">{artist.name}</p>
+                  <p className="mt-1 text-sm font-semibold text-white">{safeDisplayName(artist.name, 'Unknown Artist')}</p>
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
