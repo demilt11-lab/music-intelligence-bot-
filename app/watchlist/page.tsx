@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import { WatchlistGrid, type WatchlistEntry } from '@/components/watchlist/WatchlistGrid'
+import { AddToWatchlistSearch } from '@/components/watchlist/AddToWatchlistSearch'
 import { PageShell } from '@/components/ui/PageShell'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
 
@@ -11,9 +12,11 @@ export default function WatchlistPage() {
   const [error, setError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const load = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true)
+      setError(null)
+    }
 
     try {
       const res = await fetch('/api/ui/watchlist')
@@ -26,15 +29,19 @@ export default function WatchlistPage() {
       const { obj } = await res.json()
       setItems(obj)
     } catch (e: any) {
-      setError(e.message ?? 'Failed to load watchlist')
+      if (!silent) setError(e.message ?? 'Failed to load watchlist')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
     load()
   }, [load])
+
+  // Silent refresh after an add so the list updates in place without flashing
+  // the full-page loading skeleton.
+  const handleAdded = useCallback(() => load(true), [load])
 
   async function handleRemove(id: number) {
     setActionError(null)
@@ -171,7 +178,7 @@ export default function WatchlistPage() {
                       loading
                         ? 'I’m pulling your current watchlist now.'
                         : items.length === 0
-                          ? 'Your shortlist is empty right now. Add artists or tracks from scout and intelligence views to build a live decision queue.'
+                          ? 'Your shortlist is empty right now. Search for an artist or track above to add it directly, or save items from scout and intelligence views.'
                           : `You currently have ${items.length} watchlist item${items.length !== 1 ? 's' : ''}. This list works best as a focused operating queue rather than a long archive.`
                     }
                   />
@@ -180,6 +187,8 @@ export default function WatchlistPage() {
             </div>
 
             <div className="px-5 py-5 sm:px-6">
+              <AddToWatchlistSearch existing={items} onAdded={handleAdded} />
+
               {loading && (
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {Array.from({ length: 6 }).map((_, i) => (
@@ -211,8 +220,8 @@ export default function WatchlistPage() {
                   <div className="space-y-2">
                     <p className="text-sm font-medium text-zinc-200">No watchlist items yet</p>
                     <p className="max-w-md text-sm leading-6 text-zinc-500">
-                      Build your shortlist by saving promising artists and tracks from Buddy Scout,
-                      artist pages, and track intelligence views.
+                      Use the search above to add artists and tracks directly, or save them from
+                      Buddy Scout, artist pages, and track intelligence views.
                     </p>
                   </div>
                 </div>
