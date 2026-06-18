@@ -5,6 +5,10 @@ on:
     - cron: '0 4 * * 1' # every Monday at 04:00 UTC
   workflow_dispatch:
 
+permissions:
+  contents: read
+  actions: write  # needed to dispatch ml_train.yml when drift is detected
+
 jobs:
   drift-check:
     runs-on: ubuntu-latest

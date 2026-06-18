@@ -58,13 +58,10 @@ export function handleApiError(err: unknown): NextResponse {
     );
   }
 
-  const message =
-    err instanceof Error ? err.message : 'An unexpected error occurred';
-
   console.error('[handleApiError] Unhandled error:', err);
 
   return NextResponse.json(
-    { error: message, code: 'INTERNAL_ERROR' },
+    { error: 'Internal server error', code: 'INTERNAL_ERROR' },
     { status: 500 },
   );
 }

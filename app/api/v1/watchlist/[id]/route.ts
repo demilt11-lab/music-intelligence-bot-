@@ -25,7 +25,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    await db.watchlistItem.delete({ where: { id } });
+    await db.watchlistItem.deleteMany({ where: { id, tenantId: ctx.tenantId } });
 
     await logRequest(ctx, endpoint, 'DELETE', 204, startedAt);
     return new NextResponse(null, { status: 204 });

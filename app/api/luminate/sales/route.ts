@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
   } catch (err: any) {
     console.error('[luminate-sales]', err);
     return NextResponse.json(
-      { error: err.message ?? 'Internal error' },
+      { error: 'Internal server error' },
       { status: 500 },
     );
   }

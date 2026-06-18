@@ -75,9 +75,7 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error('Radiostats track integration error', err);
     const status = err.status || 500;
-    return NextResponse.json(
-      { error: err.message ?? 'Unknown error' },
-      { status },
-    );
+    const message = status === 500 ? 'Internal server error' : (err.message ?? 'Unknown error');
+    return NextResponse.json({ error: message }, { status });
   }
 }

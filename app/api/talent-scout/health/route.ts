@@ -22,9 +22,7 @@ export async function GET() {
   // 2. Spotify credentials present
   results.spotifyEnv = {
     clientIdPresent: !!process.env.SPOTIFY_CLIENT_ID,
-    clientIdLength: process.env.SPOTIFY_CLIENT_ID?.length ?? 0,
     clientSecretPresent: !!process.env.SPOTIFY_CLIENT_SECRET,
-    clientSecretLength: process.env.SPOTIFY_CLIENT_SECRET?.length ?? 0,
   };
 
   // 3. Spotify token fetch

@@ -48,7 +48,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     const rule = await db.alertRule.findFirst({ where: { id, tenantId: ctx.tenantId } });
     if (!rule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    await db.alertRule.delete({ where: { id } });
+    await db.alertRule.deleteMany({ where: { id, tenantId: ctx.tenantId } });
 
     await logRequest(ctx, endpoint, 'DELETE', 204, startedAt);
     return new NextResponse(null, { status: 204 });

@@ -61,7 +61,7 @@ export async function proxy(req: NextRequest) {
     return new NextResponse(null, {
       status: 204,
       headers: {
-        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN ?? '*',
+        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || 'http://localhost:3000',
         'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, x-api-key, x-request-id',
         'Access-Control-Max-Age': '86400',

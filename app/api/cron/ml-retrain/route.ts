@@ -11,11 +11,10 @@ export const maxDuration = 60;
 import { NextRequest, NextResponse } from 'next/server';
 import { trainArtistTrajectoryModel } from '@/lib/ml/models/artist-trajectory';
 import { trainTrackViralModel, writeAllTrackPredictions } from '@/lib/ml/models/track-viral';
+import { verifyCronSecret } from '@/lib/platform/cron-auth';
 
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  const auth = req.headers.get('authorization') ?? '';
-  if (!secret || auth !== `Bearer ${secret}`) {
+  if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

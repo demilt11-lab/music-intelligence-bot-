@@ -28,6 +28,16 @@ export async function GET(req: NextRequest, props: RouteParams) {
   const keys = await db.apiKey.findMany({
     where: { tenantId },
     orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      tenantId: true,
+      label: true,
+      scopes: true,
+      expiresAt: true,
+      isRevoked: true,
+      createdAt: true,
+      lastUsedAt: true,
+    },
   });
 
   return NextResponse.json({ obj: keys }, { status: 200 });

@@ -404,7 +404,7 @@ def _write_feedback_to_db(items: List[FeedbackItem]):
         conn.close()
         logger.info("Persisted %d feedback items to DB", len(items))
     except Exception as e:
-        logger.error("Failed to write feedback to DB: %s", e)
+        logger.error("Failed to write feedback to DB")
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

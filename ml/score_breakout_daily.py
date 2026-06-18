@@ -9,12 +9,15 @@ ASSUMPTION: artist_features_daily columns are camelCase as created by Prisma db 
 """
 
 import os
+import re
 import sys
 import logging
 import pickle
 from datetime import date
 from pathlib import Path
 from typing import Optional
+
+_SAFE_COL_RE = re.compile(r'^[A-Za-z][A-Za-z0-9_]*$')
 
 import psycopg2
 import psycopg2.extras
@@ -64,6 +67,14 @@ def score_breakout_prob_for_date(conn, target_date: date) -> None:
     feature_cols = payload["feature_cols"]
     model_version = payload.get("model_version", "unknown")
     feature_medians = payload.get("feature_medians", {})
+
+    invalid_cols = [c for c in feature_cols if not _SAFE_COL_RE.match(c)]
+    if invalid_cols:
+        logger.error(
+            "Model payload contains unsafe feature column names: %s — aborting scoring.",
+            invalid_cols,
+        )
+        return
 
     logger.info(f"Model version: {model_version}")
 

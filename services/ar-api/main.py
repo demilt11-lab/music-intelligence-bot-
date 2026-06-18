@@ -8,13 +8,15 @@ ASSUMPTION: artist table has columns: id, name, slug, imageUrl, country, popular
 TODO: Implement real playlist pitch recommendations using audio feature matching.
 """
 
+import hmac
 import os
 import logging
 from datetime import date
 from typing import Optional, List, Any
 
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Depends, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
@@ -43,21 +45,45 @@ engine = create_async_engine(ASYNC_DATABASE_URL, echo=False, pool_size=5, max_ov
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 # ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+
+_api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
+
+async def require_api_key(key: Optional[str] = Security(_api_key_header)) -> None:
+    expected = os.environ.get("AR_API_KEY", "")
+    if not expected:
+        return  # not configured: open in dev; set AR_API_KEY in production
+    if not key or not hmac.compare_digest(key, expected):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+
+# ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
+
+_debug = os.environ.get("ENV", "development") != "production"
 
 app = FastAPI(
     title="Predictive A&R API",
     description="Artist scoring, breakout probability, and A&R recommendations",
     version="1.0.0",
+    docs_url="/docs" if _debug else None,
+    redoc_url="/redoc" if _debug else None,
+    openapi_url="/openapi.json" if _debug else None,
 )
+
+_allowed_origins = [
+    o.strip()
+    for o in os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+    if o.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET"],
+    allow_headers=["x-api-key", "Content-Type"],
 )
 
 # ---------------------------------------------------------------------------
@@ -131,7 +157,7 @@ async def _get_latest_score_date(session: AsyncSession) -> Optional[date]:
 # ---------------------------------------------------------------------------
 
 
-@app.get("/artists/search", response_model=List[ArtistScoreResult])
+@app.get("/artists/search", response_model=List[ArtistScoreResult], dependencies=[Depends(require_api_key)])
 async def search_artists(
     min_heat: Optional[float] = Query(None, ge=1.0, le=10.0, description="Minimum heat score (1–10)"),
     min_breakout_prob: Optional[float] = Query(None, ge=0.0, le=1.0, description="Minimum breakout probability (0–1)"),
@@ -240,7 +266,7 @@ async def search_artists(
         return [ArtistScoreResult(**dict(row)) for row in rows]
 
 
-@app.get("/artists/{artist_id}/explanation", response_model=ArtistExplanation)
+@app.get("/artists/{artist_id}/explanation", response_model=ArtistExplanation, dependencies=[Depends(require_api_key)])
 async def explain_artist(
     artist_id: int,
     score_date: Optional[date] = Query(None, description="Score date (defaults to latest)"),
@@ -345,7 +371,7 @@ async def explain_artist(
         )
 
 
-@app.get("/playlists_to_pitch", response_model=PlaylistPitchResponse)
+@app.get("/playlists_to_pitch", response_model=PlaylistPitchResponse, dependencies=[Depends(require_api_key)])
 async def playlists_to_pitch(
     artist_id: int = Query(..., description="Artist ID to get playlist recommendations for"),
     limit: int = Query(10, ge=1, le=50),
@@ -390,4 +416,4 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=_debug)

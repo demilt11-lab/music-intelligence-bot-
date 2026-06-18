@@ -19,7 +19,7 @@ async function deliverWebhook(url: string, payload: object) {
 
 async function deliverEmail(email: string, payload: { headline: string; breakoutTracks: any[]; breakingArtists: any[]; watchlistAlerts: any[] }) {
   // SMTP delivery placeholder — wire to nodemailer / Resend / SendGrid here
-  console.log(`[EMAIL] To: ${email}`);
+  console.log(`[EMAIL] queued`);
   console.log(`  Subject: ${payload.headline}`);
   console.log(`  ${payload.breakoutTracks.length} breakout tracks, ${payload.breakingArtists.length} breaking artists, ${payload.watchlistAlerts.length} watchlist alerts`);
 }

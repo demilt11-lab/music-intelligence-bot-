@@ -64,7 +64,7 @@ async function main() {
             body: JSON.stringify({ entityType: target.entityType, entityId: target.entityId, metric: rule.metric, value, threshold: rule.threshold, message: msg }),
           });
         } else {
-          console.log(`[EMAIL] To: ${rule.destination}\n${msg}`);
+          console.log(`[EMAIL] To: [redacted]\n${msg}`);
         }
         await db.alertRule.update({ where: { id: rule.id }, data: { lastFiredAt: new Date() } });
         fired++;

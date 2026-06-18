@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
         dataSource,
         isSignalBacked,
         rankedCount: ranked.length,
-        ...(sourceError ? { sourceError } : {}),
+        ...(sourceError ? { sourceError: 'upstream fetch failed' } : {}),
         ...(dbCounts ? { dbCounts } : {}),
         description:
           'Daily UGC trend-spotting list combining internal ML, UGC, streaming, and Luminate metrics.',
@@ -97,7 +97,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(payload, { headers: { 'x-cache': 'miss' } })
   } catch (err) {
     console.error('[talent-scout-daily]', err)
-    const message = err instanceof Error ? err.message : 'Internal error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
