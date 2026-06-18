@@ -75,6 +75,8 @@ export async function validateSessionToken(
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   const [id, expStr, mac] = parts;
+  if (!/^[0-9a-f]{32}$/.test(id)) return null;
+  if (!/^\d{1,13}$/.test(expStr)) return null;
   if (sign(`${id}.${expStr}`) !== mac) return null;
   if (Number(expStr) * 1000 < Date.now()) return null;
 

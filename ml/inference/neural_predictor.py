@@ -66,7 +66,7 @@ def _get_song_encoder() -> Optional[SongEncoder]:
         logger.warning("SongEncoder not found at %s", SONG_ENC_PATH)
         return None
     enc = SongEncoder()
-    enc.load_state_dict(torch.load(SONG_ENC_PATH, map_location="cpu"))
+    enc.load_state_dict(torch.load(SONG_ENC_PATH, map_location="cpu", weights_only=True))
     enc.eval()
     return enc
 
@@ -76,7 +76,7 @@ def _get_temporal_encoder() -> Optional[TemporalEncoder]:
     if not TEMPORAL_ENC_PATH.exists():
         return None
     enc = TemporalEncoder()
-    enc.load_state_dict(torch.load(TEMPORAL_ENC_PATH, map_location="cpu"))
+    enc.load_state_dict(torch.load(TEMPORAL_ENC_PATH, map_location="cpu", weights_only=True))
     enc.eval()
     return enc
 
