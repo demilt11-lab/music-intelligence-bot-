@@ -4,6 +4,7 @@ import { ScoutSources } from '@/lib/engine';
 import { emptyTrack } from '@/lib/talentScout/emptyTrack';
 import { verifyCronSecret } from '@/lib/platform/cron-auth';
 import { validateWebhookUrl } from '@/lib/platform/webhook-url';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -59,7 +60,7 @@ export async function GET(req: NextRequest) {
           try {
             validateWebhookUrl(rule.destination);
           } catch (e: any) {
-            console.warn(`[alert-rules] Skipping invalid webhook URL for rule ${rule.id}: ${e.message}`);
+            logger.warn(`[alert-rules] Skipping invalid webhook URL for rule ${rule.id}: ${e.message}`);
             continue;
           }
           await fetch(rule.destination, {

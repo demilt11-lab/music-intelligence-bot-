@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { ingestSalesForEntity } from '@/lib/luminate/ingest';
+import { logger } from '@/lib/logger';
 
 export async function GET(req: NextRequest) {
   try {
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ data: result });
   } catch (err: any) {
-    console.error('[luminate-sales]', err);
+    logger.error('[luminate-sales]', err);
     return NextResponse.json(
       { error: err.message ?? 'Internal error' },
       { status: 500 },

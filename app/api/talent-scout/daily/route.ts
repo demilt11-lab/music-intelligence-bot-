@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ScoutSources, ScoutScore } from '@/lib/engine'
 import { Cache, TTL } from '@/lib/cache'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
       tracks = await ScoutSources.fetchTopTiktokBreakoutTracks({ date, code2, limit })
     } catch (err) {
       sourceError = err instanceof Error ? err.message : String(err)
-      console.error('[talent-scout-daily] source fetch failed:', sourceError)
+      logger.error('[talent-scout-daily] source fetch failed:', sourceError)
     }
 
     tracks = await ScoutSources.hydrateInternalStreaming(tracks)
@@ -96,7 +97,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(payload, { headers: { 'x-cache': 'miss' } })
   } catch (err) {
-    console.error('[talent-scout-daily]', err)
+    logger.error('[talent-scout-daily]', err)
     const message = err instanceof Error ? err.message : 'Internal error'
     return NextResponse.json({ error: message }, { status: 500 })
   }

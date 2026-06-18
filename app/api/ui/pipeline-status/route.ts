@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireSession, AuthError } from '@/lib/auth/guard';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
     if (err instanceof AuthError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    console.error('[ui/pipeline-status]', err);
+    logger.error('[ui/pipeline-status]', err);
     return NextResponse.json({ error: 'Failed to load pipeline status' }, { status: 500 });
   }
 }

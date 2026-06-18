@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRadiostatsTrackStats } from '@/lib/radiostats/tracks';
 import { db } from '@/lib/db';
 import { requireInternalAuth } from '@/lib/platform/internal-auth';
+import { logger } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
   const denied = requireInternalAuth(req);
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ obj: stats }, { status: 200 });
   } catch (err: any) {
-    console.error('Radiostats track integration error', err);
+    logger.error('Radiostats track integration error', err);
     const status = err.status || 500;
     return NextResponse.json(
       { error: err.message ?? 'Unknown error' },

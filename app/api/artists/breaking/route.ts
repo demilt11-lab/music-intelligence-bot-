@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { Cache, TTL } from "@/lib/cache";
+import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 
@@ -127,7 +128,7 @@ export async function GET(req: NextRequest) {
     Cache.set(cacheKey, payload, TTL.SHORT);
     return NextResponse.json(payload, { headers: { "x-cache": "miss" } });
   } catch (err) {
-    console.error("[api/artists/breaking]", err);
+    logger.error("[api/artists/breaking]", err);
     return NextResponse.json(
       { error: "Failed to load breaking artists" },
       { status: 500 },

@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { ingestStreamsForEntity } from '@/lib/luminate/ingest';
+import { logger } from '@/lib/logger';
 
 export async function GET(req: NextRequest) {
   try {
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ data: result });
   } catch (err: any) {
-    console.error('[luminate-streams]', err);
+    logger.error('[luminate-streams]', err);
     return NextResponse.json(
       { error: err.message ?? 'Internal error' },
       { status: 500 },

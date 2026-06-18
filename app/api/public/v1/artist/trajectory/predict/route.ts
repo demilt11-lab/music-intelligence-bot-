@@ -1,6 +1,7 @@
 // app/api/public/v1/artist/trajectory/predict/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantByApiKey } from "@/lib/platform/auth";
+import { logger } from "@/lib/logger";
 
 const BASE = process.env.INTERNAL_API_BASE_URL;
 const INTERNAL_URL = BASE
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
       status: res.status,
     });
   } catch (err: any) {
-    console.error(err);
+    logger.error(err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

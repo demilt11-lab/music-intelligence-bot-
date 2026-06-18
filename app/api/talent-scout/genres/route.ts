@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { ScoutGenres } from '@/lib/engine';
+import { logger } from '@/lib/logger';
 
 export async function GET(req: NextRequest) {
   try {
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err: any) {
-    console.error('[talent-scout-genres]', err);
+    logger.error('[talent-scout-genres]', err);
     return NextResponse.json(
       { error: err.message ?? 'Internal error' },
       { status: 500 },

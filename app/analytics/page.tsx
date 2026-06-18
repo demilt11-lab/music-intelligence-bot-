@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { db } from '@/lib/db'
 import { PageShell } from '@/components/ui/PageShell'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -100,7 +101,7 @@ async function loadWorkspaceStats(): Promise<WorkspaceStats | null> {
       latestChartDate: latestChart?.snapshotDate ?? null,
     }
   } catch (err) {
-    console.error('[analytics] failed to load workspace stats:', err)
+    logger.error('[analytics] failed to load workspace stats:', err)
     return null
   }
 }

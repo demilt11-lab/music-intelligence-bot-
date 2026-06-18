@@ -10,6 +10,7 @@ import {
   addWatchlistItem,
   removeWatchlistItemByEntity,
 } from '@/lib/watchlist/service';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,7 @@ function errorResponse(err: unknown, fallback: string) {
   if (err instanceof AuthError) {
     return NextResponse.json({ error: err.message }, { status: err.status });
   }
-  console.error(`[ui/watchlist] ${fallback}:`, err);
+  logger.error(`[ui/watchlist] ${fallback}:`, err);
   return NextResponse.json({ error: fallback }, { status: 500 });
 }
 

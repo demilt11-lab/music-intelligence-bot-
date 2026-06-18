@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { successResponse } from '@/lib/shared/response'
+import { logger } from '@/lib/logger'
 
 type RouteParams = {
   params: Promise<{ id: string }>
@@ -70,7 +71,7 @@ export async function GET(_req: Request, props: RouteParams) {
     // youtubeViews) to strings so JSON.stringify does not throw.
     return successResponse(payload, 200)
   } catch (err) {
-    console.error('GET /api/tracks/[id] error', err)
+    logger.error('GET /api/tracks/[id] error', err)
     return NextResponse.json(
       { error: 'Internal error loading track' },
       { status: 500 }

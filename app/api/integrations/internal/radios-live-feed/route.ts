@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createInternalConnector } from '@/lib/integrations/internal';
 import { requireInternalAuth } from '@/lib/platform/internal-auth';
+import { logger } from '@/lib/logger';
 
 export async function GET(req: NextRequest) {
   const denied = requireInternalAuth(req);
@@ -35,7 +36,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(data);
   } catch (err) {
-    console.error('[GET /api/integrations/internal/radios-live-feed]', err);
+    logger.error('[GET /api/integrations/internal/radios-live-feed]', err);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 },

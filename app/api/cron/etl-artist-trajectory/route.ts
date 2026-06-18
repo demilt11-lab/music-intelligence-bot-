@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyCronSecret } from '@/lib/platform/cron-auth';
 import { buildArtistTrajectorySnapshots } from '@/jobs/etl/artist_trajectory_snapshots';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, date, ...result });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : 'ETL failed';
-    console.error('[cron/etl-artist-trajectory]', message);
+    logger.error('[cron/etl-artist-trajectory]', message);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

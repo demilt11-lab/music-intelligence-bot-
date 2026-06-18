@@ -13,6 +13,7 @@ import { randomUUID } from 'crypto';
 import { db } from '@/lib/db';
 import { requireInternalAuth } from '@/lib/platform/internal-auth';
 import { predictArtistBatch } from '@/lib/ml/models/artist-trajectory';
+import { logger } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
   const denied = requireInternalAuth(req);
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: any) {
     const errorId = randomUUID();
-    console.error(`[trajectory/predict] errorId=${errorId}:`, err?.message ?? err);
+    logger.error(`[trajectory/predict] errorId=${errorId}:`, err?.message ?? err);
     return NextResponse.json({ error: 'Internal error', errorId }, { status: 500 });
   }
 }

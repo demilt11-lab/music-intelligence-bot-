@@ -8,6 +8,7 @@ import {
   SESSION_COOKIE,
 } from '@/lib/auth/session';
 import { assertSameOrigin, AuthError } from '@/lib/auth/guard';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
     if (err instanceof AuthError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    console.error('[auth/login]', err);
+    logger.error('[auth/login]', err);
     return NextResponse.json({ error: 'Login failed' }, { status: 500 });
   }
 }

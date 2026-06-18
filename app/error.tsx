@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { logger } from '@/lib/logger';
 
 export default function GlobalError({
   error,
@@ -12,7 +13,7 @@ export default function GlobalError({
   useEffect(() => {
     // Log to an error reporting service in production
     if (process.env.NODE_ENV === 'production') {
-      console.error('[GlobalError]', error.digest ?? error.message);
+      logger.error('[GlobalError]', error.digest ?? error.message);
     }
   }, [error]);
 

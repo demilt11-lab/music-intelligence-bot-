@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireSession, assertSameOrigin, AuthError } from '@/lib/auth/guard';
 import { removeWatchlistItemById } from '@/lib/watchlist/service';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +25,7 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     if (err instanceof AuthError) {
       return NextResponse.json({ error: err.message }, { status: err.status });
     }
-    console.error('[ui/watchlist/:id] DELETE failed:', err);
+    logger.error('[ui/watchlist/:id] DELETE failed:', err);
     return NextResponse.json(
       { error: 'Failed to remove watchlist item' },
       { status: 500 },

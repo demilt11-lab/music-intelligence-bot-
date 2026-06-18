@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { requireSession, AuthError } from '@/lib/auth/guard';
 import { listWatchlist } from '@/lib/watchlist/service';
 import { toCsvResponse } from '@/lib/export/csv';
+import { logger } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
     if (err instanceof AuthError) {
       return Response.json({ error: err.message }, { status: err.status });
     }
-    console.error('[ui/watchlist/export] failed:', err);
+    logger.error('[ui/watchlist/export] failed:', err);
     return Response.json({ error: 'Failed to export watchlist' }, { status: 500 });
   }
 }

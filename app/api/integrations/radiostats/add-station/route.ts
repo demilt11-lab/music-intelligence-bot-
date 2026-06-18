@@ -6,6 +6,7 @@ import {
   AddStationRequest,
 } from '@/lib/radiostats/addStation';
 import { requireInternalAuth } from '@/lib/platform/internal-auth';
+import { logger } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
   const denied = requireInternalAuth(req);
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(resp, { status: 200 });
   } catch (err: any) {
-    console.error('Radiostats add-station error', err);
+    logger.error('Radiostats add-station error', err);
     const status = err.status || 500;
     return NextResponse.json(
       { error: err.message ?? 'Unknown error' },

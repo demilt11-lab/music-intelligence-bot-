@@ -6,7 +6,7 @@ const ABSOLUTE_MAX = 10_000;
 /**
  * Parsed and validated pagination parameters.
  */
-export interface PaginationParams {
+interface PaginationParams {
   /** Maximum number of records to return. */
   limit: number;
   /** Zero-based index of the first record to return. */

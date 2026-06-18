@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { ingestAirplayForEntity } from '@/lib/luminate/ingest';
+import { logger } from '@/lib/logger';
 
 export async function GET(req: NextRequest) {
   try {
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ data: result });
   } catch (err: any) {
-    console.error('[luminate-airplay]', err);
+    logger.error('[luminate-airplay]', err);
     return NextResponse.json(
       { error: err.message ?? 'Internal error' },
       { status: 500 },

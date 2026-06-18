@@ -11,6 +11,7 @@ export const maxDuration = 60;
 import { NextRequest, NextResponse } from 'next/server';
 import { trainArtistTrajectoryModel } from '@/lib/ml/models/artist-trajectory';
 import { trainTrackViralModel, writeAllTrackPredictions } from '@/lib/ml/models/track-viral';
+import { logger } from '@/lib/logger';
 
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -25,14 +26,14 @@ export async function GET(req: NextRequest) {
   try {
     results['artist-trajectory'] = await trainArtistTrajectoryModel();
   } catch (err: any) {
-    console.error('[cron:ml-retrain] artist-trajectory failed:', err?.message);
+    logger.error('[cron:ml-retrain] artist-trajectory failed:', err?.message);
     results['artist-trajectory'] = { error: err?.message };
   }
 
   try {
     results['track-viral'] = await trainTrackViralModel();
   } catch (err: any) {
-    console.error('[cron:ml-retrain] track-viral failed:', err?.message);
+    logger.error('[cron:ml-retrain] track-viral failed:', err?.message);
     results['track-viral'] = { error: err?.message };
   }
 
@@ -41,10 +42,10 @@ export async function GET(req: NextRequest) {
     const predictions = await writeAllTrackPredictions();
     results['track-predictions'] = predictions;
   } catch (err: any) {
-    console.error('[cron:ml-retrain] writeAllTrackPredictions failed:', err?.message);
+    logger.error('[cron:ml-retrain] writeAllTrackPredictions failed:', err?.message);
     results['track-predictions'] = { error: err?.message };
   }
 
-  console.log(`[cron:ml-retrain] done in ${Date.now() - started}ms`, results);
+  logger.info(`[cron:ml-retrain] done in ${Date.now() - started}ms`, results);
   return NextResponse.json({ ok: true, durationMs: Date.now() - started, results });
 }

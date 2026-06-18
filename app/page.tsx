@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { db } from '@/lib/db'
 import { BuddyCharacter } from '@/components/buddy/BuddyCharacter'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,7 +53,7 @@ async function loadQueueStats(): Promise<QueueStats> {
 
     return { scoutSignals, breakingArtists, watchlistItems }
   } catch (err) {
-    console.error('[home] queue stats unavailable:', err)
+    logger.error('[home] queue stats unavailable:', err)
     return { scoutSignals: null, breakingArtists: null, watchlistItems: null }
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { Cache, TTL } from '@/lib/cache'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -228,7 +229,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ artistId
     Cache.set(cacheKey, payload, TTL.SHORT)
     return NextResponse.json(payload, { headers: { 'x-cache': 'miss' } })
   } catch (error) {
-    console.error('[api/artists/:id/trajectory]', error)
+    logger.error('[api/artists/:id/trajectory]', error)
     return NextResponse.json(
       { error: 'Failed to load artist trajectory' },
       { status: 500 }

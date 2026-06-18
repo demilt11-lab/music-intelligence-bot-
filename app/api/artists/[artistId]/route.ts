@@ -6,6 +6,7 @@
 // unset and shipped a tenant key to the browser bundle.
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,7 +59,7 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ arti
 
     return NextResponse.json({ obj })
   } catch (error) {
-    console.error('[api/artists/:id]', error)
+    logger.error('[api/artists/:id]', error)
     return NextResponse.json(
       { error: 'Failed to fetch artist detail' },
       { status: 500 }

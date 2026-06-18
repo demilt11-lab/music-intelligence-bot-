@@ -31,12 +31,3 @@ export function successResponse<T>(data: T, status = 200): NextResponse {
   return NextResponse.json(serialised, { status });
 }
 
-/**
- * Returns an error JSON response.
- *
- * @param message - Human-readable error description.
- * @param status  - HTTP status code (default 400).
- */
-export function errorResponse(message: string, status = 400): NextResponse {
-  return NextResponse.json({ error: message }, { status });
-}
