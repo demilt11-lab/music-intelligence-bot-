@@ -15,6 +15,7 @@
 import { createHash, createHmac, randomBytes } from 'crypto';
 import { cookies } from 'next/headers';
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 export const SESSION_COOKIE = 'nv8_session';
 const SESSION_TTL_DAYS = 7;
@@ -91,7 +92,7 @@ export async function validateSessionToken(
   if (Date.now() - session.lastSeenAt.getTime() > 60_000) {
     db.session
       .update({ where: { id: session.id }, data: { lastSeenAt: new Date() } })
-      .catch((err: Error) => console.warn('[session] lastSeenAt update failed:', err.message));
+      .catch((err: Error) => logger.warn('[session] lastSeenAt update failed:', err.message));
   }
 
   return {

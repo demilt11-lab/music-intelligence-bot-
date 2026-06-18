@@ -1,4 +1,5 @@
 import { fetchWithRetry } from '@/lib/http/retry';
+import { logger } from '@/lib/logger';
 /**
  * Meta Graph API client for Instagram Reels music ingestion.
  *
@@ -130,7 +131,7 @@ export async function searchHashtagId(hashtag: string): Promise<string | null> {
     });
     return resp.data?.[0]?.id ?? null;
   } catch (err) {
-    console.error(`[instagram] searchHashtagId(${hashtag}) failed:`, err);
+    logger.error(`[instagram] searchHashtagId(${hashtag}) failed:`, err);
     return null;
   }
 }

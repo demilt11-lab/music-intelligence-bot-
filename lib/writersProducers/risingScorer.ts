@@ -5,6 +5,7 @@
 // Runs as part of the daily ETL; outputs are written to
 // writer_producer_rising_scores.
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 interface ScoredCreator {
   songwriterId: number;
@@ -66,7 +67,7 @@ export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> 
   for (const r of mlPredRows) {
     if (r.mlBreakoutProb30d != null) mlProbMap.set(r.songwriterId, r.mlBreakoutProb30d);
   }
-  console.log(
+  logger.info(
     `[rising-scorer] Loaded ML predictions for ${mlProbMap.size} songwriters from ${yesterday.toISOString().slice(0, 10)}`
   );
 

@@ -7,6 +7,7 @@
 import { db } from '@/lib/db';
 import { trainLogistic, predictProba, predictClass, type TrainedModel } from '../regression';
 import { extractArtistTrainingData, buildArtistFeatureVector, ARTIST_FEATURE_NAMES } from '../features/artist';
+import { logger } from '@/lib/logger';
 
 export const MODEL_TYPE = 'artist-trajectory';
 export const MODEL_VERSION = 1;
@@ -96,7 +97,7 @@ export async function trainArtistTrajectoryModel(): Promise<TrainResult> {
   });
 
   invalidateCache();
-  console.log(`[ml:artist-trajectory] trained — samples=${model.nSamples} accuracy=${model.accuracy.toFixed(3)}`);
+  logger.info(`[ml:artist-trajectory] trained — samples=${model.nSamples} accuracy=${model.accuracy.toFixed(3)}`);
 
   return { accuracy: model.accuracy, nSamples: model.nSamples, classCounts, skipped: false };
 }

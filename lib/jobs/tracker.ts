@@ -7,6 +7,7 @@
 // Tracking is best-effort by design — a broken DB connection must surface as
 // the job's own failure, not as a tracker crash masking it.
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 
 export type JobResult = Record<string, unknown> & { rowsWritten?: number };
 
@@ -24,7 +25,7 @@ export async function runTrackedJob<T extends JobResult | void>(
     });
     runId = run.id;
   } catch (e) {
-    console.warn(`[job-tracker] could not record start of ${jobName}:`, e);
+    logger.warn(`[job-tracker] could not record start of ${jobName}:`, e);
   }
 
   try {

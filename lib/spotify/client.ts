@@ -1,5 +1,6 @@
 // lib/spotify/client.ts
 import { fetchWithRetry } from '@/lib/http/retry';
+import { logger } from '@/lib/logger';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
@@ -60,7 +61,7 @@ async function getAccessToken(): Promise<string> {
 
 // ─── Error class ─────────────────────────────────────────────────────────────
 
-export class SpotifyError extends Error {
+class SpotifyError extends Error {
   status: number;
   body: unknown;
 
@@ -153,15 +154,6 @@ export interface SpotifyTrack {
   artists: Array<{ id: string; name: string }>;
 }
 
-export interface SpotifyArtist {
-  id: string;
-  name: string;
-  popularity: number;
-  followers: { total: number };
-  images: Array<{ url: string; width: number; height: number }>;
-  genres: string[];
-}
-
 export interface SpotifyPlaylistItem {
   added_at: string;
   track: SpotifyTrack | null;
@@ -185,7 +177,7 @@ export interface SpotifyPlaylist {
   owner: { id: string; display_name: string };
 }
 
-export interface SpotifySearchResult {
+interface SpotifySearchResult {
   tracks: SpotifyPagingObject<SpotifyTrack>;
 }
 
@@ -221,64 +213,14 @@ export async function getPlaylistTracks(playlistId: string): Promise<SpotifyPlay
   return items;
 }
 
-/** Fetch artist details by Spotify artist ID */
-export async function getArtistDetails(spotifyId: string): Promise<SpotifyArtist> {
-  return spotifyGet<SpotifyArtist>(`/artists/${spotifyId}`);
-}
-
 /** Search Spotify for tracks matching a query string */
-export async function searchTracks(query: string, limit = 10): Promise<SpotifyTrack[]> {
+async function searchTracks(query: string, limit = 10): Promise<SpotifyTrack[]> {
   const result = await spotifyGet<SpotifySearchResult>('/search', {
     q: query,
     type: 'track',
     limit,
   });
   return result.tracks.items;
-}
-
-// Top 50 chart playlist IDs per market
-const TOP_CHART_PLAYLISTS: Record<string, string> = {
-  global: '37i9dQZEVXbMDoHDwVN2tF',
-  US: '37i9dQZEVXbLRQDuF5jeBp',
-  GB: '37i9dQZEVXbLnolsZ8PSNw',
-  AU: '37i9dQZEVXbJPcfkRz0wJ0',
-  CA: '37i9dQZEVXbKj23U1GF4IR',
-  BR: '37i9dQZEVXbMXbN3EUUhlg',
-  DE: '37i9dQZEVXbJiZcmkrIHGU',
-  FR: '37i9dQZEVXbIPWwFssbupI',
-  MX: '37i9dQZEVXbO3qyFxbkOE1',
-};
-
-/** Fetch Spotify Top 50 chart for a given market (defaults to global) */
-export async function getTopCharts(market = 'global'): Promise<{
-  playlistId: string;
-  market: string;
-  items: SpotifyPlaylistItem[];
-}> {
-  const playlistId = TOP_CHART_PLAYLISTS[market];
-  if (!playlistId) {
-    throw new Error(`No top chart playlist configured for market: ${market}`);
-  }
-  const items = await getPlaylistTracks(playlistId);
-  return { playlistId, market, items };
-}
-
-export interface SpotifyAlbum {
-  id: string;
-  name: string;
-  artists: Array<{ id: string; name: string }>;
-  release_date: string;
-  total_tracks: number;
-  images: Array<{ url: string; width: number; height: number }>;
-}
-
-/** New releases — works with client credentials, no special scopes needed */
-export async function getNewReleases(country = 'US', limit = 50): Promise<SpotifyAlbum[]> {
-  const result = await spotifyGet<{ albums: { items: SpotifyAlbum[] } }>('/browse/new-releases', {
-    country,
-    limit,
-  });
-  return result.albums.items;
 }
 
 /** Popular tracks via artist-name search — reliable with client credentials */
@@ -309,7 +251,7 @@ export async function getPopularTracks(_market: string, limit = 50): Promise<Spo
       }
       await delay(100);
     } catch (err) {
-      console.warn(`[spotify] search failed for "${q}":`, (err as Error).message);
+      logger.warn(`[spotify] search failed for "${q}":`, (err as Error).message);
     }
   }
 

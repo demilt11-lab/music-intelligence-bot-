@@ -8,7 +8,7 @@
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface TiktokTokenResponse {
+interface TiktokTokenResponse {
   access_token: string;
   expires_in: number;
   token_type: string;
@@ -172,7 +172,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function tiktokPost<T>(path: string, body: unknown): Promise<T> {
+async function tiktokPost<T>(path: string, body: unknown): Promise<T> {
   await sleep(DELAY_MS);
   const token = await getAccessToken();
 
@@ -228,38 +228,6 @@ export async function queryVideos(
     max_count: params.max_count ?? 100,
     cursor: params.cursor ?? 0,
     ...(params.search_id ? { search_id: params.search_id } : {}),
-  });
-}
-
-/**
- * Fetch details for specific video IDs.
- * POST /v2/research/video/query/ with id IN filter
- */
-export async function getVideoDetails(videoIds: string[]): Promise<TiktokVideoQueryResponse> {
-  if (videoIds.length === 0) {
-    return {
-      data: { videos: [], cursor: 0, has_more: false, search_id: '' },
-      error: { code: 'ok', message: '', log_id: '' },
-    };
-  }
-
-  const today = new Date();
-  const end = formatDate(today);
-  const start = formatDate(new Date(today.getTime() - 30 * 86_400_000));
-
-  return queryVideos({
-    query: {
-      and: [
-        {
-          field_name: 'id',
-          field_values: videoIds,
-          operation: 'IN',
-        },
-      ],
-    },
-    start_date: start,
-    end_date: end,
-    max_count: videoIds.length,
   });
 }
 

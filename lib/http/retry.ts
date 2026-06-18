@@ -6,6 +6,8 @@
 // quota. Every retry is logged with the provider label so flaky upstreams
 // are visible in job logs.
 
+import { logger } from '@/lib/logger';
+
 export type RetryOptions = {
   retries?: number;        // attempts AFTER the first (default 3)
   baseDelayMs?: number;    // first backoff (default 500ms; grows 2x + jitter)
@@ -52,7 +54,7 @@ export async function fetchWithRetry(
         ? Math.min(retryAfter * 1000, 60_000)
         : baseDelayMs * 2 ** attempt + Math.random() * 250;
 
-      console.warn(
+      logger.warn(
         `[${label}] HTTP ${res.status} — retry ${attempt + 1}/${retries} in ${Math.round(delay)}ms`,
       );
       // Drain the body so the connection can be reused.
@@ -66,7 +68,7 @@ export async function fetchWithRetry(
 
       const delay = baseDelayMs * 2 ** attempt + Math.random() * 250;
       const reason = err instanceof Error ? err.message : String(err);
-      console.warn(
+      logger.warn(
         `[${label}] ${reason} — retry ${attempt + 1}/${retries} in ${Math.round(delay)}ms`,
       );
       await sleep(delay);

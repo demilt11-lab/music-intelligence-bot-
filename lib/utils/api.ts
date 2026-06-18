@@ -1,6 +1,7 @@
 // lib/utils/api.ts
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
+import { logger } from '@/lib/logger';
 import type { PaginationMeta } from '@/lib/types';
 
 // ─── Standard response builders ────────────────────────────────────────────────
@@ -38,7 +39,7 @@ export function withErrorBoundary(handler: Handler): Handler {
     try {
       return await handler(req, ctx);
     } catch (e) {
-      console.error('[API Error]', req.url, e);
+      logger.error('[API Error]', req.url, e);
       return NextResponse.json(
         { ok: false, error: 'Internal server error', code: 'INTERNAL_ERROR' },
         { status: 500 },

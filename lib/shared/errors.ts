@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { logger } from '@/lib/logger';
 
 /**
  * Structured API error with an HTTP status code and a machine-readable code.
@@ -61,7 +62,7 @@ export function handleApiError(err: unknown): NextResponse {
   const message =
     err instanceof Error ? err.message : 'An unexpected error occurred';
 
-  console.error('[handleApiError] Unhandled error:', err);
+  logger.error('[handleApiError] Unhandled error:', err);
 
   return NextResponse.json(
     { error: message, code: 'INTERNAL_ERROR' },
