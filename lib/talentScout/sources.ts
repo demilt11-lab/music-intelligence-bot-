@@ -53,10 +53,6 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   const code2 = opts.code2 ?? 'GLOBAL'
   const dateFilter = opts.date ? { lte: new Date(opts.date) } : undefined
 
-  console.log(
-    `[scout-sources] fetchTopTiktokBreakoutTracks code2=${code2} limit=${limit} date=${opts.date ?? 'latest'}`
-  )
-
   // ── Tier 1: UGC metrics (TikTok API data) ──
   const resolvedCode2 =
     code2 === 'GLOBAL'
@@ -73,8 +69,6 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     orderBy: { date: 'desc' },
     select: { date: true },
   })
-
-  console.log(`[scout-sources] Tier1 latestUgc=${latestUgc?.date ?? 'null'}`)
 
   if (latestUgc) {
     const ugcRows = await db.ugcTrackMetrics.findMany({
@@ -118,8 +112,6 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   }
 
   // ── Tier 2: talent_scout_scores from ETL ──
-  console.log('[scout-sources] Tier1 empty, trying Tier2 (talentScoutScore)...')
-
   const scoreCode2 = code2 === 'GLOBAL' ? 'GLOBAL' : code2
 
   const latestScore = await db.talentScoutScore.findFirst({
@@ -130,10 +122,6 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     orderBy: { date: 'desc' },
     select: { date: true, code2: true },
   })
-
-  console.log(
-    `[scout-sources] Tier2 latestScore=${latestScore?.date ?? 'null'} code2=${latestScore?.code2 ?? 'null'}`
-  )
 
   if (latestScore) {
     const scoreRows = await db.talentScoutScore.findMany({
@@ -173,8 +161,6 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   }
 
   // ── Tier 3: raw chart_rows from any ingested platform ──
-  console.log('[scout-sources] Tier2 empty, trying Tier3 (chart_rows)...')
-
   const chartTracks = await db.$queryRaw<
     { trackId: number; rank: number; countryCode: string | null }[]
   >`
@@ -188,8 +174,6 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     ORDER BY cr."trackId", cs."snapshotDate" DESC, cr.rank ASC
     LIMIT ${limit}
   `
-
-  console.log(`[scout-sources] Tier3 chartTracks.length=${chartTracks.length}`)
 
   if (chartTracks.length) {
     const trackById = await loadTrackMeta(chartTracks.map((r) => r.trackId))
@@ -229,7 +213,6 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   // SCOUT_SAMPLE_FALLBACK=1 to instead return clearly-labeled sample rows
   // (source='sample', negative track IDs) for layout/demo walkthroughs.
   if (process.env.SCOUT_SAMPLE_FALLBACK === '1') {
-    console.log('[scout-sources] No signal data — returning labeled sample rows')
     return SAMPLE_TRACKS.slice(0, limit).map((t, i) => ({
       trackId: -(i + 1),
       name: t.name,
@@ -252,7 +235,6 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     }))
   }
 
-  console.log('[scout-sources] No signal data available — returning empty set')
   return []
 }
 
