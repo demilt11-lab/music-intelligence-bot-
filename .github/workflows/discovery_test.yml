@@ -1,0 +1,32 @@
+name: Discovery Test — Songs To Watch
+
+# Manually-triggered run of the "songs to watch" discovery ranker against the
+# production database. Ranks tracks by month-over-month streaming growth +
+# growth in curated-playlist features. Read-only (SELECT queries only).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  discovery:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm install
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run discovery (songs to watch)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npx tsx scripts/discovery_test.ts
