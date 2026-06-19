@@ -7,12 +7,12 @@ export async function GET() {
     // lightweight DB check
     await db.$queryRaw`SELECT 1`;
     return NextResponse.json(
-      { status: 'ok', db: 'up' },
+      { status: 'ok' },
       { status: 200 },
     );
   } catch {
     return NextResponse.json(
-      { status: 'degraded', db: 'down' },
+      { status: 'degraded' },
       { status: 503 },
     );
   }

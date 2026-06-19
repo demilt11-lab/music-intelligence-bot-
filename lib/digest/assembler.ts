@@ -1,5 +1,6 @@
 import { ScoutSources } from '@/lib/engine';
 import { db } from '@/lib/db';
+import { logger } from '@/lib/logger';
 import { emptyTrack } from '@/lib/talentScout/emptyTrack';
 import type { TalentScoutTrack as ScoreTrack } from '@/lib/talentScout/score';
 
@@ -83,9 +84,14 @@ export async function assembleDigest(tenantId: number, tenantName: string, date?
 
     for (const item of (watchlistItems as Array<{ entityId: number; notes: string | null }>)) {
       const live = withMl.find((t) => t.trackId === item.entityId);
-      const baseline = item.notes
-        ? (JSON.parse(item.notes) as { baselineViralScore?: number | null })
-        : null;
+      let baseline: { baselineViralScore?: number | null } | null = null;
+      if (item.notes) {
+        try {
+          baseline = JSON.parse(item.notes) as { baselineViralScore?: number | null };
+        } catch {
+          logger.warn(`[digest] Skipping malformed notes JSON on watchlistItem ${item.entityId}`);
+        }
+      }
       const delta =
         live?.viralScore != null && baseline?.baselineViralScore != null
           ? live.viralScore - baseline.baselineViralScore

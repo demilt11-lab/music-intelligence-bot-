@@ -20,12 +20,12 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
     }
 
-    const item = await db.watchlistItem.findFirst({ where: { id, tenantId: ctx.tenantId } });
-    if (!item) {
+    const { count } = await db.watchlistItem.deleteMany({
+      where: { id, tenantId: ctx.tenantId },
+    });
+    if (count === 0) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
-
-    await db.watchlistItem.delete({ where: { id } });
 
     await logRequest(ctx, endpoint, 'DELETE', 204, startedAt);
     return new NextResponse(null, { status: 204 });

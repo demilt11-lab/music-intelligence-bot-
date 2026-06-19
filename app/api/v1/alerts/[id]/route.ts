@@ -21,7 +21,7 @@ export async function PATCH(req: NextRequest, props: { params: Promise<{ id: str
 
     const body = await req.json();
     const updated = await db.alertRule.update({
-      where: { id },
+      where: { id, tenantId: ctx.tenantId },
       data: { isActive: body.isActive ?? rule.isActive },
     });
 
@@ -45,10 +45,8 @@ export async function DELETE(req: NextRequest, props: { params: Promise<{ id: st
     await enforceRateLimit(ctx, `tenant:${ctx.tenantId}:alerts`, 50);
 
     const id = Number(params.id);
-    const rule = await db.alertRule.findFirst({ where: { id, tenantId: ctx.tenantId } });
-    if (!rule) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-
-    await db.alertRule.delete({ where: { id } });
+    const { count } = await db.alertRule.deleteMany({ where: { id, tenantId: ctx.tenantId } });
+    if (count === 0) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     await logRequest(ctx, endpoint, 'DELETE', 204, startedAt);
     return new NextResponse(null, { status: 204 });

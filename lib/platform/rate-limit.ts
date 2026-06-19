@@ -1,6 +1,7 @@
 // lib/platform/rate-limit.ts
 import type { RequestContext } from './context';
 import { Redis } from '@upstash/redis';
+import { logger } from '@/lib/logger';
 
 const redis =
   process.env.UPSTASH_REDIS_URL && process.env.UPSTASH_REDIS_TOKEN
@@ -9,6 +10,10 @@ const redis =
         token: process.env.UPSTASH_REDIS_TOKEN,
       })
     : null;
+
+if (!redis && process.env.NODE_ENV === 'production') {
+  logger.warn('[rate-limit] UPSTASH_REDIS not configured — rate limiting is DISABLED for all v1 API endpoints');
+}
 
 async function incrementBucket(key: string, windowSeconds: number) {
   if (!redis) return { count: 0 };

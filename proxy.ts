@@ -37,19 +37,19 @@ async function hasPlausibleSession(req: NextRequest): Promise<boolean> {
   const [id, expStr, mac] = parts;
   if (Number(expStr) * 1000 < Date.now()) return false;
 
+  // SHA-256 HMAC hex is always 64 chars; reject early on wrong length
+  if (mac.length !== 64) return false;
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
     'raw',
     enc.encode(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign'],
+    ['verify'],
   );
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(`${id}.${expStr}`));
-  const expected = Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return expected === mac;
+  // Decode hex MAC to bytes and use WebCrypto's constant-time verify
+  const macBytes = new Uint8Array(mac.match(/../g)!.map(h => parseInt(h, 16)));
+  return crypto.subtle.verify('HMAC', key, macBytes, enc.encode(`${id}.${expStr}`));
 }
 
 export async function proxy(req: NextRequest) {
@@ -61,7 +61,7 @@ export async function proxy(req: NextRequest) {
     return new NextResponse(null, {
       status: 204,
       headers: {
-        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN ?? '*',
+        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN ?? 'http://localhost:3000',
         'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, x-api-key, x-request-id',
         'Access-Control-Max-Age': '86400',

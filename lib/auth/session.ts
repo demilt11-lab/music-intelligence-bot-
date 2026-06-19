@@ -12,7 +12,7 @@
 // AUTH_SECRET is required in production (fail closed). In development and
 // test, when AUTH_SECRET is unset, auth is disabled with a loud warning so
 // local hacking stays frictionless.
-import { createHash, createHmac, randomBytes } from 'crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import { cookies } from 'next/headers';
 import { db } from '@/lib/db';
 import { logger } from '@/lib/logger';
@@ -76,7 +76,12 @@ export async function validateSessionToken(
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   const [id, expStr, mac] = parts;
-  if (sign(`${id}.${expStr}`) !== mac) return null;
+  const computed = sign(`${id}.${expStr}`);
+  try {
+    if (!timingSafeEqual(Buffer.from(computed, 'hex'), Buffer.from(mac, 'hex'))) return null;
+  } catch {
+    return null;
+  }
   if (Number(expStr) * 1000 < Date.now()) return null;
 
   const session = await db.session.findUnique({
