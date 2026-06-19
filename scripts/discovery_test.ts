@@ -1,30 +1,33 @@
 // scripts/discovery_test.ts
 //
 // Runs the "songs to watch" discovery ranker (lib/talentScout/discovery.ts):
-// surfaces 10 songs ranked by month-over-month streaming growth + growth in
+// surfaces songs ranked by month-over-month streaming growth + growth in
 // curated-playlist features.
 //
 //   npx tsx scripts/discovery_test.ts            # synthetic demo pool
 //   DATABASE_URL=... npx tsx scripts/discovery_test.ts   # live DB pool
 //
 // When DATABASE_URL is set the candidate pool is loaded from the real tables
-// (track_platform_stats_daily + playlist_membership_events ⋈ curator_playlists);
-// otherwise a clearly-labeled synthetic pool is used so the feature can be
-// exercised without a database.
+// (track_platform_stats_daily + playlist_membership_events ⋈ curator_playlists),
+// the 30/60-day windows are anchored on the latest available data date (so a
+// slightly stale ingest still produces a meaningful "last month"), and a
+// production data-coverage diagnostic is printed. Otherwise a clearly-labeled
+// synthetic pool is used so the feature can be exercised without a database.
 
 import {
   rankWatchCandidates,
+  streamGrowthRate,
   type WatchCandidate,
   type RankedWatchCandidate,
 } from '@/lib/talentScout/discovery'
 
 const TOP_N = 10
 
+/** Type of the shared Prisma client (imported dynamically only in DB mode). */
+type DbClient = typeof import('@/lib/db').db
+
 // ──────────────────────────────────────────────────────────────────────────
 // Synthetic candidate pool (used when no DATABASE_URL is configured).
-// Numbers are illustrative. 12 candidates trend up on both signals; 2 are
-// included to prove the qualifier filter (one with flat curated features, one
-// with declining streams) and should NOT appear in the results.
 // ──────────────────────────────────────────────────────────────────────────
 const SYNTHETIC_POOL: WatchCandidate[] = [
   c(101, 'Neon Tide', ['Maris'], 1_100_000, 3_600_000, 4, 14),
@@ -64,44 +67,86 @@ function c(
   }
 }
 
-/**
- * Load candidates from the live database. Maps the two signals to real tables:
- *   - streaming windows  → track_platform_stats_daily.streams
- *   - curated features   → playlist_membership_events ⋈ curator_playlists
- * Only invoked when DATABASE_URL is set.
- */
-async function loadCandidatesFromDb(): Promise<WatchCandidate[]> {
-  const { db } = await import('@/lib/db')
+// ── live DB loading ──
 
-  const rows = await db.$queryRawUnsafe<
-    {
-      trackId: number
-      name: string
-      artists: string | null
-      streams_last_30d: bigint | null
-      streams_prior_30d: bigint | null
-      curated_adds_last_30d: bigint | null
-      curated_adds_prior_30d: bigint | null
-    }[]
-  >(`
+type Diagnostics = {
+  streamMin: string | null
+  streamMax: string | null
+  streamRows: number
+  streamTracks: number
+  eventMin: string | null
+  eventMax: string | null
+  eventTotal: number
+  eventAdded: number
+  curatorPlaylistLinks: number
+  addedOnCurated: number
+}
+
+function fmtDate(d: unknown): string | null {
+  if (!d) return null
+  const date = d instanceof Date ? d : new Date(String(d))
+  return Number.isNaN(date.getTime()) ? String(d) : date.toISOString().slice(0, 10)
+}
+
+async function loadDiagnostics(db: DbClient): Promise<Diagnostics> {
+  const [r] = await db.$queryRawUnsafe<any[]>(`
+    SELECT
+      (SELECT MIN(date) FROM track_platform_stats_daily)                        AS stream_min,
+      (SELECT MAX(date) FROM track_platform_stats_daily)                        AS stream_max,
+      (SELECT COUNT(*) FROM track_platform_stats_daily)                         AS stream_rows,
+      (SELECT COUNT(DISTINCT "trackId") FROM track_platform_stats_daily)        AS stream_tracks,
+      (SELECT MIN("eventDate") FROM playlist_membership_events)                 AS event_min,
+      (SELECT MAX("eventDate") FROM playlist_membership_events)                 AS event_max,
+      (SELECT COUNT(*) FROM playlist_membership_events)                         AS event_total,
+      (SELECT COUNT(*) FROM playlist_membership_events WHERE "eventType"='added') AS event_added,
+      (SELECT COUNT(*) FROM curator_playlists)                                  AS curator_playlist_links,
+      (SELECT COUNT(*) FROM playlist_membership_events e
+         JOIN curator_playlists cp ON cp."playlistId" = e."playlistId"
+         WHERE e."eventType"='added')                                          AS added_on_curated
+  `)
+  return {
+    streamMin: fmtDate(r.stream_min),
+    streamMax: fmtDate(r.stream_max),
+    streamRows: Number(r.stream_rows ?? 0),
+    streamTracks: Number(r.stream_tracks ?? 0),
+    eventMin: fmtDate(r.event_min),
+    eventMax: fmtDate(r.event_max),
+    eventTotal: Number(r.event_total ?? 0),
+    eventAdded: Number(r.event_added ?? 0),
+    curatorPlaylistLinks: Number(r.curator_playlist_links ?? 0),
+    addedOnCurated: Number(r.added_on_curated ?? 0),
+  }
+}
+
+/**
+ * Load candidates from the live database. Windows are anchored on the latest
+ * stream date present (not wall-clock today), so "last month" is meaningful
+ * even when ingestion isn't current. Curated-playlist features use the same
+ * anchor so the two signals describe the same calendar month.
+ */
+async function loadCandidatesFromDb(db: DbClient): Promise<WatchCandidate[]> {
+  const ANCHOR = `(SELECT MAX(date) FROM track_platform_stats_daily)`
+
+  const rows = await db.$queryRawUnsafe<any[]>(`
     WITH stream_windows AS (
       SELECT
         s."trackId",
-        SUM(s.streams) FILTER (WHERE s.date >= CURRENT_DATE - INTERVAL '30 days')                                       AS streams_last_30d,
-        SUM(s.streams) FILTER (WHERE s.date >= CURRENT_DATE - INTERVAL '60 days' AND s.date < CURRENT_DATE - INTERVAL '30 days') AS streams_prior_30d
+        SUM(s.streams) FILTER (WHERE s.date >  ${ANCHOR} - INTERVAL '30 days') AS streams_last_30d,
+        SUM(s.streams) FILTER (WHERE s.date <= ${ANCHOR} - INTERVAL '30 days'
+                                 AND s.date >  ${ANCHOR} - INTERVAL '60 days') AS streams_prior_30d
       FROM track_platform_stats_daily s
-      WHERE s.date >= CURRENT_DATE - INTERVAL '60 days'
+      WHERE s.date > ${ANCHOR} - INTERVAL '60 days'
       GROUP BY s."trackId"
     ),
     curated_windows AS (
       SELECT
         e."trackId",
-        COUNT(*) FILTER (WHERE e."eventDate" >= CURRENT_DATE - INTERVAL '30 days')                                        AS curated_adds_last_30d,
-        COUNT(*) FILTER (WHERE e."eventDate" >= CURRENT_DATE - INTERVAL '60 days' AND e."eventDate" < CURRENT_DATE - INTERVAL '30 days') AS curated_adds_prior_30d
+        COUNT(*) FILTER (WHERE e."eventDate" >  ${ANCHOR} - INTERVAL '30 days') AS curated_adds_last_30d,
+        COUNT(*) FILTER (WHERE e."eventDate" <= ${ANCHOR} - INTERVAL '30 days'
+                          AND e."eventDate" >  ${ANCHOR} - INTERVAL '60 days') AS curated_adds_prior_30d
       FROM playlist_membership_events e
       JOIN curator_playlists cp ON cp."playlistId" = e."playlistId"
       WHERE e."eventType" = 'added'
-        AND e."eventDate" >= CURRENT_DATE - INTERVAL '60 days'
       GROUP BY e."trackId"
     )
     SELECT
@@ -124,12 +169,49 @@ async function loadCandidatesFromDb(): Promise<WatchCandidate[]> {
   return rows.map((r) => ({
     trackId: r.trackId,
     name: r.name,
-    artists: r.artists ? r.artists.split(', ') : [],
+    artists: r.artists ? String(r.artists).split(', ') : [],
     streamsLast30d: Number(r.streams_last_30d ?? 0),
     streamsPrior30d: Number(r.streams_prior_30d ?? 0),
     curatedPlaylistAddsLast30d: Number(r.curated_adds_last_30d ?? 0),
     curatedPlaylistAddsPrior30d: Number(r.curated_adds_prior_30d ?? 0),
   }))
+}
+
+/** Tracks gaining curated-playlist features lately, anchored on the latest event date. */
+async function loadTopCuratedPickups(
+  db: DbClient,
+): Promise<{ name: string; artists: string; last30: number; prior30: number }[]> {
+  const ANCHOR = `(SELECT MAX("eventDate") FROM playlist_membership_events)`
+  return db.$queryRawUnsafe<any[]>(`
+    WITH cw AS (
+      SELECT
+        e."trackId",
+        COUNT(*) FILTER (WHERE e."eventDate" >  ${ANCHOR} - INTERVAL '30 days') AS last30,
+        COUNT(*) FILTER (WHERE e."eventDate" <= ${ANCHOR} - INTERVAL '30 days'
+                          AND e."eventDate" >  ${ANCHOR} - INTERVAL '60 days') AS prior30
+      FROM playlist_membership_events e
+      JOIN curator_playlists cp ON cp."playlistId" = e."playlistId"
+      WHERE e."eventType" = 'added'
+      GROUP BY e."trackId"
+    )
+    SELECT t.title AS name, STRING_AGG(a.name, ', ') AS artists,
+           cw.last30, cw.prior30
+    FROM cw
+    JOIN tracks t ON t.id = cw."trackId"
+    LEFT JOIN track_artists ta ON ta."trackId" = t.id
+    LEFT JOIN artists a ON a.id = ta."artistId"
+    WHERE cw.last30 > cw.prior30
+    GROUP BY t.title, cw.last30, cw.prior30
+    ORDER BY (cw.last30 - cw.prior30) DESC
+    LIMIT ${TOP_N}
+  `).then((rows) =>
+    rows.map((r) => ({
+      name: r.name,
+      artists: r.artists ?? '',
+      last30: Number(r.last30 ?? 0),
+      prior30: Number(r.prior30 ?? 0),
+    })),
+  )
 }
 
 // ── presentation ──
@@ -149,6 +231,17 @@ function pad(s: string, width: number): string {
   return s.length >= width ? s.slice(0, width) : s + ' '.repeat(width - s.length)
 }
 
+function printDiagnostics(d: Diagnostics) {
+  console.log('')
+  console.log('  ── PRODUCTION DATA COVERAGE ──────────────────────────────────────────────')
+  console.log(`  Streaming (track_platform_stats_daily): ${d.streamRows} rows, ${d.streamTracks} tracks`)
+  console.log(`     date range: ${d.streamMin ?? 'n/a'} → ${d.streamMax ?? 'n/a'}`)
+  console.log(`  Playlist membership events: ${d.eventTotal} total, ${d.eventAdded} 'added'`)
+  console.log(`     date range: ${d.eventMin ?? 'n/a'} → ${d.eventMax ?? 'n/a'}`)
+  console.log(`  Curator→playlist links (curator_playlists): ${d.curatorPlaylistLinks}`)
+  console.log(`  'added' events on curator-backed playlists: ${d.addedOnCurated}`)
+}
+
 function printResults(ranked: RankedWatchCandidate[], poolSize: number, source: string) {
   console.log('')
   console.log('═'.repeat(78))
@@ -158,68 +251,86 @@ function printResults(ranked: RankedWatchCandidate[], poolSize: number, source: 
   console.log('═'.repeat(78))
   console.log('')
 
-  const header =
-    pad('#', 3) +
-    pad('SONG — ARTIST', 30) +
-    pad('STREAMS (MoM)', 22) +
-    pad('CURATED ADDS', 15) +
-    'WATCH'
-  console.log(header)
-  console.log('─'.repeat(78))
+  if (!ranked.length) {
+    console.log('  No song is currently trending up on BOTH signals at once.')
+    console.log('  (See the per-signal movers below to find where momentum exists.)')
+    return
+  }
 
+  console.log(
+    pad('#', 3) + pad('SONG — ARTIST', 30) + pad('STREAMS (MoM)', 22) + pad('CURATED ADDS', 15) + 'WATCH',
+  )
+  console.log('─'.repeat(78))
   ranked.slice(0, TOP_N).forEach((t, i) => {
     const title = `${t.name} — ${t.artists.join(', ') || 'Unknown'}`
     const streams = `${count(t.streamsPrior30d)}→${count(t.streamsLast30d)} (${pct(t.streamGrowthRate)})`
     const adds = `${t.curatedPlaylistAddsPrior30d}→${t.curatedPlaylistAddsLast30d} (+${t.curatedPlaylistAddsDelta})`
-    const score = t.watchScore.toFixed(2)
-    console.log(
-      pad(String(i + 1), 3) +
-        pad(title, 30) +
-        pad(streams, 22) +
-        pad(adds, 15) +
-        score,
-    )
+    console.log(pad(String(i + 1), 3) + pad(title, 30) + pad(streams, 22) + pad(adds, 15) + t.watchScore.toFixed(2))
   })
+}
+
+function printStreamMovers(candidates: WatchCandidate[]) {
+  const movers = candidates
+    .filter((c) => c.streamsLast30d > c.streamsPrior30d)
+    .map((c) => ({ ...c, rate: streamGrowthRate(c.streamsLast30d, c.streamsPrior30d) }))
+    .sort((a, b) => b.rate - a.rate)
+    .slice(0, TOP_N)
 
   console.log('')
-  console.log('  WHY THESE — top 3 in detail')
+  console.log(`  ▲ TOP STREAM MOVERS (last 30d vs prior 30d) — ${movers.length} shown`)
   console.log('─'.repeat(78))
-  ranked.slice(0, 3).forEach((t, i) => {
-    console.log(`  ${i + 1}. ${t.name} — ${t.artists.join(', ')}  (watch ${t.watchScore.toFixed(2)})`)
-    t.reasons.forEach((r) => console.log(`       • ${r}`))
+  if (!movers.length) {
+    console.log('  (none — no track has higher streams in the last 30d than the prior 30d)')
+    return
+  }
+  movers.forEach((m, i) => {
+    const title = `${m.name} — ${m.artists.join(', ') || 'Unknown'}`
+    console.log(`  ${pad(String(i + 1), 3)}${pad(title, 34)}${count(m.streamsPrior30d)}→${count(m.streamsLast30d)} (${pct(m.rate)})`)
   })
+}
+
+function printCuratedPickups(
+  rows: { name: string; artists: string; last30: number; prior30: number }[],
+) {
   console.log('')
+  console.log(`  ★ TOP CURATED-PLAYLIST PICKUPS (last 30d vs prior 30d) — ${rows.length} shown`)
+  console.log('─'.repeat(78))
+  if (!rows.length) {
+    console.log('  (none — no track gained curated-playlist features recently)')
+    return
+  }
+  rows.forEach((r, i) => {
+    const title = `${r.name} — ${r.artists || 'Unknown'}`
+    console.log(`  ${pad(String(i + 1), 3)}${pad(title, 40)}${r.prior30}→${r.last30} (+${r.last30 - r.prior30})`)
+  })
 }
 
 async function main() {
   const useDb = Boolean(process.env.DATABASE_URL)
-  let pool: WatchCandidate[]
-  let source: string
 
-  if (useDb) {
-    try {
-      pool = await loadCandidatesFromDb()
-      source = 'LIVE DB (track_platform_stats_daily + curated playlist events)'
-      if (!pool.length) {
-        console.warn('[discovery_test] DB returned no candidates — falling back to synthetic pool')
-        pool = SYNTHETIC_POOL
-        source = 'SYNTHETIC (DB empty)'
-      }
-    } catch (err) {
-      console.warn(`[discovery_test] DB load failed (${(err as Error).message}) — using synthetic pool`)
-      pool = SYNTHETIC_POOL
-      source = 'SYNTHETIC (DB load failed)'
-    }
-  } else {
-    pool = SYNTHETIC_POOL
-    source = 'SYNTHETIC demo pool (no DATABASE_URL)'
+  if (!useDb) {
+    const ranked = rankWatchCandidates(SYNTHETIC_POOL)
+    printResults(ranked, SYNTHETIC_POOL.length, 'SYNTHETIC demo pool (no DATABASE_URL)')
+    return
   }
 
-  const ranked = rankWatchCandidates(pool)
-  printResults(ranked, pool.length, source)
+  const { db } = await import('@/lib/db')
+  try {
+    const diag = await loadDiagnostics(db)
+    const pool = await loadCandidatesFromDb(db)
+    const ranked = rankWatchCandidates(pool)
 
-  if (useDb) {
-    const { db } = await import('@/lib/db')
+    printDiagnostics(diag)
+    printResults(ranked, pool.length, 'LIVE DB (track_platform_stats_daily + curated playlist events)')
+
+    // When the strict "both signals up" list is thin, surface where momentum
+    // actually exists on each individual signal — these are real songs too.
+    if (ranked.length < TOP_N) {
+      printStreamMovers(pool)
+      printCuratedPickups(await loadTopCuratedPickups(db))
+    }
+    console.log('')
+  } finally {
     await db.$disconnect()
   }
 }
