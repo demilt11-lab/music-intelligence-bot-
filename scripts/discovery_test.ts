@@ -242,6 +242,66 @@ function printDiagnostics(d: Diagnostics) {
   console.log(`  'added' events on curator-backed playlists: ${d.addedOnCurated}`)
 }
 
+/** Minimum streaming history needed for a real prior-month comparison window. */
+const MIN_STREAM_HISTORY_DAYS = 31
+
+type Sufficiency = {
+  streamingOk: boolean
+  curatedOk: boolean
+  streamSpanDays: number | null
+  tracksWithPriorStreams: number
+}
+
+function daysBetween(min: string | null, max: string | null): number | null {
+  if (!min || !max) return null
+  const a = Date.parse(min)
+  const b = Date.parse(max)
+  if (Number.isNaN(a) || Number.isNaN(b)) return null
+  return Math.round((b - a) / 86_400_000)
+}
+
+/**
+ * Decide whether production has enough data to rank "songs to watch". The two
+ * failure modes seen in practice:
+ *   - streaming history shorter than a month → the prior-30d window is empty,
+ *     so month-over-month "growth" degenerates to a clamped placeholder (+400%);
+ *   - no curated-playlist data at all (no curator links / membership events).
+ */
+function assessSufficiency(diag: Diagnostics, candidates: WatchCandidate[]): Sufficiency {
+  const streamSpanDays = daysBetween(diag.streamMin, diag.streamMax)
+  const tracksWithPriorStreams = candidates.filter((c) => c.streamsPrior30d > 0).length
+  const streamingOk =
+    tracksWithPriorStreams > 0 && (streamSpanDays ?? 0) >= MIN_STREAM_HISTORY_DAYS
+  const curatedOk = diag.curatorPlaylistLinks > 0 && diag.addedOnCurated > 0
+  return { streamingOk, curatedOk, streamSpanDays, tracksWithPriorStreams }
+}
+
+function printInsufficient(diag: Diagnostics, suf: Sufficiency) {
+  console.log('')
+  console.log('═'.repeat(78))
+  console.log('  ⚠  INSUFFICIENT PRODUCTION DATA — cannot rank "songs to watch"')
+  console.log('═'.repeat(78))
+
+  if (!suf.streamingOk) {
+    const span = suf.streamSpanDays == null ? 'n/a' : `${suf.streamSpanDays} days`
+    console.log('')
+    console.log('  • Streaming growth (last 30d vs prior 30d): NOT COMPUTABLE')
+    console.log(`      history spans only ${span} (${diag.streamMin ?? 'n/a'} → ${diag.streamMax ?? 'n/a'}), so the`)
+    console.log('      prior-month window is empty — any "growth" would be a placeholder, not')
+    console.log(`      a real change. Needs ≥ ~2 months of daily rows in track_platform_stats_daily.`)
+  }
+  if (!suf.curatedOk) {
+    console.log('')
+    console.log('  • Curated-playlist features: NO DATA')
+    console.log(`      curator→playlist links: ${diag.curatorPlaylistLinks}, 'added' events on curated playlists: ${diag.addedOnCurated}.`)
+    console.log('      Needs playlist_membership_events populated and curator_playlists links present.')
+  }
+
+  console.log('')
+  console.log('  → Populate the ingestion/ETL for the signal(s) above, then re-run this workflow.')
+  console.log('')
+}
+
 function printResults(ranked: RankedWatchCandidate[], poolSize: number, source: string) {
   console.log('')
   console.log('═'.repeat(78))
@@ -318,9 +378,22 @@ async function main() {
   try {
     const diag = await loadDiagnostics(db)
     const pool = await loadCandidatesFromDb(db)
-    const ranked = rankWatchCandidates(pool)
 
     printDiagnostics(diag)
+
+    // Guard: if either signal lacks the data to be measured, report that
+    // cleanly rather than printing placeholder rankings/movers.
+    const suf = assessSufficiency(diag, pool)
+    if (!suf.streamingOk || !suf.curatedOk) {
+      printInsufficient(diag, suf)
+      // Surface real per-signal movers only for signals that actually have data.
+      if (suf.streamingOk) printStreamMovers(pool)
+      if (suf.curatedOk) printCuratedPickups(await loadTopCuratedPickups(db))
+      console.log('')
+      return
+    }
+
+    const ranked = rankWatchCandidates(pool)
     printResults(ranked, pool.length, 'LIVE DB (track_platform_stats_daily + curated playlist events)')
 
     // When the strict "both signals up" list is thin, surface where momentum
