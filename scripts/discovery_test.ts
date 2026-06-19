@@ -8,7 +8,7 @@
 //   DATABASE_URL=... npx tsx scripts/discovery_test.ts   # live DB pool
 //
 // When DATABASE_URL is set the candidate pool is loaded from the real tables
-// (track_platform_stats_daily + playlist_membership_events ⋈ curator_playlists),
+// (luminate_streams + playlist_membership_events on editorial playlists),
 // the 30/60-day windows are anchored on the latest available data date (so a
 // slightly stale ingest still produces a meaningful "last month"), and a
 // production data-coverage diagnostic is printed. Otherwise a clearly-labeled
@@ -109,10 +109,10 @@ const CURATED_ADD_EVENTS_SQL = `
 async function loadDiagnostics(db: DbClient): Promise<Diagnostics> {
   const [r] = await db.$queryRawUnsafe<any[]>(`
     SELECT
-      (SELECT MIN(date) FROM track_platform_stats_daily)                        AS stream_min,
-      (SELECT MAX(date) FROM track_platform_stats_daily)                        AS stream_max,
-      (SELECT COUNT(*) FROM track_platform_stats_daily)                         AS stream_rows,
-      (SELECT COUNT(DISTINCT "trackId") FROM track_platform_stats_daily)        AS stream_tracks,
+      (SELECT MIN(date) FROM luminate_streams WHERE "entityType" = 'track')     AS stream_min,
+      (SELECT MAX(date) FROM luminate_streams WHERE "entityType" = 'track')     AS stream_max,
+      (SELECT COUNT(*) FROM luminate_streams WHERE "entityType" = 'track')      AS stream_rows,
+      (SELECT COUNT(DISTINCT "entityId") FROM luminate_streams WHERE "entityType" = 'track') AS stream_tracks,
       (SELECT MIN("eventDate") FROM playlist_membership_events)                 AS event_min,
       (SELECT MAX("eventDate") FROM playlist_membership_events)                 AS event_max,
       (SELECT COUNT(*) FROM playlist_membership_events)                         AS event_total,
@@ -143,18 +143,21 @@ async function loadDiagnostics(db: DbClient): Promise<Diagnostics> {
  * anchor so the two signals describe the same calendar month.
  */
 async function loadCandidatesFromDb(db: DbClient): Promise<WatchCandidate[]> {
-  const ANCHOR = `(SELECT MAX(date) FROM track_platform_stats_daily)`
+  // Real stream counts come from Luminate (luminate_streams), split across
+  // markets/services per track per day — so SUM per track gives total streams.
+  // The streams column is text, hence the numeric cast.
+  const ANCHOR = `(SELECT MAX(date) FROM luminate_streams WHERE "entityType" = 'track')`
 
   const rows = await db.$queryRawUnsafe<any[]>(`
     WITH stream_windows AS (
       SELECT
-        s."trackId",
-        SUM(s.streams) FILTER (WHERE s.date >  ${ANCHOR} - INTERVAL '30 days') AS streams_last_30d,
-        SUM(s.streams) FILTER (WHERE s.date <= ${ANCHOR} - INTERVAL '30 days'
+        s."entityId" AS "trackId",
+        SUM(NULLIF(s.streams, '')::numeric) FILTER (WHERE s.date >  ${ANCHOR} - INTERVAL '30 days') AS streams_last_30d,
+        SUM(NULLIF(s.streams, '')::numeric) FILTER (WHERE s.date <= ${ANCHOR} - INTERVAL '30 days'
                                  AND s.date >  ${ANCHOR} - INTERVAL '60 days') AS streams_prior_30d
-      FROM track_platform_stats_daily s
-      WHERE s.date > ${ANCHOR} - INTERVAL '60 days'
-      GROUP BY s."trackId"
+      FROM luminate_streams s
+      WHERE s."entityType" = 'track' AND s.date > ${ANCHOR} - INTERVAL '60 days'
+      GROUP BY s."entityId"
     ),
     curated_windows AS (
       SELECT
@@ -248,7 +251,7 @@ function pad(s: string, width: number): string {
 function printDiagnostics(d: Diagnostics) {
   console.log('')
   console.log('  ── PRODUCTION DATA COVERAGE ──────────────────────────────────────────────')
-  console.log(`  Streaming (track_platform_stats_daily): ${d.streamRows} rows, ${d.streamTracks} tracks`)
+  console.log(`  Streaming (luminate_streams): ${d.streamRows} rows, ${d.streamTracks} tracks`)
   console.log(`     date range: ${d.streamMin ?? 'n/a'} → ${d.streamMax ?? 'n/a'}`)
   console.log(`  Playlist membership events: ${d.eventTotal} total, ${d.eventAdded} add(s)`)
   console.log(`     date range: ${d.eventMin ?? 'n/a'} → ${d.eventMax ?? 'n/a'}`)
@@ -304,7 +307,7 @@ function printInsufficient(diag: Diagnostics, suf: Sufficiency) {
     console.log('  • Streaming growth (last 30d vs prior 30d): NOT COMPUTABLE')
     console.log(`      history spans only ${span} (${diag.streamMin ?? 'n/a'} → ${diag.streamMax ?? 'n/a'}), so the`)
     console.log('      prior-month window is empty — any "growth" would be a placeholder, not')
-    console.log(`      a real change. Needs ≥ ~2 months of daily rows in track_platform_stats_daily.`)
+    console.log(`      a real change. Needs ≥ ~2 months of daily rows in luminate_streams (run the Luminate ingest).`)
   }
   if (!suf.curatedOk) {
     console.log('')
@@ -411,7 +414,7 @@ async function main() {
     }
 
     const ranked = rankWatchCandidates(pool)
-    printResults(ranked, pool.length, 'LIVE DB (track_platform_stats_daily + curated playlist events)')
+    printResults(ranked, pool.length, 'LIVE DB (luminate_streams + editorial playlist events)')
 
     // When the strict "both signals up" list is thin, surface where momentum
     // actually exists on each individual signal — these are real songs too.

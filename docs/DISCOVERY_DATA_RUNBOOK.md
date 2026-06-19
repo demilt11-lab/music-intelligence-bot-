@@ -8,7 +8,7 @@ The feature ranks tracks by two signals:
 
 | # | Signal | Table / column the query reads |
 |---|--------|--------------------------------|
-| 1 | Month‑over‑month **streaming growth** (last 30d vs prior 30d) | `track_platform_stats_daily.streams` |
+| 1 | Month‑over‑month **streaming growth** (last 30d vs prior 30d) | `luminate_streams.streams` (real stream counts, summed per track) |
 | 2 | Growth in **curated‑playlist features** (last 30d vs prior 30d) | `playlist_membership_events` (`eventType='add'`) on **editorial** playlists (`playlists.playlistType='editorial'`) ∪ `curator_playlists` |
 
 A track only makes the list if **both** signals are trending up.
@@ -33,28 +33,20 @@ so you can turn signals on one credential at a time.
   at least two points in the window, so adds accumulate. Spotify runs every 6h,
   so deltas appear within days.
 
-### Streaming signal  ⚠️ read this — it's a proxy as currently wired
-The discovery query sums `track_platform_stats_daily.streams`. In the current
-code that column is populated by **Google Trends search interest**, not literal
-play counts:
+### Streaming signal  — real stream counts (Luminate)
+The discovery query sums `luminate_streams.streams` (literal play counts,
+summed across markets/services per track per day):
 
-- **Job:** `jobs/ingest/googletrends.ts` — workflow **“Ingest Google Trends”** (`ingest_googletrends.yml`, daily).
-- **What it writes:** `track_platform_stats_daily` rows with
-  `platform='google_trends'`, `streams = averageInterest` (a 0–100 search‑interest proxy).
-- **Secret required:** `SEARCHAPI_KEY` (https://www.searchapi.io).
-- YouTube (`YOUTUBE_API_KEY`) and Instagram (`META_APP_ID`/`META_APP_SECRET`/`IG_USER_ID`)
-  also write `track_platform_stats_daily`, but into **`videoViews`**, which the
-  discovery query does **not** sum. They don't move the streaming signal as‑is.
-
-**For literal stream counts** (recommended for a true "streaming numbers" read),
-the source is **Luminate**:
 - **Job:** `jobs/ingest/luminate.ts` — workflow **“Ingest Luminate”** (`ingest_luminate.yml`).
-- **Writes:** `luminate_streams` (a separate table; already used by the Talent
-  Scout ranker via `hydrateLuminateMetrics`).
-- **Secrets:** `LUMINATE_API_KEY`, `LUMINATE_BASE_URL`.
-- ⚠️ This requires a **one‑line code change** to point the discovery streaming
-  window at `luminate_streams` instead of `track_platform_stats_daily.streams`.
-  Ask and we'll switch it; until then, "streaming" = Google Trends interest.
+- **What it writes:** `luminate_streams` rows (`entityType='track'`, `entityId`,
+  `date`, `streams`). Same source the Talent Scout ranker uses via `hydrateLuminateMetrics`.
+- **Secrets required:** `LUMINATE_API_KEY`, `LUMINATE_BASE_URL`.
+
+Notes:
+- Other ingests write to `track_platform_stats_daily` (Google Trends → `streams`
+  as a search‑interest proxy; YouTube/Instagram → `videoViews`). The discovery
+  query no longer reads that table for streaming — it uses Luminate. If you ever
+  want the search‑interest proxy instead, that's a one‑line swap back.
 
 ---
 
@@ -68,14 +60,15 @@ Minimum to light up **both** signals:
 ```
 SPOTIFY_CLIENT_ID         # curated‑playlist signal (+ real catalog)
 SPOTIFY_CLIENT_SECRET
-SEARCHAPI_KEY             # streaming signal (Google Trends interest proxy)
+LUMINATE_API_KEY          # streaming signal (real stream counts)
+LUMINATE_BASE_URL
 ```
 
-Optional / better data:
+Optional / other data:
 
 ```
-LUMINATE_API_KEY  LUMINATE_BASE_URL   # literal stream counts (needs the 1‑line switch)
-YOUTUBE_API_KEY                       # videoViews (not summed today)
+SEARCHAPI_KEY                         # Google Trends interest (alt streaming proxy; not read now)
+YOUTUBE_API_KEY                       # videoViews (not summed)
 RAPIDAPI_KEY                          # TikTok UGC (feeds the other Talent Scout lens)
 FIRECRAWL_API_KEY                     # Billboard charts
 META_APP_ID  META_APP_SECRET  IG_USER_ID   # Instagram
