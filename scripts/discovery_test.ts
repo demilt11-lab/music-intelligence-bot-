@@ -78,6 +78,7 @@ type Diagnostics = {
   eventMax: string | null
   eventTotal: number
   eventAdded: number
+  editorialPlaylists: number
   curatorPlaylistLinks: number
   addedOnCurated: number
 }
@@ -87,6 +88,23 @@ function fmtDate(d: unknown): string | null {
   const date = d instanceof Date ? d : new Date(String(d))
   return Number.isNaN(date.getTime()) ? String(d) : date.toISOString().slice(0, 10)
 }
+
+// "Curated" = editorial (human-curated) playlists, plus any playlist linked to a
+// curator. NB: the Spotify ingest (jobs/ingest/spotify.ts) is the producer here —
+// it sets playlists.playlistType='editorial' and writes membership events with
+// eventType 'add'/'remove'. The curator_playlists table currently has no writer,
+// but it's included via UNION so this keeps working if one is added.
+const CURATED_PLAYLIST_IDS_SQL = `
+  SELECT id AS id FROM playlists WHERE "playlistType" = 'editorial'
+  UNION
+  SELECT "playlistId" AS id FROM curator_playlists
+`
+/** Membership events that count as a curated-playlist "feature". */
+const CURATED_ADD_EVENTS_SQL = `
+  FROM playlist_membership_events e
+  JOIN ( ${CURATED_PLAYLIST_IDS_SQL} ) c ON c.id = e."playlistId"
+  WHERE e."eventType" IN ('add', 'added')
+`
 
 async function loadDiagnostics(db: DbClient): Promise<Diagnostics> {
   const [r] = await db.$queryRawUnsafe<any[]>(`
@@ -98,11 +116,10 @@ async function loadDiagnostics(db: DbClient): Promise<Diagnostics> {
       (SELECT MIN("eventDate") FROM playlist_membership_events)                 AS event_min,
       (SELECT MAX("eventDate") FROM playlist_membership_events)                 AS event_max,
       (SELECT COUNT(*) FROM playlist_membership_events)                         AS event_total,
-      (SELECT COUNT(*) FROM playlist_membership_events WHERE "eventType"='added') AS event_added,
+      (SELECT COUNT(*) FROM playlist_membership_events WHERE "eventType" IN ('add','added')) AS event_added,
+      (SELECT COUNT(*) FROM playlists WHERE "playlistType" = 'editorial')       AS editorial_playlists,
       (SELECT COUNT(*) FROM curator_playlists)                                  AS curator_playlist_links,
-      (SELECT COUNT(*) FROM playlist_membership_events e
-         JOIN curator_playlists cp ON cp."playlistId" = e."playlistId"
-         WHERE e."eventType"='added')                                          AS added_on_curated
+      (SELECT COUNT(*) ${CURATED_ADD_EVENTS_SQL})                               AS added_on_curated
   `)
   return {
     streamMin: fmtDate(r.stream_min),
@@ -113,6 +130,7 @@ async function loadDiagnostics(db: DbClient): Promise<Diagnostics> {
     eventMax: fmtDate(r.event_max),
     eventTotal: Number(r.event_total ?? 0),
     eventAdded: Number(r.event_added ?? 0),
+    editorialPlaylists: Number(r.editorial_playlists ?? 0),
     curatorPlaylistLinks: Number(r.curator_playlist_links ?? 0),
     addedOnCurated: Number(r.added_on_curated ?? 0),
   }
@@ -144,9 +162,7 @@ async function loadCandidatesFromDb(db: DbClient): Promise<WatchCandidate[]> {
         COUNT(*) FILTER (WHERE e."eventDate" >  ${ANCHOR} - INTERVAL '30 days') AS curated_adds_last_30d,
         COUNT(*) FILTER (WHERE e."eventDate" <= ${ANCHOR} - INTERVAL '30 days'
                           AND e."eventDate" >  ${ANCHOR} - INTERVAL '60 days') AS curated_adds_prior_30d
-      FROM playlist_membership_events e
-      JOIN curator_playlists cp ON cp."playlistId" = e."playlistId"
-      WHERE e."eventType" = 'added'
+      ${CURATED_ADD_EVENTS_SQL}
       GROUP BY e."trackId"
     )
     SELECT
@@ -189,9 +205,7 @@ async function loadTopCuratedPickups(
         COUNT(*) FILTER (WHERE e."eventDate" >  ${ANCHOR} - INTERVAL '30 days') AS last30,
         COUNT(*) FILTER (WHERE e."eventDate" <= ${ANCHOR} - INTERVAL '30 days'
                           AND e."eventDate" >  ${ANCHOR} - INTERVAL '60 days') AS prior30
-      FROM playlist_membership_events e
-      JOIN curator_playlists cp ON cp."playlistId" = e."playlistId"
-      WHERE e."eventType" = 'added'
+      ${CURATED_ADD_EVENTS_SQL}
       GROUP BY e."trackId"
     )
     SELECT t.title AS name, STRING_AGG(a.name, ', ') AS artists,
@@ -236,10 +250,11 @@ function printDiagnostics(d: Diagnostics) {
   console.log('  ── PRODUCTION DATA COVERAGE ──────────────────────────────────────────────')
   console.log(`  Streaming (track_platform_stats_daily): ${d.streamRows} rows, ${d.streamTracks} tracks`)
   console.log(`     date range: ${d.streamMin ?? 'n/a'} → ${d.streamMax ?? 'n/a'}`)
-  console.log(`  Playlist membership events: ${d.eventTotal} total, ${d.eventAdded} 'added'`)
+  console.log(`  Playlist membership events: ${d.eventTotal} total, ${d.eventAdded} add(s)`)
   console.log(`     date range: ${d.eventMin ?? 'n/a'} → ${d.eventMax ?? 'n/a'}`)
+  console.log(`  Editorial playlists (playlistType='editorial'): ${d.editorialPlaylists}`)
   console.log(`  Curator→playlist links (curator_playlists): ${d.curatorPlaylistLinks}`)
-  console.log(`  'added' events on curator-backed playlists: ${d.addedOnCurated}`)
+  console.log(`  Adds on curated playlists (editorial ∪ curator-linked): ${d.addedOnCurated}`)
 }
 
 /** Minimum streaming history needed for a real prior-month comparison window. */
@@ -272,7 +287,8 @@ function assessSufficiency(diag: Diagnostics, candidates: WatchCandidate[]): Suf
   const tracksWithPriorStreams = candidates.filter((c) => c.streamsPrior30d > 0).length
   const streamingOk =
     tracksWithPriorStreams > 0 && (streamSpanDays ?? 0) >= MIN_STREAM_HISTORY_DAYS
-  const curatedOk = diag.curatorPlaylistLinks > 0 && diag.addedOnCurated > 0
+  // Curated signal needs actual 'add' events on curated (editorial/curator) playlists.
+  const curatedOk = diag.addedOnCurated > 0
   return { streamingOk, curatedOk, streamSpanDays, tracksWithPriorStreams }
 }
 
@@ -293,8 +309,9 @@ function printInsufficient(diag: Diagnostics, suf: Sufficiency) {
   if (!suf.curatedOk) {
     console.log('')
     console.log('  • Curated-playlist features: NO DATA')
-    console.log(`      curator→playlist links: ${diag.curatorPlaylistLinks}, 'added' events on curated playlists: ${diag.addedOnCurated}.`)
-    console.log('      Needs playlist_membership_events populated and curator_playlists links present.')
+    console.log(`      editorial playlists: ${diag.editorialPlaylists}, curator links: ${diag.curatorPlaylistLinks}, adds on curated playlists: ${diag.addedOnCurated}.`)
+    console.log("      Run the Spotify ingest (jobs/ingest/spotify.ts) to populate editorial")
+    console.log("      playlists + 'add' membership events; needs SPOTIFY_CLIENT_ID/SECRET.")
   }
 
   console.log('')
