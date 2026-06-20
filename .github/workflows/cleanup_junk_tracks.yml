@@ -1,8 +1,8 @@
 name: Clean Junk Catalog Rows
 
 # Manually-triggered cleanup of scraped non-song rows in the tracks catalog.
-# DRY RUN unless the "apply" input is checked. Uses the direct (session)
-# connection so the interactive transaction in the script works.
+# DRY RUN unless the "apply" input is checked. Single-statement queries only,
+# so it runs over the connection pooler.
 
 on:
   workflow_dispatch:
@@ -32,9 +32,8 @@ jobs:
 
       - name: Clean junk catalog rows
         env:
-          # Use the direct/session connection (not the transaction pooler) so the
-          # script's interactive transaction works.
-          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+          # Pooler connection (reachable from runners; the direct db.<ref> host is not).
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           CONFIRM_DELETE: ${{ inputs.apply && '1' || '0' }}
         run: npx tsx scripts/clean_junk_tracks.ts

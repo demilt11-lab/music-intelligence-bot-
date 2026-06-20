@@ -7,18 +7,19 @@
 //   DATABASE_URL=... CONFIRM_DELETE=1 npx tsx scripts/clean_junk_tracks.ts   # actually delete
 //
 // Safety:
-//   • DRY RUN is the default. It prints every candidate and then performs the
-//     DELETE inside a transaction that is ROLLED BACK — so it verifies the
-//     cascade actually works (no FK blocks) without persisting anything.
+//   • DRY RUN is the default — it prints every candidate plus the exact
+//     cascade blast radius (child-row counts) and deletes NOTHING.
 //   • Deletion criteria are conservative: a row is junk only if it has NO real
 //     identifier (isrc AND iswc are null) AND its title has an obvious non-song
 //     shape. Anything with an ISRC/ISWC is never touched.
-//   • APPLY mode prints the full list of rows being removed (recovery record in
-//     the run log) before deleting, inside a single transaction.
+//   • APPLY prints the full list being removed (recovery record in the run log),
+//     then runs a single atomic DELETE. Deleting a track cascades to its child
+//     rows; if any FK is non-cascading the DELETE fails as a whole (no partial
+//     deletion) and reports the constraint.
 //
-// Deleting a track cascades to its child rows (stats, playlist events, etc.).
+// Uses only single-statement queries, so it works over the connection pooler.
 
-export {} // mark as a module (dynamic db import below means no top-level import)
+export {} // module marker (db is imported dynamically below)
 
 const APPLY = process.env.CONFIRM_DELETE === '1' || process.argv.includes('--apply')
 const SAMPLE = 100
@@ -47,7 +48,6 @@ async function main() {
     console.error('✗ DATABASE_URL is not set — aborting (this script only runs against a DB).')
     process.exit(1)
   }
-
   const { db } = await import('@/lib/db')
   try {
     await run(db)
@@ -90,42 +90,41 @@ async function run(db: typeof import('@/lib/db').db) {
   console.log(`  …of the ${rows.length} shown, ${withIds} have external IDs (expected: 0)`)
   console.log('─'.repeat(78))
   rows.forEach((r) => {
-    const title = JSON.stringify(r.title)
-    console.log(`  #${r.id}  ${title}  — artists: ${r.artists ?? '∅'}  extIds:${Number(r.ext_ids)}`)
+    console.log(`  #${r.id}  ${JSON.stringify(r.title)}  — artists: ${r.artists ?? '∅'}  extIds:${Number(r.ext_ids)}`)
   })
   if (junkCount > rows.length) {
     console.log(`  … and ${junkCount - rows.length} more (showing first ${SAMPLE}).`)
   }
-  console.log('')
 
   if (junkCount === 0) {
+    console.log('')
     console.log('  Nothing to clean. ✅')
     return
   }
 
+  // Cascade blast radius — child rows that would be removed along with the tracks.
+  const [bl] = await db.$queryRawUnsafe<Record<string, bigint>[]>(`
+    WITH junk AS (SELECT t.id FROM tracks t WHERE ${JUNK_WHERE})
+    SELECT
+      (SELECT COUNT(*) FROM track_platform_stats_daily x WHERE x."trackId" IN (SELECT id FROM junk)) AS stats_daily,
+      (SELECT COUNT(*) FROM playlist_membership_events  x WHERE x."trackId" IN (SELECT id FROM junk)) AS membership_events,
+      (SELECT COUNT(*) FROM playlist_tracks             x WHERE x."trackId" IN (SELECT id FROM junk)) AS playlist_tracks,
+      (SELECT COUNT(*) FROM track_artists               x WHERE x."trackId" IN (SELECT id FROM junk)) AS track_artists,
+      (SELECT COUNT(*) FROM chart_rows                  x WHERE x."trackId" IN (SELECT id FROM junk)) AS chart_rows,
+      (SELECT COUNT(*) FROM external_ids                x WHERE x."entityType"='track' AND x."entityId" IN (SELECT id FROM junk)) AS external_ids
+  `)
+  console.log('')
+  console.log('  Cascade blast radius (child rows removed with these tracks):')
+  for (const [k, v] of Object.entries(bl)) console.log(`     ${k}: ${Number(v)}`)
+  console.log('')
+
   if (!APPLY) {
-    // Exercise the cascade in a transaction, then roll back — verifies the
-    // delete will succeed (no FK restriction) without persisting anything.
-    const ROLLBACK = Symbol('rollback')
-    let deleted = 0
-    try {
-      await db.$transaction(async (tx) => {
-        deleted = await tx.$executeRawUnsafe(`DELETE FROM tracks AS t WHERE ${JUNK_WHERE}`)
-        throw ROLLBACK
-      })
-    } catch (e) {
-      if (e !== ROLLBACK) {
-        console.error('  ✗ DRY RUN delete failed (likely a non-cascading FK):')
-        console.error(`    ${(e as Error).message}`)
-        process.exit(1)
-      }
-    }
-    console.log(`  DRY RUN: would delete ${deleted} track(s) (cascade verified, transaction rolled back).`)
-    console.log('  Re-run with CONFIRM_DELETE=1 to apply.')
+    console.log(`  DRY RUN — would delete ${junkCount} track(s) and the child rows above. Nothing changed.`)
+    console.log('  Re-run with apply=true (CONFIRM_DELETE=1) to delete.')
     return
   }
 
-  // APPLY: log the full set being removed (recovery record), then delete.
+  // APPLY: log the full set being removed (recovery record), then atomic delete.
   const allDeleted = await db.$queryRawUnsafe<{ id: number; title: string; artists: string | null }[]>(`
     SELECT t.id, t.title,
       (SELECT string_agg(a.name, ', ')
@@ -134,11 +133,9 @@ async function run(db: typeof import('@/lib/db').db) {
     FROM tracks t WHERE ${JUNK_WHERE} ORDER BY t.id
   `)
   console.log('  Removing (recovery record):')
-  console.log(JSON.stringify(allDeleted, null, 0))
+  console.log(JSON.stringify(allDeleted))
 
-  const deleted = await db.$transaction(async (tx) =>
-    tx.$executeRawUnsafe(`DELETE FROM tracks AS t WHERE ${JUNK_WHERE}`),
-  )
+  const deleted = await db.$executeRawUnsafe(`DELETE FROM tracks AS t WHERE ${JUNK_WHERE}`)
   console.log('')
   console.log(`  ✅ Deleted ${deleted} junk track(s) (child rows cascaded).`)
 }
