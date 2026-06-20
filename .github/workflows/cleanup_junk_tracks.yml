@@ -1,0 +1,40 @@
+name: Clean Junk Catalog Rows
+
+# Manually-triggered cleanup of scraped non-song rows in the tracks catalog.
+# DRY RUN unless the "apply" input is checked. Uses the direct (session)
+# connection so the interactive transaction in the script works.
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Actually delete (leave unchecked for a dry run)"
+        type: boolean
+        default: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm install
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Clean junk catalog rows
+        env:
+          # Use the direct/session connection (not the transaction pooler) so the
+          # script's interactive transaction works.
+          DATABASE_URL: ${{ secrets.DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          CONFIRM_DELETE: ${{ inputs.apply && '1' || '0' }}
+        run: npx tsx scripts/clean_junk_tracks.ts
