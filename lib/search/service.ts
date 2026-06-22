@@ -14,7 +14,12 @@ import {
   queryStations,
   queryCities,
   querySongwriters,
+  queryArtistByExternalId,
+  queryTrackByExternalId,
+  queryAlbumByExternalId,
+  queryPlaylistByExternalId,
 } from './query';
+import { parseSearchUrl } from './url-parser';
 import {
   normalizeArtist,
   normalizeTrack,
@@ -68,6 +73,43 @@ export async function search(
   params: SearchParams,
 ): Promise<SearchNormalResponse | SearchBetaResponse> {
   const { q, limit, offset, type, beta, platforms, triggerCitiesOnly } = params;
+
+  // ── URL shortcut: resolve by external ID when q is a platform URL ─────────
+  const parsedUrl = parseSearchUrl(q);
+  if (parsedUrl) {
+    const { platform, entityType, id } = parsedUrl;
+
+    type Norm = (r: RawRow) => Record<string, unknown>;
+    let rawRows: unknown[];
+    let groupKey: string;
+    let norm: Norm;
+
+    if (entityType === 'artist') {
+      rawRows = await queryArtistByExternalId(platform, id);
+      groupKey = 'artists';
+      norm = normalizeArtist as unknown as Norm;
+    } else if (entityType === 'track') {
+      rawRows = await queryTrackByExternalId(platform, id);
+      groupKey = 'tracks';
+      norm = normalizeTrack as unknown as Norm;
+    } else if (entityType === 'album') {
+      rawRows = await queryAlbumByExternalId(platform, id);
+      groupKey = 'albums';
+      norm = normalizeAlbum as unknown as Norm;
+    } else {
+      rawRows = await queryPlaylistByExternalId(platform, id);
+      groupKey = 'playlists';
+      norm = normalizePlaylist as unknown as Norm;
+    }
+
+    if (beta) {
+      return { obj: { suggestions: rowsToSuggestions(groupKey, rawRows, norm) } };
+    }
+
+    const grouped: SearchGroupedResults = {};
+    (grouped as Record<string, unknown>)[groupKey] = (rawRows as RawRow[]).map(norm);
+    return { obj: grouped };
+  }
 
   // ── Beta mode: return a flat suggestions list ─────────────────────────────
   if (beta) {

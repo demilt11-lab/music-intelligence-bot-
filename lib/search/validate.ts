@@ -11,8 +11,8 @@ import {
   SEARCH_ENTITY_TYPES,
 } from './types';
 
-/** Maximum allowed length for the search query string. */
-const MAX_Q_LENGTH = 100;
+/** Maximum allowed length for the search query string. Raised to 300 to allow full platform URLs. */
+const MAX_Q_LENGTH = 300;
 /** Default number of results per page. */
 const DEFAULT_LIMIT = 20;
 /** Maximum allowed results per page. */

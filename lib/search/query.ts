@@ -267,3 +267,100 @@ export async function querySongwriters(
     skip: offset,
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// External-ID lookups (used when the search query is a platform URL)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function findEntityId(
+  platform: string,
+  externalId: string,
+  entityType: string,
+): Promise<number | null> {
+  const row = await db.externalId.findFirst({
+    where: { platform, externalId, entityType },
+    select: { entityId: true },
+  });
+  return row?.entityId ?? null;
+}
+
+export async function queryArtistByExternalId(
+  platform: string,
+  externalId: string,
+): Promise<unknown[]> {
+  const entityId = await findEntityId(platform, externalId, 'artist');
+  if (entityId === null) return [];
+  return db.artist.findMany({
+    where: { id: entityId },
+    include: {
+      externalIds: { where: { entityType: 'artist', platform: 'spotify' }, take: 1 },
+    },
+    take: 1,
+  });
+}
+
+export async function queryTrackByExternalId(
+  platform: string,
+  externalId: string,
+): Promise<unknown[]> {
+  const entityId = await findEntityId(platform, externalId, 'track');
+  if (entityId === null) return [];
+  return db.track.findMany({
+    where: { id: entityId },
+    include: {
+      trackArtists: {
+        include: { artist: { select: { id: true, name: true } } },
+        orderBy: { position: 'asc' },
+      },
+    },
+    take: 1,
+  });
+}
+
+export async function queryAlbumByExternalId(
+  platform: string,
+  externalId: string,
+): Promise<unknown[]> {
+  const entityId = await findEntityId(platform, externalId, 'album');
+  if (entityId === null) return [];
+  return db.album.findMany({
+    where: { id: entityId },
+    include: {
+      trackAlbums: {
+        include: {
+          track: {
+            include: {
+              trackArtists: {
+                include: { artist: { select: { id: true, name: true } } },
+                orderBy: { position: 'asc' },
+                take: 1,
+              },
+            },
+          },
+        },
+        take: 1,
+      },
+      externalIds: { where: { entityType: 'album', platform: 'spotify' }, take: 1 },
+    },
+    take: 1,
+  });
+}
+
+export async function queryPlaylistByExternalId(
+  platform: string,
+  externalId: string,
+): Promise<unknown[]> {
+  const entityId = await findEntityId(platform, externalId, 'playlist');
+  if (entityId === null) return [];
+  return db.playlist.findMany({
+    where: { id: entityId },
+    include: {
+      playlistCuratorLinks: {
+        include: { curator: { select: { id: true, name: true } } },
+        take: 1,
+      },
+      playlistMetricsLatest: true,
+    },
+    take: 1,
+  });
+}
