@@ -272,22 +272,60 @@ function isUrl(s: string): boolean {
 async function loadTrackMeta(trackIds: number[]) {
   if (!trackIds.length) return new Map<number, { name: string; artists: string[] }>()
 
+  const result = new Map<number, { name: string; artists: string[] }>()
+
+  // Primary: match signal trackId against internal Track.id
   const tracks = await db.track.findMany({
     where: { id: { in: trackIds } },
     include: { trackArtists: { include: { artist: true } } },
   })
 
-  return new Map(
-    tracks.map((t) => [
-      t.id,
-      {
-        name: t.title,
-        artists: t.trackArtists
+  for (const t of tracks) {
+    result.set(t.id, {
+      name: t.title,
+      artists: t.trackArtists
+        .map((ta) => ta.artist.name)
+        .filter((name) => !isUrl(name)),
+    })
+  }
+
+  // Secondary: for IDs not yet resolved, check ExternalId records where the
+  // external platform ID (stored as a string) matches our numeric signal ID.
+  // This covers ETL pipelines that write external platform IDs into trackId.
+  const unresolvedIds = trackIds.filter((id) => !result.has(id))
+  if (unresolvedIds.length) {
+    const extRows = await db.externalId.findMany({
+      where: {
+        entityType: 'track',
+        externalId: { in: unresolvedIds.map(String) },
+      },
+      include: {
+        track: { include: { trackArtists: { include: { artist: true } } } },
+      },
+    })
+
+    for (const ext of extRows) {
+      if (!ext.track) continue
+      const signalId = Number(ext.externalId)
+      if (!Number.isFinite(signalId) || result.has(signalId)) continue
+      result.set(signalId, {
+        name: ext.track.title,
+        artists: ext.track.trackArtists
           .map((ta) => ta.artist.name)
           .filter((name) => !isUrl(name)),
-      },
-    ])
-  )
+      })
+    }
+  }
+
+  const resolvedCount = trackIds.filter((id) => result.has(id)).length
+  if (resolvedCount < trackIds.length) {
+    console.warn(
+      `[scout-sources] loadTrackMeta: resolved ${resolvedCount}/${trackIds.length} tracks` +
+        ` — ${trackIds.length - resolvedCount} IDs unresolved (no Track or ExternalId match)`
+    )
+  }
+
+  return result
 }
 
 function computeTiktokScore(row: {
