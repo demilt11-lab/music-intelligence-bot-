@@ -120,7 +120,7 @@ class MusicDataset(Dataset):
             tid = int(row.get("trackId") or 0)
             seq_path = self.sequence_dir / f"{tid}.pt"
             if seq_path.exists():
-                features["sequence_embed"] = torch.load(seq_path, map_location="cpu")
+                features["sequence_embed"] = torch.load(seq_path, map_location="cpu", weights_only=True)
 
         targets = self._targets(row)
         weight  = float(row.get("sample_weight") or 1.0)

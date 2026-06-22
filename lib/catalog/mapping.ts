@@ -1,4 +1,5 @@
 // lib/catalog/mapping.ts
+import { Prisma } from '@prisma/client';
 import { db } from '@/lib/db';
 import type { RequestContext } from '@/lib/platform/context';
 
@@ -18,10 +19,17 @@ export async function upsertCatalogTracks(
 ): Promise<void> {
   if (tracks.length === 0) return;
 
-  // Single batch upsert instead of N sequential round trips.
-  // createMany with skipDuplicates handles the insert side; the separate
-  // updateMany passes handle field updates for existing rows, keyed on the
-  // composite unique index (tenantId, clientTrackId).
+  // Single batch upsert instead of N sequential round trips: createMany with
+  // skipDuplicates handles inserts; a bulk raw UPDATE handles field updates for
+  // existing rows, keyed on the composite unique index (tenantId, clientTrackId).
+  //
+  // The UPDATE's VALUES list is built from parameterised SQL fragments — every
+  // value is bound through Prisma's tagged-template placeholders ($1, $2, …),
+  // never interpolated into the query string — so it is safe from SQL injection.
+  const valueRows = tracks.map(
+    (t) => Prisma.sql`(${ctx.tenantId}::int, ${t.clientTrackId}::text, ${t.isrc ?? null}::text, ${t.name ?? null}::text, ${t.artistName ?? null}::text, ${t.spotifyTrackId ?? null}::text, ${t.tiktokSoundId ?? null}::text, ${t.youtubeVideoId ?? null}::text)`,
+  );
+
   await db.$transaction([
     db.catalogTrack.createMany({
       data: tracks.map((t) => ({
@@ -36,37 +44,26 @@ export async function upsertCatalogTracks(
       })),
       skipDuplicates: true,
     }),
-    // Update existing rows — one bulk UPDATE via raw SQL for efficiency.
-    db.$executeRawUnsafe(
-      `
-      UPDATE catalog_tracks AS ct
+    // Update existing rows — one bulk UPDATE via parameterised raw SQL.
+    // Identifiers are quoted to match the Prisma-generated table/columns
+    // ("CatalogTrack" with camelCase columns); the VALUES alias uses local
+    // snake_case labels.
+    db.$executeRaw`
+      UPDATE "CatalogTrack" AS ct
       SET
-        isrc            = v.isrc,
-        name            = v.name,
-        artist_name     = v.artist_name,
-        spotify_track_id = v.spotify_track_id,
-        tiktok_sound_id  = v.tiktok_sound_id,
-        youtube_video_id = v.youtube_video_id,
-        updated_at       = NOW()
-      FROM (VALUES ${tracks
-        .map(() => '(?::int, ?::text, ?::text, ?::text, ?::text, ?::text, ?::text, ?::text)')
-        .join(', ')}) AS v(
-          tenant_id, client_track_id, isrc, name, artist_name,
-          spotify_track_id, tiktok_sound_id, youtube_video_id
-        )
-      WHERE ct.tenant_id = v.tenant_id::int
-        AND ct.client_track_id = v.client_track_id
-      `,
-      ...tracks.flatMap((t) => [
-        ctx.tenantId,
-        t.clientTrackId,
-        t.isrc ?? null,
-        t.name ?? null,
-        t.artistName ?? null,
-        t.spotifyTrackId ?? null,
-        t.tiktokSoundId ?? null,
-        t.youtubeVideoId ?? null,
-      ]),
-    ),
+        "isrc"           = v.isrc,
+        "name"           = v.name,
+        "artistName"     = v.artist_name,
+        "spotifyTrackId" = v.spotify_track_id,
+        "tiktokSoundId"  = v.tiktok_sound_id,
+        "youtubeVideoId" = v.youtube_video_id,
+        "updatedAt"      = NOW()
+      FROM (VALUES ${Prisma.join(valueRows)}) AS v(
+        tenant_id, client_track_id, isrc, name, artist_name,
+        spotify_track_id, tiktok_sound_id, youtube_video_id
+      )
+      WHERE ct."tenantId" = v.tenant_id::int
+        AND ct."clientTrackId" = v.client_track_id
+    `,
   ]);
 }

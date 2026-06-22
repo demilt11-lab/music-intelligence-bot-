@@ -206,7 +206,7 @@ class EWCState:
         if not path.exists():
             logger.info("No EWC state found at %s — starting fresh.", path)
             return
-        state = torch.load(path, map_location="cpu")
+        state = torch.load(path, map_location="cpu", weights_only=True)
         self.fisher = state["fisher"]
         self.means  = state["means"]
         logger.info("EWC state loaded from %s", path)
@@ -260,7 +260,7 @@ class ContinualLearner:
     def load(self):
         if ONLINE_MODEL_PATH.exists():
             self.model.load_state_dict(
-                torch.load(ONLINE_MODEL_PATH, map_location=self.device)
+                torch.load(ONLINE_MODEL_PATH, map_location=self.device, weights_only=True)
             )
             logger.info("Loaded model from %s", ONLINE_MODEL_PATH)
         self.ewc.load()

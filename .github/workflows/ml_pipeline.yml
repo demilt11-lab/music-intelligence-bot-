@@ -36,29 +36,45 @@ jobs:
 
       - name: Resolve target date
         id: resolve_date
+        # Untrusted dispatch input is passed via env, never interpolated into the
+        # shell, to prevent command injection. It is then strictly validated.
+        env:
+          INPUT_DATE: ${{ github.event.inputs.date }}
         run: |
-          if [ -n "${{ github.event.inputs.date }}" ]; then
-            echo "date=${{ github.event.inputs.date }}" >> "$GITHUB_OUTPUT"
+          if [ -n "$INPUT_DATE" ]; then
+            if ! printf '%s' "$INPUT_DATE" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+              echo "::error::Invalid date input '$INPUT_DATE' — expected format YYYY-MM-DD."
+              exit 1
+            fi
+            echo "date=$INPUT_DATE" >> "$GITHUB_OUTPUT"
           else
             echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run feature engineering
+        env:
+          TARGET_DATE: ${{ steps.resolve_date.outputs.date }}
         run: |
-          python ml/ar_feature_engineering.py --date "${{ steps.resolve_date.outputs.date }}"
+          python ml/ar_feature_engineering.py --date "$TARGET_DATE"
 
       - name: Run scoring (heat, stability, platform balance)
+        env:
+          TARGET_DATE: ${{ steps.resolve_date.outputs.date }}
         run: |
-          python ml/scoring.py --date "${{ steps.resolve_date.outputs.date }}"
+          python ml/scoring.py --date "$TARGET_DATE"
 
       - name: Run breakout probability scoring (skip if model missing)
+        env:
+          TARGET_DATE: ${{ steps.resolve_date.outputs.date }}
         run: |
           if [ -f ml/models/breakout_xgb.pkl ]; then
-            python ml/score_breakout_daily.py --date "${{ steps.resolve_date.outputs.date }}"
+            python ml/score_breakout_daily.py --date "$TARGET_DATE"
           else
             echo "No trained model found at ml/models/breakout_xgb.pkl — skipping breakout scoring."
             echo "Run 'python ml/train_breakout.py' locally to train and commit the model."
           fi
 
       - name: Pipeline complete
-        run: echo "ML pipeline completed successfully for ${{ steps.resolve_date.outputs.date }}"
+        env:
+          TARGET_DATE: ${{ steps.resolve_date.outputs.date }}
+        run: echo "ML pipeline completed successfully for $TARGET_DATE"
