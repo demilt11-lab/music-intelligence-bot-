@@ -4,6 +4,16 @@ import React, { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { PageShell } from '@/components/ui/PageShell'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
+import type {
+  SearchArtistResult,
+  SearchTrackResult,
+  SearchPlaylistResult,
+  SearchCuratorResult,
+  SearchAlbumResult,
+  SearchStationResult,
+  SearchCityResult,
+  SearchSongwriterResult,
+} from '@/lib/search/types'
 
 type SearchType =
   | 'all'
@@ -13,16 +23,18 @@ type SearchType =
   | 'curators'
   | 'albums'
   | 'stations'
+  | 'cities'
   | 'songwriters'
 
 type SearchResultBuckets = {
-  artists?: any[]
-  tracks?: any[]
-  playlists?: any[]
-  curators?: any[]
-  albums?: any[]
-  stations?: any[]
-  songwriters?: any[]
+  artists?: SearchArtistResult[]
+  tracks?: SearchTrackResult[]
+  playlists?: SearchPlaylistResult[]
+  curators?: SearchCuratorResult[]
+  albums?: SearchAlbumResult[]
+  stations?: SearchStationResult[]
+  cities?: SearchCityResult[]
+  songwriters?: SearchSongwriterResult[]
 }
 
 const TYPES: { value: SearchType; label: string }[] = [
@@ -33,6 +45,7 @@ const TYPES: { value: SearchType; label: string }[] = [
   { value: 'curators', label: 'Curators' },
   { value: 'albums', label: 'Albums' },
   { value: 'stations', label: 'Stations' },
+  { value: 'cities', label: 'Cities' },
   { value: 'songwriters', label: 'Songwriters' },
 ]
 
@@ -43,6 +56,7 @@ const BUCKET_ORDER: (keyof SearchResultBuckets)[] = [
   'curators',
   'albums',
   'stations',
+  'cities',
   'songwriters',
 ]
 
@@ -71,24 +85,78 @@ function bucketIcon(bucket: string) {
   }
 }
 
-function getHref(bucket: string, item: any) {
+function getHref(bucket: string, item: { id?: number | string | null }): string | null {
   if (bucket === 'artists' && item.id) return `/artists/${item.id}`
   if (bucket === 'tracks' && item.id) return `/tracks/${item.id}`
   return null
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getSubtitle(bucket: string, item: any): string | null {
+  switch (bucket) {
+    case 'tracks': {
+      const artists = item.artists as Array<{ name: string }> | undefined
+      return artists?.map((a) => a.name).join(', ') ?? null
+    }
+    case 'artists': {
+      const parts: string[] = []
+      if (item.code2) parts.push(String(item.code2))
+      if (item.spotifyFollowers != null)
+        parts.push(`${Number(item.spotifyFollowers).toLocaleString()} followers`)
+      return parts.join(' · ') || null
+    }
+    case 'playlists': {
+      const parts: string[] = []
+      if (item.platform) parts.push(String(item.platform))
+      if (item.ownerName) parts.push(String(item.ownerName))
+      return parts.join(' · ') || null
+    }
+    case 'curators': {
+      const parts: string[] = []
+      if (item.platform) parts.push(String(item.platform))
+      if (item.numPlaylists != null) parts.push(`${item.numPlaylists} playlists`)
+      return parts.join(' · ') || null
+    }
+    case 'albums': {
+      const albumArtists = item.artists as Array<{ name: string }> | undefined
+      const parts: string[] = []
+      const artistStr = albumArtists?.map((a) => a.name).join(', ')
+      if (artistStr) parts.push(artistStr)
+      if (item.releaseDate) parts.push(String(item.releaseDate).slice(0, 4))
+      return parts.join(' · ') || null
+    }
+    case 'stations': {
+      return [item.genre, item.country].filter(Boolean).join(' · ') || null
+    }
+    case 'cities': {
+      return [item.country, item.code2].filter(Boolean).join(' · ') || null
+    }
+    default:
+      return null
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ResultRow({ item, bucket }: { item: any; bucket: string }) {
-  const name = item.name ?? item.title ?? item.id ?? '—'
-  const sub =
-    bucket === 'tracks'
-      ? item.artists?.map((a: any) => a.name).join(', ')
-      : item.description ?? item.genre ?? null
+  const name = String(item.name ?? item.title ?? item.id ?? '—')
+  const sub = getSubtitle(bucket, item)
   const href = getHref(bucket, item)
+  const imageUrl = typeof item.imageUrl === 'string' ? item.imageUrl : null
 
   return (
     <div className="flex items-center gap-3 border-b border-white/10 px-4 py-3 transition-colors last:border-0 hover:bg-white/[0.03]">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-sm text-zinc-300">
-        {bucketIcon(bucket)}
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-white/[0.04] text-sm text-zinc-300">
+        {imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          bucketIcon(bucket)
+        )}
       </div>
 
       <div className="min-w-0 flex-1">

@@ -7,6 +7,19 @@ interface CompanionMessageProps {
   className?: string
 }
 
+/** Strip common Markdown syntax so LLM-generated messages never render as `**raw**` literals. */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, '')       // ## headings
+    .replace(/\*\*(.+?)\*\*/g, '$1')   // **bold**
+    .replace(/\*(.+?)\*/g, '$1')       // *italic*
+    .replace(/`{1,3}([^`]+)`{1,3}/g, '$1') // `code` / ```code```
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // [link](url)
+    .replace(/^[-*+]\s+/gm, '')        // - list items
+    .replace(/\n{3,}/g, '\n\n')        // collapse excessive blank lines
+    .trim()
+}
+
 const TYPE_CONFIG = {
   insight: {
     border: 'border-emerald-400/20',
@@ -49,6 +62,7 @@ export function CompanionMessage({
   className = '',
 }: CompanionMessageProps) {
   const cfg = TYPE_CONFIG[type]
+  const safeMessage = stripMarkdown(message)
 
   if (compact) {
     return (
@@ -62,7 +76,7 @@ export function CompanionMessage({
         >
           {cfg.icon}
         </span>
-        <span>{message}</span>
+        <span>{safeMessage}</span>
       </p>
     )
   }
@@ -84,7 +98,7 @@ export function CompanionMessage({
           <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
             {cfg.label}
           </p>
-          <p className={`mt-1 text-sm leading-6 ${cfg.text}`}>{message}</p>
+          <p className={`mt-1 text-sm leading-6 ${cfg.text}`}>{safeMessage}</p>
         </div>
       </div>
     </div>
