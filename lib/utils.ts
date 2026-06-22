@@ -54,6 +54,27 @@ function getClassBase(cls: string): string {
 
 // ─── Number formatting ───────────────────────────────────────────────────────
 
+/**
+ * Formats a raw platform metric value (from a string or number API field) for
+ * display in a platform bar row.
+ *
+ * Returns '—' when:
+ *   - the value is null / undefined / empty string
+ *   - the numeric equivalent is 0 (explicit "no data" sentinel used by scouts)
+ *
+ * Non-numeric strings are passed through as-is (e.g. 'Pop 85' Spotify fallback).
+ */
+export function formatPlatformMetric(v: string | number | null | undefined): string {
+  if (v == null || v === '' || v === '0' || v === 0) return '—'
+  const n = typeof v === 'number' ? v : Number(v)
+  if (Number.isNaN(n)) return String(v)
+  const abs = Math.abs(n)
+  if (abs >= 1_000_000_000) return `${(abs / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}B`
+  if (abs >= 1_000_000) return `${(abs / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+  if (abs >= 1_000) return `${(abs / 1_000).toFixed(1).replace(/\.0$/, '')}K`
+  return abs.toLocaleString()
+}
+
 export function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined || isNaN(value)) return '—'
 

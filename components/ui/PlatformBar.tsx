@@ -1,4 +1,5 @@
 import React from 'react'
+import { formatPlatformMetric } from '@/lib/utils'
 
 interface PlatformBarProps {
   platform: 'tiktok' | 'spotify' | 'youtube' | 'instagram' | 'luminate' | 'shazam'
@@ -47,19 +48,6 @@ const PLATFORM_CONFIG = {
   },
 } as const
 
-function formatValue(v: string | number | null): string {
-  if (v == null || v === '' || v === '0' || v === 0) return '—'
-
-  const n = Number(v)
-  if (Number.isNaN(n)) return String(v)
-
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-
-  return n.toLocaleString()
-}
-
 function barWidth(v: string | number | null, max: number): number {
   const n = Number(v ?? 0)
   if (!n || !max) return 0
@@ -75,7 +63,7 @@ export function PlatformBar({
   className = '',
 }: PlatformBarProps) {
   const cfg = PLATFORM_CONFIG[platform]
-  const display = formatValue(value)
+  const display = formatPlatformMetric(value)
   const hasData = display !== '—'
   const width = hasData ? barWidth(value, maxValue) : 0
   const velocity =
@@ -110,6 +98,8 @@ export function PlatformBar({
                 className={`text-[11px] font-medium tabular-nums ${
                   hasData ? 'text-zinc-200' : 'text-zinc-600'
                 }`}
+                title={!hasData ? `No ${cfg.label} data available` : undefined}
+                aria-label={hasData ? `${cfg.label}: ${display}` : `${cfg.label}: no data`}
               >
                 {display}
               </span>

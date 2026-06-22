@@ -347,21 +347,34 @@ export async function hydrateInternalStreaming(
   const trackIds = tracks.map((t) => t.trackId).filter((id) => id > 0)
   if (!trackIds.length) return tracks
 
+  // ── TrackStatisticsLatest: YouTube views + Spotify popularity ─────────────
   const statsRows = await db.trackStatisticsLatest.findMany({
     where: { trackId: { in: trackIds } },
-    select: { trackId: true, youtubeViews: true },
+    select: { trackId: true, youtubeViews: true, spotifyPopularity: true },
   })
 
   const youtubeByTrack = new Map<number, string>()
+  const spotifyPopularityByTrack = new Map<number, number>()
   for (const r of statsRows) {
     if (r.youtubeViews != null) youtubeByTrack.set(r.trackId, String(r.youtubeViews))
+    if (r.spotifyPopularity != null) spotifyPopularityByTrack.set(r.trackId, r.spotifyPopularity)
   }
 
-  const instagramRows = await db.trackPlatformStatsDaily.groupBy({
-    by: ['trackId'],
-    where: { platform: 'instagram', trackId: { in: trackIds } },
-    _sum: { videoViews: true },
-  })
+  // ── TrackPlatformStatsDaily: Instagram plays + Spotify streams ────────────
+  // Run both platform queries in parallel. Spotify uses _max(streams) to
+  // surface the track's peak daily stream count as a streaming-momentum signal.
+  const [instagramRows, spotifyRows] = await Promise.all([
+    db.trackPlatformStatsDaily.groupBy({
+      by: ['trackId'],
+      where: { platform: 'instagram', trackId: { in: trackIds } },
+      _sum: { videoViews: true },
+    }),
+    db.trackPlatformStatsDaily.groupBy({
+      by: ['trackId'],
+      where: { platform: 'spotify', trackId: { in: trackIds } },
+      _max: { streams: true },
+    }),
+  ])
 
   const instagramByTrack = new Map<number, string>()
   for (const r of instagramRows) {
@@ -370,10 +383,19 @@ export async function hydrateInternalStreaming(
     }
   }
 
+  const spotifyStreamsByTrack = new Map<number, string>()
+  for (const r of spotifyRows) {
+    if (r._max.streams != null) {
+      spotifyStreamsByTrack.set(r.trackId, String(r._max.streams))
+    }
+  }
+
   return tracks.map((t) => ({
     ...t,
     youtubeViews: youtubeByTrack.get(t.trackId) ?? t.youtubeViews,
     instagramPlays: instagramByTrack.get(t.trackId) ?? t.instagramPlays,
+    spotifyStreamsLatest: spotifyStreamsByTrack.get(t.trackId) ?? t.spotifyStreamsLatest,
+    spotifyPopularity: spotifyPopularityByTrack.get(t.trackId) ?? t.spotifyPopularity,
   }))
 }
 
