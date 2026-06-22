@@ -1,14 +1,8 @@
-// lib/jobs/tracker.ts
-//
-// Wraps ingest/ETL entrypoints so every execution is recorded in job_runs:
-// status, duration, rows written, and the error when one occurs. Powers the
-// pipeline-status endpoint, the Analytics ops panel, and staleness checks.
-//
-// Tracking is best-effort by design — a broken DB connection must surface as
-// the job's own failure, not as a tracker crash masking it.
 import { db } from '@/lib/db';
 
 export type JobResult = Record<string, unknown> & { rowsWritten?: number };
+
+const CONSECUTIVE_FAILURE_THRESHOLD = 3;
 
 export async function runTrackedJob<T extends JobResult | void>(
   jobName: string,
@@ -66,6 +60,27 @@ export async function runTrackedJob<T extends JobResult | void>(
           },
         })
         .catch(() => {});
+
+      try {
+        const recentRuns = await db.jobRun.findMany({
+          where: { jobName, status: { in: ['success', 'failed'] } },
+          orderBy: { startedAt: 'desc' },
+          take: CONSECUTIVE_FAILURE_THRESHOLD,
+          select: { status: true },
+        });
+
+        if (
+          recentRuns.length >= CONSECUTIVE_FAILURE_THRESHOLD &&
+          recentRuns.every((r) => r.status === 'failed')
+        ) {
+          console.error(
+            `[job-tracker] CONSECUTIVE_FAILURE_ALERT: ${jobName} has failed ${recentRuns.length} consecutive times`,
+            JSON.stringify({ jobName, consecutiveFailures: recentRuns.length }),
+          );
+        }
+      } catch {
+        // best-effort — do not mask the original job error
+      }
     }
     throw err;
   }

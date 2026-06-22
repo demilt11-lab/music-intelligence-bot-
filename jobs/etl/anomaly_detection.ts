@@ -53,13 +53,8 @@ async function detectMetricAnomalies(
     const sev = severity(z);
     if (!sev) continue;
 
-    await (db as any).anomalyLog.upsert({
-      where: {
-        // no unique constraint — just create
-        id: -1,
-      },
-      update: {},
-      create: {
+    await db.anomalyLog.create({
+      data: {
         trackId,
         metric,
         zScore: z,
@@ -69,20 +64,7 @@ async function detectMetricAnomalies(
         severity: sev,
         detectedAt: today,
       },
-    }).catch(() =>
-      (db as any).anomalyLog.create({
-        data: {
-          trackId,
-          metric,
-          zScore: z,
-          currentValue: todayPoint.value,
-          baselineMean: mean,
-          baselineStd: std,
-          severity: sev,
-          detectedAt: today,
-        },
-      }),
-    );
+    });
 
     detected++;
 
@@ -122,7 +104,7 @@ async function main() {
   console.log(`[anomaly] Running detection for ${today.toISOString().slice(0, 10)}`);
 
   // TikTok views velocity
-  const ugcRows = await (db as any).ugcTrackMetric.findMany({
+  const ugcRows = await db.ugcTrackMetrics.findMany({
     where: { date: { gte: cutoff } },
     select: { trackId: true, views7d: true, date: true },
   }) as Array<{ trackId: number; views7d: bigint | number; date: Date }>;
@@ -161,7 +143,7 @@ async function main() {
   await detectMetricAnomalies('chart_rank_inverted', chartPoints, today);
 
   // Viral score spikes
-  const vsRows = await (db as any).talentScoutScore.findMany({
+  const vsRows = await db.talentScoutScore.findMany({
     where: { date: { gte: cutoff }, code2: 'GLOBAL' },
     select: { trackId: true, viralScore: true, date: true },
   }) as Array<{ trackId: number; viralScore: number; date: Date }>;

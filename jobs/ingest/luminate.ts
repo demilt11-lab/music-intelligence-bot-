@@ -166,6 +166,13 @@ async function main(): Promise<{ rowsWritten: number }> {
       `airplay=${airplayWritten} errors=${errors}`,
   );
 
+  const maxPossibleErrors = externalIds.length * 3;
+  if (maxPossibleErrors > 0 && errors / maxPossibleErrors > 0.5) {
+    throw new Error(
+      `[luminate] Error rate ${errors}/${maxPossibleErrors} (${Math.round((errors / maxPossibleErrors) * 100)}%) exceeded 50% threshold — marking job failed`,
+    );
+  }
+
   if (errors > 0) {
     console.warn(`[luminate] Completed with ${errors} error(s)`);
   }
