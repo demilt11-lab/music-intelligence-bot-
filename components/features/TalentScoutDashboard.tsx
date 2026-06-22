@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { CompanionHeader } from '@/components/talent-scout/CompanionHeader';
 import { ScoutTrackCard, ScoutTrack } from '@/components/talent-scout/ScoutTrackCard';
 import { StatCard } from '@/components/ui/StatCard';
 import { TrackCardSkeleton } from '@/components/ui/Skeleton';
 import { formatNumber } from '@/lib/utils';
+import { sortTracks, type SortKey } from '@/lib/talentScout/sort';
 
 type ApiResponse = {
   obj: (ScoutTrack & { totalScore: number })[];
@@ -32,6 +33,7 @@ export function TalentScoutDashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'ugc_early' | 'general'>('ugc_early');
+  const [sortKey, setSortKey] = useState<SortKey>('breakout');
   const [code2, setCode2] = useState('US');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
@@ -58,6 +60,8 @@ export function TalentScoutDashboard() {
 
   useEffect(() => { void fetchData(); }, [fetchData]);
 
+  const sortedData = useMemo(() => sortTracks(data, sortKey), [data, sortKey]);
+
   const hotCount = data.filter((t) => t.totalScore >= 0.5).length;
   const risingCount = data.filter((t) => t.totalScore >= 0.25 && t.totalScore < 0.5).length;
   const avgScore = avg(data.map((t) => t.totalScore));
@@ -69,8 +73,10 @@ export function TalentScoutDashboard() {
         hotCount={hotCount}
         mode={mode}
         code2={code2}
+        sortKey={sortKey}
         onModeChange={setMode}
         onMarketChange={setCode2}
+        onSortChange={setSortKey}
         onRefresh={fetchData}
         isLoading={isLoading}
       />
@@ -153,7 +159,7 @@ export function TalentScoutDashboard() {
         {/* Grid view */}
         {!isLoading && !error && data.length > 0 && viewMode === 'grid' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {data.map((track, idx) => (
+            {sortedData.map((track, idx) => (
               <ScoutTrackCard key={track.trackId} track={track} index={idx} />
             ))}
           </div>
@@ -175,7 +181,7 @@ export function TalentScoutDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.map((track, idx) => {
+                  {sortedData.map((track, idx) => {
                     const scoreColor = track.totalScore >= 0.5 ? 'text-amber-400' : track.totalScore >= 0.25 ? 'text-emerald-400' : 'text-slate-400';
                     return (
                       <tr

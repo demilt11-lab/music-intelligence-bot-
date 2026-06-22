@@ -1,14 +1,17 @@
 'use client'
 
 import React from 'react'
+import { SORT_KEYS, SORT_LABELS, type SortKey } from '@/lib/talentScout/sort'
 
 interface CompanionHeaderProps {
   trackCount: number
   hotCount: number
   mode: 'ugc_early' | 'general'
   code2: string
+  sortKey: SortKey
   onModeChange: (m: 'ugc_early' | 'general') => void
   onMarketChange: (m: string) => void
+  onSortChange: (key: SortKey) => void
   onRefresh: () => void
   isLoading: boolean
 }
@@ -49,8 +52,10 @@ export function CompanionHeader({
   hotCount,
   mode,
   code2,
+  sortKey,
   onModeChange,
   onMarketChange,
+  onSortChange,
   onRefresh,
   isLoading,
 }: CompanionHeaderProps) {
@@ -197,15 +202,30 @@ export function CompanionHeader({
               </select>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-              {['Breakout velocity', 'Playlist fit', 'Artist consistency'].map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] text-zinc-400"
-                >
-                  {tag}
-                </span>
-              ))}
+            <div
+              className="flex flex-wrap items-center gap-2 lg:justify-end"
+              role="group"
+              aria-label="Sort tracks by"
+            >
+              {SORT_KEYS.map((key) => {
+                const active = sortKey === key
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => onSortChange(key)}
+                    aria-pressed={active}
+                    className={[
+                      'rounded-full border px-3 py-1.5 text-[11px] transition',
+                      active
+                        ? 'border-cyan-400/20 bg-cyan-500/10 text-cyan-300'
+                        : 'border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white',
+                    ].join(' ')}
+                  >
+                    {SORT_LABELS[key]}
+                  </button>
+                )
+              })}
             </div>
           </div>
         </div>

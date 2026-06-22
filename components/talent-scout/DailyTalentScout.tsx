@@ -5,6 +5,7 @@ import { CompanionHeader } from './CompanionHeader'
 import { ScoutTrackCard, type ScoutTrack } from './ScoutTrackCard'
 import { TrackCardSkeleton } from '@/components/ui/Skeleton'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
+import { sortTracks, type SortKey } from '@/lib/talentScout/sort'
 
 type ApiResponse = {
   obj: ScoutTrack[]
@@ -54,6 +55,7 @@ export function DailyTalentScout() {
   const [isLoading, setIsLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [mode, setMode] = React.useState<'ugc_early' | 'general'>('ugc_early')
+  const [sortKey, setSortKey] = React.useState<SortKey>('breakout')
   const [code2, setCode2] = React.useState('US')
   const [dataSource, setDataSource] = React.useState<string | null>(null)
   const [isSignalBacked, setIsSignalBacked] = React.useState(true)
@@ -94,7 +96,11 @@ export function DailyTalentScout() {
     void fetchData()
   }, [fetchData])
 
+  // Client-side re-order based on the active sort key.
+  const sortedData = React.useMemo(() => sortTracks(data, sortKey), [data, sortKey])
+
   // Conviction tiers only mean something when the batch is signal-backed.
+  // Count against the full (unsorted) set so the numbers never change on sort.
   const hotCount = isSignalBacked
     ? data.filter((t) => t.totalScore >= 0.5).length
     : null
@@ -102,6 +108,7 @@ export function DailyTalentScout() {
   const highConvictionCount = isSignalBacked
     ? data.filter((t) => t.totalScore >= 0.7).length
     : null
+  // topTrack is always the AI's #1 pick by totalScore, independent of sort choice.
   const topTrack = data[0]
   const sourceNote = dataSource ? SOURCE_NOTES[dataSource] : undefined
 
@@ -115,8 +122,10 @@ export function DailyTalentScout() {
         hotCount={hotCount ?? 0}
         mode={mode}
         code2={code2}
+        sortKey={sortKey}
         onModeChange={setMode}
         onMarketChange={setCode2}
+        onSortChange={setSortKey}
         onRefresh={fetchData}
         isLoading={isLoading}
       />
@@ -273,7 +282,7 @@ export function DailyTalentScout() {
               className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3"
               aria-label={`${data.length} tracks`}
             >
-              {data.map((track, idx) => (
+              {sortedData.map((track, idx) => (
                 <ScoutTrackCard key={track.trackId} track={track} index={idx} />
               ))}
             </div>
