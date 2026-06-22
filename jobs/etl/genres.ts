@@ -59,7 +59,7 @@ async function loadTrackGenres(trackIds: number[]): Promise<Map<number, string>>
   return out;
 }
 
-export async function runGenreEtl(referenceDate?: string) {
+export async function runGenreEtl(referenceDate?: string): Promise<{ rowsWritten: number }> {
   const today = referenceDate ? new Date(referenceDate) : new Date();
   if (Number.isNaN(today.getTime())) {
     throw new Error(`Invalid reference date: ${referenceDate}`);
@@ -70,17 +70,19 @@ export async function runGenreEtl(referenceDate?: string) {
   const fourteenDaysAgo = new Date(sevenDaysAgo);
   fourteenDaysAgo.setUTCDate(sevenDaysAgo.getUTCDate() - 7);
 
-  await aggregateUgcGenre(date);
-  await aggregatePlaylistGenre(date, sevenDaysAgo, fourteenDaysAgo);
-  await aggregateAirplayGenre(date, sevenDaysAgo, fourteenDaysAgo);
+  const ugcRows = await aggregateUgcGenre(date);
+  const playlistRows = await aggregatePlaylistGenre(date, sevenDaysAgo, fourteenDaysAgo);
+  const airplayRows = await aggregateAirplayGenre(date, sevenDaysAgo, fourteenDaysAgo);
+
+  return { rowsWritten: ugcRows + playlistRows + airplayRows };
 }
 
 /** UGC: roll UgcTrackMetrics (already 7d windows) up to genre level. */
-async function aggregateUgcGenre(date: Date) {
+async function aggregateUgcGenre(date: Date): Promise<number> {
   const ugc = await db.ugcTrackMetrics.findMany({ where: { date } });
   if (!ugc.length) {
     console.log('[genre-etl] no UgcTrackMetrics for date - skipping UGC rollup');
-    return;
+    return 0;
   }
 
   const genreByTrack = await loadTrackGenres(ugc.map((u) => u.trackId));
@@ -125,6 +127,7 @@ async function aggregateUgcGenre(date: Date) {
   }
 
   console.log(`[genre-etl] UGC rollup wrote ${byKey.size} genre rows`);
+  return byKey.size;
 }
 
 /** Spotify streams + playlist adds per genre over the trailing 7 days. */
@@ -132,7 +135,7 @@ async function aggregatePlaylistGenre(
   date: Date,
   sevenDaysAgo: Date,
   fourteenDaysAgo: Date,
-) {
+): Promise<number> {
   const window = async (gte: Date, lt: Date) =>
     db.trackPlatformStatsDaily.groupBy({
       by: ['trackId'],
@@ -147,7 +150,7 @@ async function aggregatePlaylistGenre(
 
   if (!current.length) {
     console.log('[genre-etl] no spotify daily stats in window - skipping playlist rollup');
-    return;
+    return 0;
   }
 
   const genreByTrack = await loadTrackGenres(current.map((r) => r.trackId));
@@ -193,6 +196,7 @@ async function aggregatePlaylistGenre(
   }
 
   console.log(`[genre-etl] playlist rollup wrote ${currByGenre.size} genre rows`);
+  return currByGenre.size;
 }
 
 /** US radio spins/audience per genre from Luminate airplay facts. */
@@ -200,7 +204,7 @@ async function aggregateAirplayGenre(
   date: Date,
   sevenDaysAgo: Date,
   fourteenDaysAgo: Date,
-) {
+): Promise<number> {
   const loadWindow = (gte: Date, lt: Date) =>
     db.luminateAirplay.findMany({
       where: {
@@ -218,7 +222,7 @@ async function aggregateAirplayGenre(
 
   if (!current.length) {
     console.log('[genre-etl] no Luminate airplay in window - skipping airplay rollup');
-    return;
+    return 0;
   }
 
   const genreByTrack = await loadTrackGenres(
@@ -267,12 +271,13 @@ async function aggregateAirplayGenre(
   }
 
   console.log(`[genre-etl] airplay rollup wrote ${currByKey.size} genre rows`);
+  return currByKey.size;
 }
 
 if (require.main === module) {
   runTrackedJob('etl:genres', () => runGenreEtl(process.argv[2]))
-    .then(() => {
-      console.log('Genre ETL complete');
+    .then(({ rowsWritten }) => {
+      console.log(`Genre ETL complete (${rowsWritten} rows)`);
       process.exit(0);
     })
     .catch((err) => {

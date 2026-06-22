@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 export type JobResult = Record<string, unknown> & { rowsWritten?: number };
 
 const CONSECUTIVE_FAILURE_THRESHOLD = 3;
+const ZERO_ROW_ALERT_THRESHOLD = 3;
 
 export async function runTrackedJob<T extends JobResult | void>(
   jobName: string,
@@ -30,6 +31,41 @@ export async function runTrackedJob<T extends JobResult | void>(
         result && typeof result === 'object' && 'rowsWritten' in result
           ? Number((result as JobResult).rowsWritten ?? 0)
           : extractRowCount(result);
+
+      if (rowsWritten === 0) {
+        try {
+          const priorRuns = await db.jobRun.findMany({
+            where: {
+              jobName,
+              id: { not: runId },
+              status: { in: ['success', 'failed'] },
+            },
+            orderBy: { startedAt: 'desc' },
+            take: ZERO_ROW_ALERT_THRESHOLD - 1,
+            select: { rowsWritten: true },
+          });
+
+          const priorZeros = priorRuns.filter((r) => (r.rowsWritten ?? 0) === 0).length;
+
+          if (
+            priorRuns.length >= ZERO_ROW_ALERT_THRESHOLD - 1 &&
+            priorZeros === ZERO_ROW_ALERT_THRESHOLD - 1
+          ) {
+            throw new Error(
+              `ZERO_ROW_ALERT: ${jobName} has written 0 rows for ${ZERO_ROW_ALERT_THRESHOLD} consecutive runs`,
+            );
+          }
+
+          if (priorZeros > 0) {
+            console.warn(
+              `[job-tracker] zero-row warning: ${jobName} wrote 0 rows (${priorZeros + 1} consecutive)`,
+            );
+          }
+        } catch (zeroErr) {
+          if ((zeroErr as Error).message?.startsWith('ZERO_ROW_ALERT')) throw zeroErr;
+          console.warn(`[job-tracker] could not check zero-row threshold for ${jobName}:`, zeroErr);
+        }
+      }
 
       await db.jobRun
         .update({

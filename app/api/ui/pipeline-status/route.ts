@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireSession, AuthError } from '@/lib/auth/guard';
+import { freshnessStatus, FRESHNESS_SLA_HOURS } from '@/lib/jobs/freshness';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
   try {
     await requireSession(req);
 
-    const [latestRuns, recentFailures, lastReconcile] = await Promise.all([
+    const [latestRuns, recentFailures, lastReconcile, latestUgcDate, latestUgcGenreDate, latestPlaylistGenreDate] = await Promise.all([
       db.$queryRawUnsafe<
         {
           jobName: string;
@@ -48,13 +49,33 @@ export async function GET(req: NextRequest) {
         orderBy: { startedAt: 'desc' },
         select: { startedAt: true, status: true, meta: true },
       }),
+      db.ugcTrackMetrics.findFirst({
+        orderBy: { date: 'desc' },
+        select: { date: true },
+      }),
+      db.ugcGenreMetrics.findFirst({
+        orderBy: { date: 'desc' },
+        select: { date: true },
+      }),
+      db.genrePlaylistMetrics.findFirst({
+        orderBy: { date: 'desc' },
+        select: { date: true },
+      }),
     ]);
+
+    const freshness = {
+      slaHours: FRESHNESS_SLA_HOURS,
+      ugcTrackMetrics: freshnessStatus(latestUgcDate?.date),
+      ugcGenreMetrics: freshnessStatus(latestUgcGenreDate?.date),
+      genrePlaylistMetrics: freshnessStatus(latestPlaylistGenreDate?.date),
+    };
 
     return NextResponse.json({
       obj: {
         jobs: latestRuns,
         recentFailures,
         lastReconcile,
+        freshness,
       },
     });
   } catch (err) {
