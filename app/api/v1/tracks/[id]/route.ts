@@ -31,7 +31,24 @@ export async function GET(req: NextRequest, props: RouteParams) {
       return NextResponse.json({ error: 'Track not found' }, { status: 404 });
     }
 
-    const res = NextResponse.json({ obj: track }, { status: 200 });
+    const obj = {
+      id: track.id,
+      title: track.title,
+      isrc: track.isrc ?? null,
+      releaseDate: track.releaseDate ?? null,
+      artists: track.trackArtists.map((ta) => ({
+        id: ta.artist.id,
+        name: ta.artist.name,
+        country: ta.artist.country ?? null,
+        followersCount: ta.artist.followersCount?.toString() ?? null,
+      })),
+      externalIds: track.externalIds.map((e) => ({
+        platform: e.platform,
+        externalId: e.externalId,
+      })),
+    };
+
+    const res = NextResponse.json({ obj }, { status: 200 });
     await logRequest(ctx, '/api/v1/tracks/[id]', 'GET', 200, startedAt);
     return res;
   } catch (err: any) {
