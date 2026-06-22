@@ -22,6 +22,24 @@ function formatModeLabel(mode: 'ugc_early' | 'general') {
   return mode === 'ugc_early' ? 'Early UGC Breakouts' : 'General Momentum'
 }
 
+const MODE_LENS_CONTEXT: Record<
+  'ugc_early' | 'general',
+  { arRead: string; recommendedMove: string }
+> = {
+  ugc_early: {
+    arRead:
+      'Focus on records that are gaining attention early without needing full platform saturation. This view is best for finding movement before the wider market reacts.',
+    recommendedMove:
+      'Shortlist the top signals, review artist consistency, then route the strongest names into playlist, curator, and campaign analysis.',
+  },
+  general: {
+    arRead:
+      'Review tracks building momentum across all platforms, including records already in the mainstream cycle. Use this view for a broader market scan beyond early-breakout signals.',
+    recommendedMove:
+      'Compare momentum scores across platforms and filter by market alignment, then prioritize based on overall trajectory rather than early-breakout status alone.',
+  },
+}
+
 const SOURCE_NOTES: Record<string, string> = {
   charts:
     'Live UGC breakout signals are not available for this market yet, so Buddy is showing recent chart activity instead. Treat these as established popularity, not breakout discoveries.',
@@ -278,17 +296,14 @@ export function DailyTalentScout() {
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs font-medium text-zinc-400">A&R read</p>
                 <p className="mt-1 text-sm leading-6 text-zinc-300">
-                  Focus on records that are gaining attention early without needing full
-                  platform saturation. This view is best for finding movement before the
-                  wider market reacts.
+                  {MODE_LENS_CONTEXT[mode].arRead}
                 </p>
               </div>
 
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs font-medium text-zinc-400">Recommended move</p>
                 <p className="mt-1 text-sm leading-6 text-zinc-300">
-                  Shortlist the top signals, review artist consistency, then route the
-                  strongest names into playlist, curator, and campaign analysis.
+                  {MODE_LENS_CONTEXT[mode].recommendedMove}
                 </p>
               </div>
             </div>

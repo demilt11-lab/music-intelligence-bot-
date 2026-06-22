@@ -101,3 +101,56 @@ test('rights complexity adds a cleanup action for signal tracks', () => {
   const [ranked] = rankTalentTracks([t], 'ugc_early');
   assert.ok(ranked.actions.some((a) => a.type === 'rights_cleanup'));
 });
+
+// ── Lens-state coverage (BUG-03) ──────────────────────────────────────────
+
+test('general lens weights YouTube signal more heavily than ugc_early', () => {
+  // A track with meaningful YouTube views but zero TikTok activity.
+  // general weights YouTube at 0.15 vs ugc_early at 0.10, so its score
+  // must be strictly higher under general mode.
+  const track = makeTrack({ trackId: 1, youtubeViews: '5000000', tiktokVelocity: 0, tiktokScore: 0 });
+
+  const [ugcResult] = rankTalentTracks([track], 'ugc_early');
+  const [generalResult] = rankTalentTracks([track], 'general');
+
+  assert.ok(
+    generalResult.totalScore > ugcResult.totalScore,
+    `general score (${generalResult.totalScore}) should exceed ugc_early score (${ugcResult.totalScore}) for a YouTube-heavy track`,
+  );
+});
+
+test('general lens does not apply baseline size penalty', () => {
+  // A large-catalog track (>20M combined streams) is penalised in ugc_early
+  // (both filtered AND penalised) but in general mode it passes through and
+  // carries no baseline penalty — so its score must be strictly positive.
+  const track = makeTrack({
+    trackId: 2,
+    spotifyStreamsLatest: '30000000',
+    tiktokVelocity: 50,
+    tiktokScore: 0.4,
+  });
+
+  const ugcRanked = rankTalentTracks([track], 'ugc_early');
+  const [generalResult] = rankTalentTracks([track], 'general');
+
+  assert.equal(ugcRanked.length, 0, 'ugc_early should filter out the over-threshold track');
+  assert.ok(generalResult.totalScore > 0, 'general mode should score the track positively');
+});
+
+test('both lens mode strings produce distinct totalScore distributions', () => {
+  // ugc_early applies a rightsPenalty of (rightsComplexityScore * 0.1) that
+  // general mode does NOT apply. Track Y has higher raw TikTok velocity but
+  // also max rights complexity, so:
+  //   ugc_early: X (0.28) > Y (0.35 − 0.10 = 0.25)  → order [X, Y]
+  //   general:   Y (0.30) > X (0.24)                  → order [Y, X]
+  const tracks = [
+    makeTrack({ trackId: 10, tiktokVelocity: 80, rightsComplexityScore: 0 }),   // Track X
+    makeTrack({ trackId: 11, tiktokVelocity: 100, rightsComplexityScore: 1.0 }), // Track Y
+  ];
+
+  const ugcOrder = rankTalentTracks(tracks, 'ugc_early').map((t) => t.trackId);
+  const generalOrder = rankTalentTracks(tracks, 'general').map((t) => t.trackId);
+
+  assert.deepEqual(ugcOrder, [10, 11], 'ugc_early should rank the low-rights track first');
+  assert.deepEqual(generalOrder, [11, 10], 'general should rank the high-velocity track first (no rights penalty)');
+});
