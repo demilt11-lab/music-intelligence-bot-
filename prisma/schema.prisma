@@ -442,6 +442,12 @@ model ExternalId {
   platform   String
   externalId String
 
+  // POLYMORPHIC association: entityId references a track, artist, album, or
+  // playlist depending on entityType. These relations exist for query
+  // ergonomics (include: { externalIds }), but their DB-level foreign keys are
+  // intentionally DROPPED by migration 20260623000002 — three FKs on one
+  // column made the table impossible to populate. Do NOT re-add the FK
+  // constraints; integrity is enforced in application code.
   track  Track?  @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_ids_track_fk")
   artist Artist? @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_ids_artist_fk")
   album  Album?  @relation(fields: [entityId], references: [id], onDelete: Cascade, map: "external_ids_album_fk")
