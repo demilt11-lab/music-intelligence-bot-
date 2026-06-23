@@ -42,20 +42,60 @@ export function ScoutingWorkflows() {
   const [editing, setEditing] = React.useState(false)
   const [workflows, setWorkflows] = React.useState<Workflow[]>(DEFAULT_WORKFLOWS)
   const [directive, setDirective] = React.useState(DEFAULT_DIRECTIVE)
+  const syncTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Hydrate from localStorage after mount to avoid SSR/client mismatch.
+  // Hydrate after mount (avoids SSR/client mismatch). Prefer per-user server
+  // state; fall back to the local cache, then to defaults.
   React.useEffect(() => {
     setMounted(true)
-    try {
-      const rawWf = window.localStorage.getItem(WORKFLOWS_KEY)
-      if (rawWf) {
-        const parsed = JSON.parse(rawWf) as Workflow[]
-        if (Array.isArray(parsed)) setWorkflows(parsed)
+    let active = true
+
+    function loadLocal() {
+      try {
+        const rawWf = window.localStorage.getItem(WORKFLOWS_KEY)
+        if (rawWf) {
+          const parsed = JSON.parse(rawWf) as Workflow[]
+          if (Array.isArray(parsed)) setWorkflows(parsed)
+        }
+        const rawDir = window.localStorage.getItem(DIRECTIVE_KEY)
+        if (rawDir != null) setDirective(rawDir)
+      } catch {
+        /* corrupt storage — keep defaults */
       }
-      const rawDir = window.localStorage.getItem(DIRECTIVE_KEY)
-      if (rawDir != null) setDirective(rawDir)
-    } catch {
-      /* corrupt storage — fall back to defaults */
+    }
+
+    fetch('/api/ui/scouting-workflows')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (!active) return
+        const data = body?.obj as
+          | {
+              initialized?: boolean
+              directive?: string | null
+              workflows?: { id: number; label: string; href: string | null }[]
+            }
+          | undefined
+        if (data?.initialized) {
+          setWorkflows(
+            (data.workflows ?? []).map((w) => ({
+              id: String(w.id),
+              label: w.label,
+              href: w.href ?? undefined,
+            })),
+          )
+          setDirective(
+            typeof data.directive === 'string' ? data.directive : DEFAULT_DIRECTIVE,
+          )
+        } else {
+          loadLocal()
+        }
+      })
+      .catch(() => {
+        if (active) loadLocal()
+      })
+
+    return () => {
+      active = false
     }
   }, [])
 
@@ -65,6 +105,28 @@ export function ScoutingWorkflows() {
       window.localStorage.setItem(DIRECTIVE_KEY, nextDirective)
     } catch {
       /* storage unavailable (private mode) — keep in-memory only */
+    }
+    // Best-effort server sync, debounced so typing doesn't spam the API.
+    // The local copy is always the offline fallback.
+    if (syncTimer.current) clearTimeout(syncTimer.current)
+    syncTimer.current = setTimeout(() => {
+      void fetch('/api/ui/scouting-workflows', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workflows: next.map((w) => ({ label: w.label, href: w.href ?? null })),
+          directive: nextDirective,
+        }),
+      }).catch(() => {
+        /* offline or unauthenticated — local copy persists */
+      })
+    }, 700)
+  }, [])
+
+  // Flush any pending sync timer on unmount.
+  React.useEffect(() => {
+    return () => {
+      if (syncTimer.current) clearTimeout(syncTimer.current)
     }
   }, [])
 

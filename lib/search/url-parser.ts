@@ -1,5 +1,5 @@
 export type ParsedUrl = {
-  platform: 'spotify' | 'youtube'
+  platform: 'spotify' | 'youtube' | 'apple'
   entityType: 'artist' | 'track' | 'album' | 'playlist'
   id: string
 }
@@ -20,6 +20,10 @@ const SPOTIFY_ENTITY_TYPES = new Set(['artist', 'track', 'album', 'playlist'])
  *   youtube.com/watch?v={id}   (video → track)
  *   youtu.be/{id}              (video → track)
  *   youtube.com/channel/{id}   (channel → artist)
+ *
+ * Apple Music (music.apple.com):
+ *   /{storefront}/artist|song|album|playlist/{slug}/{id}
+ *   album links with ?i={trackId} resolve to the track.
  *
  * Also accepts Spotify URIs (spotify:track:{id}) and internationalized Spotify
  * links (open.spotify.com/intl-xx/track/{id}).
@@ -83,6 +87,30 @@ export function parseSearchUrl(q: string): ParsedUrl | null {
   if (url.hostname === 'youtu.be') {
     const id = url.pathname.slice(1)
     if (id) return { platform: 'youtube', entityType: 'track', id }
+  }
+
+  // ── Apple Music ─────────────────────────────────────────────────────────────
+  //   /{storefront}/artist/{slug}/{id}     /{storefront}/song/{slug}/{id}
+  //   /{storefront}/album/{slug}/{id}[?i=] /{storefront}/playlist/{slug}/{plId}
+  if (url.hostname === 'music.apple.com') {
+    const parts = url.pathname.split('/').filter(Boolean)
+    // Strip the 2-letter storefront prefix (e.g. /us/…) when present.
+    if (parts[0] && /^[a-z]{2}$/i.test(parts[0])) parts.shift()
+    const type = parts[0]
+    const pathId = parts[parts.length - 1]
+    if (!type || !pathId || parts.length < 2) return null
+
+    if (type === 'artist') return { platform: 'apple', entityType: 'artist', id: pathId }
+    if (type === 'song') return { platform: 'apple', entityType: 'track', id: pathId }
+    if (type === 'playlist') return { platform: 'apple', entityType: 'playlist', id: pathId }
+    if (type === 'album') {
+      // A track within an album is addressed by ?i={trackId}.
+      const i = url.searchParams.get('i')
+      return i
+        ? { platform: 'apple', entityType: 'track', id: i }
+        : { platform: 'apple', entityType: 'album', id: pathId }
+    }
+    return null
   }
 
   return null

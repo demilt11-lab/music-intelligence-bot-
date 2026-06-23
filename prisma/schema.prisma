@@ -1625,3 +1625,32 @@ model SongwriterTrack {
   @@id([songwriterId, trackId])
   @@map("songwriter_tracks")
 }
+
+// ─────────────────────────────────────────────
+// Scouting workflows — per-user editable home-page workflow + directive
+// ─────────────────────────────────────────────
+
+model ScoutingWorkflow {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  userId    Int
+  label     String
+  href      String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId, userId])
+  @@map("scouting_workflows")
+}
+
+model ScoutDirective {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int
+  userId    Int
+  text      String
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, userId])
+  @@map("scout_directives")
+}

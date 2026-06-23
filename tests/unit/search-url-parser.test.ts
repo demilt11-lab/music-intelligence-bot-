@@ -192,6 +192,41 @@ test('Spotify internationalized link strips the locale prefix', () => {
   })
 })
 
+// ── Apple Music ────────────────────────────────────────────────────────────────
+
+test('Apple Music artist URL maps to artist', () => {
+  const result = parseSearchUrl('https://music.apple.com/us/artist/taylor-swift/159260351')
+  assert.deepEqual(result, { platform: 'apple', entityType: 'artist', id: '159260351' })
+})
+
+test('Apple Music song URL maps to track', () => {
+  const result = parseSearchUrl('https://music.apple.com/gb/song/anti-hero/1648245169')
+  assert.deepEqual(result, { platform: 'apple', entityType: 'track', id: '1648245169' })
+})
+
+test('Apple Music album URL maps to album', () => {
+  const result = parseSearchUrl('https://music.apple.com/us/album/midnights/1649434004')
+  assert.deepEqual(result, { platform: 'apple', entityType: 'album', id: '1649434004' })
+})
+
+test('Apple Music album URL with ?i= resolves to the track', () => {
+  const result = parseSearchUrl(
+    'https://music.apple.com/us/album/midnights/1649434004?i=1649434009',
+  )
+  assert.deepEqual(result, { platform: 'apple', entityType: 'track', id: '1649434009' })
+})
+
+test('Apple Music playlist URL maps to playlist', () => {
+  const result = parseSearchUrl(
+    'https://music.apple.com/us/playlist/todays-hits/pl.f4d106fed2bd41149aaacabb233eb5eb',
+  )
+  assert.deepEqual(result, {
+    platform: 'apple',
+    entityType: 'playlist',
+    id: 'pl.f4d106fed2bd41149aaacabb233eb5eb',
+  })
+})
+
 // ── looksLikeUrl heuristic ─────────────────────────────────────────────────────
 
 test('looksLikeUrl is true for http(s) URLs', () => {
