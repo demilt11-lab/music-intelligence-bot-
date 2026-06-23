@@ -3,6 +3,8 @@ import { Inter } from 'next/font/google'
 import { headers } from 'next/headers'
 import './globals.css'
 import { ToastProvider } from '@/components/ui/Toast'
+import { AppShell } from '@/components/layout/AppShell'
+import { WebVitals } from '@/components/perf/WebVitals'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -60,10 +62,9 @@ export default async function RootLayout({
         </a>
 
         <ToastProvider>
-          <main id="main-content" className="min-h-screen">
-            {children}
-          </main>
+          <AppShell>{children}</AppShell>
         </ToastProvider>
+        <WebVitals />
       </body>
     </html>
   )

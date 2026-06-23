@@ -51,8 +51,29 @@ export async function GET(req: NextRequest) {
 
     // Provenance of this batch: every tier returns a homogeneous source.
     const dataSource = ranked[0]?.source ?? null
-    const isSignalBacked =
+
+    // Honesty gate: a batch only counts as a live signal if its source is a
+    // signal source AND the rows actually resolved to real tracks. Otherwise
+    // we'd render blank "Unknown" cards while claiming they are signal-backed
+    // (the exact failure QA reported). Surface the resolution outcome instead.
+    const resolvedCount = ranked.filter(
+      (t) => t.name && t.name !== ScoutSources.UNRESOLVED_TRACK_NAME,
+    ).length
+    const nameResolutionRatio = ranked.length ? resolvedCount / ranked.length : 1
+    const namesResolved = nameResolutionRatio >= 0.5
+    const sourceIsSignal =
       dataSource != null && ScoutSources.SIGNAL_SOURCES.has(dataSource)
+    const isSignalBacked = sourceIsSignal && namesResolved
+
+    let dataQualityWarning: string | undefined
+    if (sourceIsSignal && !namesResolved) {
+      dataQualityWarning =
+        'Scout signals were found but could not be matched to known tracks (track ID resolution failure), so they are not shown as live signals. Check ingestion/ETL ID mapping.'
+      console.error(
+        `[talent-scout-daily] name-resolution failure code2=${code2} mode=${mode} ` +
+          `resolved=${resolvedCount}/${ranked.length} dataSource=${dataSource}`,
+      )
+    }
 
     // DB table counts are diagnostics — only pay for them when asked.
     let dbCounts: Record<string, number> | undefined
@@ -82,6 +103,9 @@ export async function GET(req: NextRequest) {
         dataSource,
         isSignalBacked,
         rankedCount: ranked.length,
+        resolvedCount,
+        unresolvedCount: ranked.length - resolvedCount,
+        ...(dataQualityWarning ? { dataQualityWarning } : {}),
         ...(sourceError ? { sourceError } : {}),
         ...(dbCounts ? { dbCounts } : {}),
         description:
@@ -89,8 +113,9 @@ export async function GET(req: NextRequest) {
       },
     }
 
-    // Don't cache transient failures or empty fallback states.
-    if (!debug && !sourceError && ranked.length > 0) {
+    // Don't cache transient failures, empty fallbacks, or unresolved batches —
+    // caching a broken batch would freeze the failure until the TTL expires.
+    if (!debug && !sourceError && ranked.length > 0 && namesResolved) {
       Cache.set(cacheKey, payload, TTL.SHORT)
     }
 

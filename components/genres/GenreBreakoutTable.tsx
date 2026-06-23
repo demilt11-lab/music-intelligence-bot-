@@ -24,12 +24,49 @@ type ApiResponse = {
   meta: { date?: string; usCode2: string };
 };
 
+const REGION_NAMES: Record<string, string> = {
+  US: 'United States',
+  GB: 'United Kingdom',
+  CA: 'Canada',
+  AU: 'Australia',
+  DE: 'Germany',
+  FR: 'France',
+  BR: 'Brazil',
+  MX: 'Mexico',
+  JP: 'Japan',
+  KR: 'South Korea',
+  GLOBAL: 'Global',
+};
+
+function regionLabel(code: string): string {
+  return REGION_NAMES[code] ?? code;
+}
+
 export function GenreBreakoutTable() {
   const [data, setData] = React.useState<GenreSignal[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [usCode2, setUsCode2] = React.useState('US');
+  const [markets, setMarkets] = React.useState<string[]>(['US']);
   const [limit, setLimit] = React.useState('5');
   const [error, setError] = React.useState<string | null>(null);
+
+  // Populate the region dropdown from markets that actually have data.
+  React.useEffect(() => {
+    let active = true;
+    fetch('/api/talent-scout/genres/markets')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (active && Array.isArray(body?.obj) && body.obj.length) {
+          setMarkets(body.obj as string[]);
+        }
+      })
+      .catch(() => {
+        /* keep default ['US'] */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true);
@@ -163,7 +200,7 @@ export function GenreBreakoutTable() {
           label="Home market"
           value={usCode2}
           onChange={setUsCode2}
-          options={[{ value: 'US', label: 'United States' }]}
+          options={markets.map((m) => ({ value: m, label: regionLabel(m) }))}
           className="w-full max-w-xs"
         />
         <Select

@@ -4,6 +4,7 @@ import React from 'react'
 import { ScoreRing } from '@/components/ui/ScoreRing'
 import { PlatformBar } from '@/components/ui/PlatformBar'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
+import { Disclosure } from '@/components/ui/Disclosure'
 
 export type ScoutTrack = {
   trackId: number
@@ -191,12 +192,8 @@ export function ScoutTrackCard({
           </div>
         </div>
 
-        <div className="rounded-[20px] border border-white/10 bg-black/20 p-3">
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-500">
-            Platform read
-          </p>
-
-          <div className="space-y-2">
+        <Disclosure summary="Platform read">
+          <div className="space-y-2 rounded-[20px] border border-white/10 bg-black/20 p-3">
             <PlatformBar
               platform="tiktok"
               value={track.tiktokViews}
@@ -225,7 +222,7 @@ export function ScoutTrackCard({
               maxValue={1_000_000}
             />
           </div>
-        </div>
+        </Disclosure>
 
         {primaryAction ? (
           <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-3">

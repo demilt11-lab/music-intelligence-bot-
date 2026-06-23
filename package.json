@@ -2,6 +2,9 @@
   "name": "music-intelligence-api",
   "version": "0.1.0",
   "private": true,
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
@@ -14,6 +17,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
     "create-tenant": "tsx scripts/create-tenant.ts",
     "create-api-key": "tsx scripts/create-api-key.ts",
     "tenant-automation": "tsx scripts/automation/tenantAutomation.ts",
