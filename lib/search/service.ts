@@ -19,7 +19,8 @@ import {
   queryAlbumByExternalId,
   queryPlaylistByExternalId,
 } from './query';
-import { parseSearchUrl } from './url-parser';
+import { parseSearchUrl, looksLikeUrl } from './url-parser';
+import { badRequest } from '@/lib/shared/errors';
 import {
   normalizeArtist,
   normalizeTrack,
@@ -109,6 +110,14 @@ export async function search(
     const grouped: SearchGroupedResults = {};
     (grouped as Record<string, unknown>)[groupKey] = (rawRows as RawRow[]).map(norm);
     return { obj: grouped };
+  }
+
+  // The query is clearly a link but we couldn't parse it — return a specific,
+  // actionable error instead of a silent zero-result text search.
+  if (looksLikeUrl(q)) {
+    throw badRequest(
+      'That looks like a link, but we could not read it. Paste a full Spotify or YouTube URL (including https://), a Spotify URI (spotify:track:…), or search by name instead.',
+    );
   }
 
   // ── Beta mode: return a flat suggestions list ─────────────────────────────

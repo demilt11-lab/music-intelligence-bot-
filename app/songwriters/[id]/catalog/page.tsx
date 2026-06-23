@@ -1,5 +1,4 @@
 // app/songwriters/[id]/catalog/page.tsx
-import { AppShell } from '../../../ui/components/layout/AppShell';
 import { PageHeader } from '../../../ui/components/layout/PageHeader';
 import { PageSection } from '../../../ui/components/layout/PageSection';
 import { DataTable } from '../../../ui/components/data/DataTable';
@@ -29,7 +28,7 @@ export default async function SongwriterCatalogPage(props: SongwriterCatalogPage
   const catalog = await getSongwriterCatalog(params.id);
 
   return (
-    <AppShell>
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
         title="Songwriter catalog"
         subtitle={`Songwriter ID: ${params.id}`}
@@ -61,6 +60,6 @@ export default async function SongwriterCatalogPage(props: SongwriterCatalogPage
           />
         </PageSection>
       )}
-    </AppShell>
+    </div>
   );
 }

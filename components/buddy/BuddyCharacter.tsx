@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, MotionConfig } from 'framer-motion';
 
 const EQ_BARS = [
   { x: 345, color: '#34D399', dur: 0.9, keys: [0.4, 1, 0.55, 0.85, 0.4] },
@@ -35,6 +35,7 @@ export function BuddyCharacter({
   className?: string;
 }) {
   return (
+    <MotionConfig reducedMotion="user">
     <div className={`relative z-10 flex w-full max-w-[560px] flex-col items-center ${className ?? ''}`}>
       <svg
         viewBox="0 0 480 380"
@@ -218,6 +219,7 @@ export function BuddyCharacter({
         {caption}
       </div>
     </div>
+    </MotionConfig>
   );
 }
 

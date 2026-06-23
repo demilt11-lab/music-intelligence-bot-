@@ -16,6 +16,7 @@ type ApiResponse = {
     dataSource?: string | null
     isSignalBacked?: boolean
     sourceError?: string
+    dataQualityWarning?: string
   }
 }
 
@@ -59,6 +60,7 @@ export function DailyTalentScout() {
   const [code2, setCode2] = React.useState('US')
   const [dataSource, setDataSource] = React.useState<string | null>(null)
   const [isSignalBacked, setIsSignalBacked] = React.useState(true)
+  const [dataWarning, setDataWarning] = React.useState<string | null>(null)
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true)
@@ -82,11 +84,13 @@ export function DailyTalentScout() {
       setData(json.obj.map((t, i) => ({ ...t, rank: i + 1 })))
       setDataSource(json.meta.dataSource ?? null)
       setIsSignalBacked(json.meta.isSignalBacked ?? false)
+      setDataWarning(json.meta.dataQualityWarning ?? null)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load data.'
       setError(message)
       setData([])
       setDataSource(null)
+      setDataWarning(null)
     } finally {
       setIsLoading(false)
     }
@@ -211,18 +215,19 @@ export function DailyTalentScout() {
                   <p className="mt-3 text-sm leading-6 text-zinc-300">
                     {isSignalBacked
                       ? 'This scan is backed by live UGC and ML signals. Conviction scores and recommended moves are active.'
-                      : sourceNote ??
+                      : dataWarning ??
+                        sourceNote ??
                         'Waiting on live scouting signals for this market. Conviction scoring is paused until real data arrives.'}
                   </p>
                 </div>
               </div>
 
-              {!isSignalBacked && data.length > 0 && sourceNote ? (
+              {!isSignalBacked && data.length > 0 && (dataWarning || sourceNote) ? (
                 <div
                   role="status"
                   className="rounded-[18px] border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm leading-6 text-amber-200"
                 >
-                  {sourceNote}
+                  {dataWarning ?? sourceNote}
                 </div>
               ) : null}
             </div>

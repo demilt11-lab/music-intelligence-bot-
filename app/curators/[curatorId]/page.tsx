@@ -1,5 +1,4 @@
 // app/curators/[curatorId]/page.tsx
-import { AppShell } from '../../ui/components/layout/AppShell';
 import { PageHeader } from '../../ui/components/layout/PageHeader';
 import { PageSection } from '../../ui/components/layout/PageSection';
 import { DataTable } from '../../ui/components/data/DataTable';
@@ -26,7 +25,7 @@ export default async function CuratorPage(props: CuratorPageProps) {
   const curator = await getCurator(params.curatorId);
 
   return (
-    <AppShell>
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
         title={curator?.name ?? 'Curator'}
         subtitle={curator?.platform}
@@ -58,6 +57,6 @@ export default async function CuratorPage(props: CuratorPageProps) {
           </PageSection>
         </>
       )}
-    </AppShell>
+    </div>
   );
 }

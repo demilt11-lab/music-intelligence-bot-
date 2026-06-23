@@ -1,5 +1,13 @@
 // lib/talentScout/sources.ts
 import { db } from '@/lib/db'
+import { Prisma } from '@prisma/client'
+
+/**
+ * Placeholder name used when a signal row's trackId cannot be resolved to a
+ * canonical Track. Exported so the API layer can detect unresolved batches and
+ * avoid presenting them as live, signal-backed results.
+ */
+export const UNRESOLVED_TRACK_NAME = 'Unknown'
 
 /**
  * Provenance of a scout result batch. The UI and API surface this so
@@ -91,7 +99,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
 
         return {
           trackId: ugc.trackId,
-          name: info?.name ?? 'Unknown',
+          name: info?.name ?? UNRESOLVED_TRACK_NAME,
           artists: info?.artists ?? [],
           code2: code2 === 'GLOBAL' ? null : code2,
           source: 'ugc_live' as const,
@@ -150,7 +158,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
 
         return {
           trackId: s.trackId,
-          name: info?.name ?? 'Unknown',
+          name: info?.name ?? UNRESOLVED_TRACK_NAME,
           artists: info?.artists ?? [],
           code2: latestScore.code2 === 'GLOBAL' ? null : latestScore.code2,
           source: 'ml_scores' as const,
@@ -175,9 +183,17 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
   // ── Tier 3: raw chart_rows from any ingested platform ──
   console.log('[scout-sources] Tier2 empty, trying Tier3 (chart_rows)...')
 
+  // Honor the requested market here too — previously this fallback ignored
+  // code2 entirely, so a non-US market silently returned US chart rows (or, if
+  // none matched upstream, nothing). GLOBAL means "no country filter".
+  const countryFilter =
+    code2 === 'GLOBAL'
+      ? Prisma.empty
+      : Prisma.sql`AND cs."countryCode" = ${code2}`
+
   const chartTracks = await db.$queryRaw<
     { trackId: number; rank: number; countryCode: string | null }[]
-  >`
+  >(Prisma.sql`
     SELECT DISTINCT ON (cr."trackId")
       cr."trackId",
       cr.rank,
@@ -185,11 +201,14 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
     FROM chart_rows cr
     JOIN chart_snapshots cs ON cs.id = cr."snapshotId"
     WHERE cs.platform IN ('spotify', 'billboard', 'shazam')
+      ${countryFilter}
     ORDER BY cr."trackId", cs."snapshotDate" DESC, cr.rank ASC
     LIMIT ${limit}
-  `
+  `)
 
-  console.log(`[scout-sources] Tier3 chartTracks.length=${chartTracks.length}`)
+  console.log(
+    `[scout-sources] Tier3 chartTracks.length=${chartTracks.length} code2=${code2}`,
+  )
 
   if (chartTracks.length) {
     const trackById = await loadTrackMeta(chartTracks.map((r) => r.trackId))
@@ -199,7 +218,7 @@ export async function fetchTopTiktokBreakoutTracks(opts: {
 
       return {
         trackId: r.trackId,
-        name: info?.name ?? 'Unknown',
+        name: info?.name ?? UNRESOLVED_TRACK_NAME,
         artists: info?.artists ?? [],
         code2: r.countryCode,
         source: 'charts' as const,

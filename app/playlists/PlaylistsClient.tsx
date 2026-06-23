@@ -154,9 +154,14 @@ export default function PlaylistsClient() {
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="Playlist name, curator, or URL…"
+                    placeholder="Playlist name, curator, or Spotify/YouTube URL…"
                     className="h-11 w-full rounded-full border border-white/10 bg-white/5 px-4 text-sm text-zinc-100 placeholder-zinc-500 outline-none transition focus:border-cyan-400/30 focus:bg-white/10"
                   />
+                  <p className="mt-1.5 text-[11px] leading-5 text-zinc-500">
+                    Search by playlist name or curator, or paste a link. Supported links:
+                    Spotify (<span className="text-zinc-400">open.spotify.com/playlist/…</span>)
+                    and YouTube. A pasted link resolves only if that playlist is in our index.
+                  </p>
                 </div>
 
                 <button

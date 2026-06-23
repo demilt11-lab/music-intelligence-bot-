@@ -1,7 +1,5 @@
 // lib/talentScout/genres.ts
-import { PrismaClient } from '@prisma/client'
-
-const db = new PrismaClient()
+import { db } from '@/lib/db'
 
 export type GenreBreakoutSignal = {
   genre: string
@@ -34,6 +32,30 @@ export type GenreBreakoutSignal = {
 type GenreTrendOptions = {
   date?: string
   usCode2?: string
+}
+
+/**
+ * Returns the list of markets that actually have genre data, so the UI can
+ * offer a data-driven region dropdown instead of a hardcoded single option.
+ * 'US' is always included as the canonical home market.
+ */
+export async function getGenreMarkets(): Promise<string[]> {
+  const [playlistCountries, airplayCountries] = await Promise.all([
+    db.genrePlaylistMetrics.findMany({
+      distinct: ['country'],
+      select: { country: true },
+    }),
+    db.genreAirplayMetrics.findMany({
+      distinct: ['country'],
+      select: { country: true },
+    }),
+  ])
+
+  const markets = new Set<string>(['US'])
+  for (const row of playlistCountries) if (row.country) markets.add(row.country)
+  for (const row of airplayCountries) if (row.country) markets.add(row.country)
+
+  return [...markets].sort()
 }
 
 export async function computeGenreBreakouts(

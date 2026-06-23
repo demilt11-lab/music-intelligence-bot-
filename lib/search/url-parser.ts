@@ -21,10 +21,26 @@ const SPOTIFY_ENTITY_TYPES = new Set(['artist', 'track', 'album', 'playlist'])
  *   youtu.be/{id}              (video → track)
  *   youtube.com/channel/{id}   (channel → artist)
  *
+ * Also accepts Spotify URIs (spotify:track:{id}) and internationalized Spotify
+ * links (open.spotify.com/intl-xx/track/{id}).
+ *
  * Returns null for plain text, unsupported hosts, or unrecognised path shapes.
  */
 export function parseSearchUrl(q: string): ParsedUrl | null {
   const trimmed = q.trim()
+
+  // ── Spotify URI (spotify:track:ID) ──────────────────────────────────────────
+  const uriMatch = trimmed.match(
+    /^spotify:(artist|track|album|playlist):([A-Za-z0-9]+)$/i,
+  )
+  if (uriMatch) {
+    return {
+      platform: 'spotify',
+      entityType: uriMatch[1].toLowerCase() as 'artist' | 'track' | 'album' | 'playlist',
+      id: uriMatch[2],
+    }
+  }
+
   if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return null
 
   let url: URL
@@ -37,6 +53,8 @@ export function parseSearchUrl(q: string): ParsedUrl | null {
   // ── Spotify ───────────────────────────────────────────────────────────────
   if (url.hostname === 'open.spotify.com') {
     const parts = url.pathname.split('/').filter(Boolean)
+    // Strip locale prefix in internationalized links, e.g. /intl-de/track/{id}.
+    if (parts[0] && /^intl-[a-z]{2}$/i.test(parts[0])) parts.shift()
     const entityType = parts[0]
     const id = parts[1]
     if (!entityType || !id) return null
@@ -68,4 +86,17 @@ export function parseSearchUrl(q: string): ParsedUrl | null {
   }
 
   return null
+}
+
+/**
+ * Heuristic: does this query look like a link (rather than free-text search)?
+ * Used to give a specific "unsupported link" message instead of silently
+ * returning zero text-search results when a user pastes a URL we can't parse.
+ */
+export function looksLikeUrl(q: string): boolean {
+  const t = q.trim()
+  if (/^https?:\/\//i.test(t)) return true
+  if (/^spotify:/i.test(t)) return true
+  // Bare host + path, e.g. "open.spotify.com/track/x" or "tidal.com/browse/...".
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+\/\S/i.test(t)
 }

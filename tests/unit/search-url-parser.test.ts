@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseSearchUrl } from '@/lib/search/url-parser'
+import { parseSearchUrl, looksLikeUrl } from '@/lib/search/url-parser'
 
 // ── Non-URL inputs ────────────────────────────────────────────────────────────
 
@@ -157,4 +157,59 @@ test('YouTube channel URL maps to artist', () => {
 
 test('YouTube @handle URL (unsupported) returns null', () => {
   assert.equal(parseSearchUrl('https://www.youtube.com/@BillieEilish'), null)
+})
+
+// ── Spotify URI scheme ────────────────────────────────────────────────────────
+
+test('Spotify track URI (spotify:track:ID)', () => {
+  const result = parseSearchUrl('spotify:track:6rqhFgbbKwnb9MLmUQDhG6')
+  assert.deepEqual(result, {
+    platform: 'spotify',
+    entityType: 'track',
+    id: '6rqhFgbbKwnb9MLmUQDhG6',
+  })
+})
+
+test('Spotify playlist URI (spotify:playlist:ID)', () => {
+  const result = parseSearchUrl('spotify:playlist:37i9dQZF1DXcBWIGoYBM5M')
+  assert.deepEqual(result, {
+    platform: 'spotify',
+    entityType: 'playlist',
+    id: '37i9dQZF1DXcBWIGoYBM5M',
+  })
+})
+
+// ── Internationalized Spotify links ───────────────────────────────────────────
+
+test('Spotify internationalized link strips the locale prefix', () => {
+  const result = parseSearchUrl(
+    'https://open.spotify.com/intl-de/track/6rqhFgbbKwnb9MLmUQDhG6',
+  )
+  assert.deepEqual(result, {
+    platform: 'spotify',
+    entityType: 'track',
+    id: '6rqhFgbbKwnb9MLmUQDhG6',
+  })
+})
+
+// ── looksLikeUrl heuristic ─────────────────────────────────────────────────────
+
+test('looksLikeUrl is true for http(s) URLs', () => {
+  assert.equal(looksLikeUrl('https://tidal.com/browse/artist/12345'), true)
+})
+
+test('looksLikeUrl is true for a Spotify URI', () => {
+  assert.equal(looksLikeUrl('spotify:track:6rqhFgbbKwnb9MLmUQDhG6'), true)
+})
+
+test('looksLikeUrl is true for a schemeless host/path', () => {
+  assert.equal(looksLikeUrl('open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6'), true)
+})
+
+test('looksLikeUrl is false for a plain artist name', () => {
+  assert.equal(looksLikeUrl('Billie Eilish'), false)
+})
+
+test('looksLikeUrl is false for a name with dots but no path', () => {
+  assert.equal(looksLikeUrl('M.I.A'), false)
 })
