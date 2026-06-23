@@ -1,11 +1,11 @@
-name: Database Migrations
+name: Seed Database
 
 on:
   workflow_dispatch:
 
 jobs:
-  migrate:
-    name: Run Prisma migrations
+  seed:
+    name: Seed demo data
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,8 +21,8 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Apply migrations
-        run: npx prisma migrate deploy
+      - name: Seed database
+        run: npm run db:seed
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
