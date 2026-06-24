@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { BuddyCharacter } from '@/components/buddy/BuddyCharacter'
+import { CommandBar } from '@/components/buddy/CommandBar'
 import { ScoutingWorkflows } from '@/components/buddy/ScoutingWorkflows'
 
 const QUICK_TASKS = [
@@ -63,33 +64,7 @@ export default function HomePage() {
                       Command Buddy
                     </p>
 
-                    <form
-                      action="/search"
-                      method="get"
-                      className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.04] p-4"
-                    >
-                      <div className="flex min-h-[120px] flex-col justify-between gap-4">
-                        <p className="text-sm leading-7 text-zinc-300">
-                          What do you want me to scout today?
-                        </p>
-
-                        <div className="flex flex-col gap-3 sm:flex-row">
-                          <input
-                            type="text"
-                            name="q"
-                            placeholder="Search an artist, track, writer, or playlist…"
-                            className="flex-1 rounded-2xl border border-white/10 bg-[#0a0d12] px-4 py-3 text-sm text-zinc-200 placeholder-zinc-500 outline-none transition focus:border-emerald-400/30"
-                            aria-label="Search the music intelligence graph"
-                          />
-                          <button
-                            type="submit"
-                            className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-5 py-3 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
-                          >
-                            Run task
-                          </button>
-                        </div>
-                      </div>
-                    </form>
+                    <CommandBar />
 
                     <div className="mt-4 flex flex-wrap gap-2">
                       {QUICK_TASKS.map((task) => (
