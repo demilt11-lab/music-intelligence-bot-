@@ -124,7 +124,6 @@ export default function ComparePage() {
   }
 
   function selectArtist(slot: 'A' | 'B', r: ArtistSearchResult) {
-    // Build an ArtistDetail from search result — richer data would come from /api/artists/:id
     const detail: ArtistDetail = {
       id: r.id,
       name: r.name,
@@ -138,18 +137,18 @@ export default function ComparePage() {
       playlistsDelta28d: null,
       followersDelta28d: null,
     }
-    // Try to enrich from breaking artists API
-    fetch(`/api/artists/breaking?status=ABOUT_TO_BREAK&limit=200`)
+    // Enrich with trajectory data from the per-artist endpoint (covers all statuses,
+    // not just ABOUT_TO_BREAK)
+    fetch(`/api/artists/${r.id}`)
       .then((res) => res.ok ? res.json() : null)
       .then((body) => {
-        const rows: Array<{ artistId: string; status: string; breakProbability: number | null; streams28dDelta: number; playlistsDelta28d: number | null; followersDelta28d: number | null }> = body?.obj ?? []
-        const match = rows.find((row) => String(row.artistId) === String(r.id))
-        if (match) {
-          detail.status = match.status
-          detail.breakProbability = match.breakProbability
-          detail.streams28dDelta = match.streams28dDelta
-          detail.playlistsDelta28d = match.playlistsDelta28d
-          detail.followersDelta28d = match.followersDelta28d
+        const t = body?.obj?.trajectory
+        if (t) {
+          detail.status = t.status ?? null
+          detail.breakProbability = t.breakProbability ?? null
+          detail.streams28dDelta = t.streams28dDelta ?? null
+          detail.playlistsDelta28d = t.playlistsDelta28d ?? null
+          detail.followersDelta28d = t.followersDelta28d ?? null
         }
         if (slot === 'A') { setArtistA({ ...detail }); setQueryA(''); setResultsA([]) }
         else { setArtistB({ ...detail }); setQueryB(''); setResultsB([]) }
