@@ -32,6 +32,7 @@ import {
   normalizeSongwriter,
   toSuggestion,
 } from './normalize';
+import { sampleSearch, isEmptyResult } from './sample-data';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal helpers
@@ -210,6 +211,15 @@ export async function search(
   if (type === 'all' || type === 'songwriters') {
     const rows = await querySongwriters(q, limit, offset);
     grouped.songwriters = (rows as RawRow[]).map(normalizeSongwriter);
+  }
+
+  // When the database has no records (schema not migrated or seed not run),
+  // return sample demo data so the search UI is immediately usable.
+  if (isEmptyResult(grouped)) {
+    const sample = sampleSearch(q, type);
+    if (!isEmptyResult(sample)) {
+      return { obj: sample, _demo: true } as SearchNormalResponse & { _demo: boolean };
+    }
   }
 
   return { obj: grouped };
