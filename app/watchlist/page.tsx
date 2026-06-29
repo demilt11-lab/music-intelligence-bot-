@@ -176,12 +176,12 @@ export default function WatchlistPage() {
                     type="insight"
                     message={
                       loading
-                        ? ‘I’m pulling your current watchlist now.’
+                        ? "I'm pulling your current watchlist now."
                         : needsAuth
-                          ? ‘Sign in to view and manage your watchlist.’
+                          ? 'Sign in to view and manage your watchlist.'
                           : items.length === 0
-                            ? ‘Your shortlist is empty right now. Add artists or tracks from scout and intelligence views to build a live decision queue.’
-                            : `You currently have ${items.length} watchlist item${items.length !== 1 ? ‘s’ : ‘’}. This list works best as a focused operating queue rather than a long archive.`
+                            ? 'Your shortlist is empty right now. Add artists or tracks from scout and intelligence views to build a live decision queue.'
+                            : `You currently have ${items.length} watchlist item${items.length !== 1 ? 's' : ''}. This list works best as a focused operating queue rather than a long archive.`
                     }
                   />
                 </div>
