@@ -5,6 +5,7 @@ import { ScoreRing } from '@/components/ui/ScoreRing'
 import { PlatformBar } from '@/components/ui/PlatformBar'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
 import { Disclosure } from '@/components/ui/Disclosure'
+import { AddToWatchlistButton } from '@/components/watchlist/AddToWatchlistButton'
 
 export type ScoutTrack = {
   trackId: number
@@ -161,15 +162,18 @@ export function ScoutTrackCard({
             </p>
           </div>
 
-          {isSignal ? (
-            <div className="shrink-0">
+          <div className="flex shrink-0 flex-col items-end gap-2">
+            {isSignal ? (
               <ScoreRing
                 score={Math.max(0, Math.min(1, track.totalScore))}
                 size={52}
                 label={`Score: ${scorePercent}`}
               />
-            </div>
-          ) : null}
+            ) : null}
+            {track.trackId > 0 ? (
+              <AddToWatchlistButton entityType="track" entityId={track.trackId} />
+            ) : null}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">

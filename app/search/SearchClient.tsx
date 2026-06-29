@@ -246,10 +246,10 @@ function ResultRow({ item, bucket }: { item: any; bucket: string }) {
 }
 
 const EXAMPLE_QUERIES = [
-  'Nova Rae',
-  'Jay Meridian',
-  'Fresh Finds Pop',
-  'Luz del Mar',
+  'Search by artist name',
+  'Search by track title',
+  'Paste a Spotify URL',
+  'Search by playlist name',
 ]
 
 export default function SearchClient({
@@ -262,7 +262,6 @@ export default function SearchClient({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SearchResultBuckets | null>(null)
-  const [isDemo, setIsDemo] = useState(false)
   const [searched, setSearched] = useState(false)
 
   const runSearch = React.useCallback(
@@ -284,12 +283,10 @@ export default function SearchClient({
 
         const data = await res.json()
         setResult(data.obj)
-        setIsDemo(!!data._demo)
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Unknown error'
         setError(msg)
         setResult(null)
-        setIsDemo(false)
       } finally {
         setLoading(false)
       }
@@ -444,29 +441,11 @@ export default function SearchClient({
                       Try a broader keyword, different spelling, or paste a direct Spotify or YouTube URL.
                     </p>
                   </div>
-                  <div className="flex flex-wrap justify-center gap-2">
-                    {EXAMPLE_QUERIES.map((eq) => (
-                      <button
-                        key={eq}
-                        type="button"
-                        onClick={() => { setQ(eq); void runSearch(eq, type) }}
-                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:bg-white/10"
-                      >
-                        Try "{eq}"
-                      </button>
-                    ))}
-                  </div>
                 </div>
               )}
 
               {!loading && !error && result && totalResults > 0 && (
                 <div className="space-y-4">
-                  {isDemo && (
-                    <div className="rounded-[18px] border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
-                      <strong className="font-semibold">Demo data</strong> — These are sample artists and tracks. Connect and seed your database to see real scouting data.
-                    </div>
-                  )}
-
                   {resultBuckets.map((bucket) => (
                     <section key={bucket}>
                       <div className="mb-2 flex items-center justify-between px-1">
@@ -501,16 +480,14 @@ export default function SearchClient({
                     </p>
                   </div>
                   <div className="flex flex-wrap justify-center gap-2">
-                    <p className="w-full text-[11px] uppercase tracking-wider text-zinc-600">Try an example</p>
-                    {EXAMPLE_QUERIES.map((eq) => (
-                      <button
-                        key={eq}
-                        type="button"
-                        onClick={() => { setQ(eq); void runSearch(eq, type) }}
-                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:bg-white/10"
+                    <p className="w-full text-[11px] uppercase tracking-wider text-zinc-600">Search examples</p>
+                    {EXAMPLE_QUERIES.map((hint) => (
+                      <span
+                        key={hint}
+                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-zinc-400"
                       >
-                        {eq}
-                      </button>
+                        {hint}
+                      </span>
                     ))}
                   </div>
                 </div>

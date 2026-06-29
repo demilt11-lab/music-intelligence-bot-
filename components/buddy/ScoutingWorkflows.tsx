@@ -9,59 +9,6 @@ type Workflow = {
   href?: string
 }
 
-type RunStatus = 'idle' | 'initializing' | 'fetching' | 'analyzing' | 'scoring' | 'completed' | 'error'
-
-const RUN_STAGES: RunStatus[] = ['initializing', 'fetching', 'analyzing', 'scoring', 'completed']
-
-const STAGE_LABELS: Record<RunStatus, string> = {
-  idle: '',
-  initializing: 'Initializing…',
-  fetching: 'Fetching signals…',
-  analyzing: 'Analyzing momentum…',
-  scoring: 'Scoring artists…',
-  completed: 'Done',
-  error: 'Failed',
-}
-
-const STAGE_DURATIONS: Partial<Record<RunStatus, number>> = {
-  initializing: 700,
-  fetching: 1100,
-  analyzing: 1400,
-  scoring: 1000,
-}
-
-function useWorkflowRun(href?: string) {
-  const [status, setStatus] = React.useState<RunStatus>('idle')
-  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  function run() {
-    if (status !== 'idle' && status !== 'completed' && status !== 'error') return
-    setStatus('initializing')
-
-    let stageIndex = 0
-    function advance() {
-      stageIndex++
-      const next = RUN_STAGES[stageIndex]
-      if (!next) return
-      setStatus(next)
-      if (next !== 'completed') {
-        timerRef.current = setTimeout(advance, STAGE_DURATIONS[next] ?? 900)
-      }
-    }
-    timerRef.current = setTimeout(advance, STAGE_DURATIONS.initializing ?? 700)
-  }
-
-  function reset() { setStatus('idle') }
-
-  React.useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
-
-  const stageIndex = RUN_STAGES.indexOf(status as (typeof RUN_STAGES)[number])
-  const progress = status === 'idle' || status === 'error'
-    ? 0
-    : Math.round(((stageIndex + 1) / RUN_STAGES.length) * 100)
-
-  return { status, run, reset, progress }
-}
 
 const WORKFLOWS_KEY = 'buddy.scoutingWorkflows.v1'
 const DIRECTIVE_KEY = 'buddy.directive.v1'
@@ -345,71 +292,28 @@ export function ScoutingWorkflows() {
 
 export default ScoutingWorkflows
 
-// ─── WorkflowItem: label + Run button with animated progress ─────────────────
+// ─── WorkflowItem: direct navigation link ────────────────────────────────────
 
 function WorkflowItem({ task }: { task: Workflow }) {
-  const { status, run, reset, progress } = useWorkflowRun(task.href)
-  const isRunning = status !== 'idle' && status !== 'completed' && status !== 'error'
-  const isCompleted = status === 'completed'
-
   return (
     <div className="flex-1 min-w-0">
-      {task.href && !isRunning && !isCompleted ? (
+      {task.href ? (
         <Link href={task.href} className="block text-sm leading-6 text-zinc-300 hover:text-zinc-100 transition-colors">
           {task.label}
         </Link>
       ) : (
-        <p className={`text-sm leading-6 transition-colors ${isCompleted ? 'text-emerald-300' : isRunning ? 'text-zinc-200' : 'text-zinc-300'}`}>
-          {task.label}
-        </p>
+        <p className="text-sm leading-6 text-zinc-300">{task.label}</p>
       )}
 
-      {isRunning ? (
-        <div className="mt-2 space-y-1.5">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-medium text-emerald-300 animate-pulse">
-              {STAGE_LABELS[status]}
-            </p>
-            <p className="text-[10px] text-zinc-500 tabular-nums">{progress}%</p>
-          </div>
-          <div className="h-1 w-full overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full bg-emerald-400 transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-      ) : isCompleted ? (
-        <div className="mt-2 flex items-center gap-2">
-          <span className="text-[10px] font-medium text-emerald-300">Completed</span>
-          {task.href ? (
-            <Link
-              href={task.href}
-              className="text-[10px] font-medium text-zinc-400 underline hover:text-zinc-200 transition-colors"
-            >
-              Open results →
-            </Link>
-          ) : null}
-          <button
-            type="button"
-            onClick={reset}
-            className="ml-auto text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            Reset
-          </button>
-        </div>
-      ) : null}
-
-      {!isRunning && !isCompleted ? (
+      {task.href ? (
         <div className="mt-2">
-          <button
-            type="button"
-            onClick={run}
-            className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300 transition hover:bg-emerald-500/20 active:scale-95"
+          <Link
+            href={task.href}
+            className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300 transition hover:bg-emerald-500/20"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-            Run
-          </button>
+            Open
+          </Link>
         </div>
       ) : null}
     </div>

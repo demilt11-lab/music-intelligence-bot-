@@ -9,14 +9,21 @@ export default function WatchlistPage() {
   const [items, setItems] = useState<WatchlistEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [needsAuth, setNeedsAuth] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setNeedsAuth(false)
 
     try {
       const res = await fetch('/api/ui/watchlist')
+
+      if (res.status === 401) {
+        setNeedsAuth(true)
+        return
+      }
 
       if (!res.ok) {
         const body = await res.json().catch(() => null)
@@ -169,10 +176,12 @@ export default function WatchlistPage() {
                     type="insight"
                     message={
                       loading
-                        ? 'I’m pulling your current watchlist now.'
-                        : items.length === 0
-                          ? 'Your shortlist is empty right now. Add artists or tracks from scout and intelligence views to build a live decision queue.'
-                          : `You currently have ${items.length} watchlist item${items.length !== 1 ? 's' : ''}. This list works best as a focused operating queue rather than a long archive.`
+                        ? ‘I’m pulling your current watchlist now.’
+                        : needsAuth
+                          ? ‘Sign in to view and manage your watchlist.’
+                          : items.length === 0
+                            ? ‘Your shortlist is empty right now. Add artists or tracks from scout and intelligence views to build a live decision queue.’
+                            : `You currently have ${items.length} watchlist item${items.length !== 1 ? ‘s’ : ‘’}. This list works best as a focused operating queue rather than a long archive.`
                     }
                   />
                 </div>
@@ -191,7 +200,27 @@ export default function WatchlistPage() {
                 </div>
               )}
 
-              {error && !loading && (
+              {needsAuth && !loading && (
+                <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-500/10 text-2xl text-emerald-400">
+                    ◈
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium text-zinc-200">Sign in to view your watchlist</p>
+                    <p className="max-w-md text-sm leading-6 text-zinc-500">
+                      Your watchlist is private to your account. Sign in to access your saved artists and tracks.
+                    </p>
+                  </div>
+                  <a
+                    href="/login"
+                    className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-5 py-2.5 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+                  >
+                    Sign in
+                  </a>
+                </div>
+              )}
+
+              {error && !loading && !needsAuth && (
                 <div className="rounded-[22px] border border-rose-500/20 bg-rose-500/10 p-4">
                   <CompanionMessage type="warning" message={error} />
                 </div>

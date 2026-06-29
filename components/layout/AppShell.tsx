@@ -551,7 +551,7 @@ export function AppShell({
   apiKeyActive = false,
   children,
   logo,
-  appName = 'Music Intelligence',
+  appName = 'NOV8TE Buddy',
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)

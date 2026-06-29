@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import { CompanionHeader } from './CompanionHeader'
 import { ScoutTrackCard, type ScoutTrack } from './ScoutTrackCard'
 import { TrackCardSkeleton } from '@/components/ui/Skeleton'
@@ -266,19 +267,27 @@ export function DailyTalentScout() {
                 ◎
               </div>
               <div className="mt-5 max-w-md space-y-2">
-                <p className="text-sm font-medium text-zinc-200">No live scout signals yet</p>
+                <p className="text-sm font-medium text-zinc-200">No scout signals for {code2} yet</p>
                 <p className="text-sm leading-6 text-zinc-500">
                   {mode === 'ugc_early'
-                    ? 'Buddy is watching for early UGC breakouts in this market. The ingest pipeline refreshes throughout the day, so new signals should appear as momentum builds.'
-                    : 'No tracks match the active scout lens right now. Try switching market or returning to early-breakout mode.'}
+                    ? `The UGC ingest pipeline hasn't loaded breakout data for ${code2} in this session. Try switching to a different market using the controls above, or switch to General Momentum mode.`
+                    : `No tracks match the active scout lens in ${code2}. Try a different market or switch back to Early UGC Breakout mode.`}
                 </p>
               </div>
-              <button
-                onClick={fetchData}
-                className="mt-6 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
-              >
-                Refresh scout feed
-              </button>
+              <div className="mt-6 flex flex-wrap justify-center gap-3">
+                <button
+                  onClick={fetchData}
+                  className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+                >
+                  Refresh feed
+                </button>
+                <Link
+                  href="/search"
+                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-zinc-300 transition hover:bg-white/10"
+                >
+                  Search instead
+                </Link>
+              </div>
             </div>
           ) : null}
 
