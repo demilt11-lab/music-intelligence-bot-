@@ -33,7 +33,7 @@ jobs:
       - name: Clean junk catalog rows
         env:
           # Pooler connection (reachable from runners; the direct db.<ref> host is not).
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           CONFIRM_DELETE: ${{ inputs.apply && '1' || '0' }}
         run: npx tsx scripts/clean_junk_tracks.ts

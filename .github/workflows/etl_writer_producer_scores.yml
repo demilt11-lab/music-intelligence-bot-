@@ -25,7 +25,7 @@ jobs:
 
       - name: Compute rising scores
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: npx tsx jobs/etl/compute_writer_producer_scores.ts $(date -u +%Y-%m-%d)

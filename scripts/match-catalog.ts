@@ -1,8 +1,6 @@
 // scripts/match-catalog.ts
-import { PrismaClient } from '@prisma/client';
+import { db as prisma } from '@/lib/db';
 import { matchTenantCatalogToCanonicalTracks } from '@/lib/catalog/matcher';
-
-const prisma = new PrismaClient();
 
 async function main() {
   const tenants = await prisma.tenant.findMany();
