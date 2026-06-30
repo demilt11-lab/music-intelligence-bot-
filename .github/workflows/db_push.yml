@@ -1,0 +1,40 @@
+name: Database Push (schema sync)
+
+# Manual escape hatch: make the database match prisma/schema.prisma WITHOUT
+# requiring an empty schema or migration history. Use this to complete a
+# partially-created database (the case `prisma migrate deploy` rejects with
+# P3005 "schema is not empty"). Additive by default — Prisma aborts rather than
+# dropping data unless run with --accept-data-loss, which this workflow does not.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  push:
+    name: Prisma db push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Push schema
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          # Derive the direct (session-pooler, port 5432) connection from the
+          # known-good DATABASE_URL so this doesn't depend on a separate
+          # DIRECT_URL secret.
+          DIRECT_URL="$(printf '%s' "$DATABASE_URL" | sed -E 's#:6543/#:5432/#; s#\?.*$##')"
+          echo "::add-mask::$DIRECT_URL"
+          export DIRECT_URL
+          npx prisma db push
