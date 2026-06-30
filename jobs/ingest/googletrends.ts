@@ -11,12 +11,10 @@
  * - 2000ms delay between Google Trends calls to avoid rate limiting
  */
 
-import { PrismaClient } from "@prisma/client";
+import { db } from "@/lib/db";
 import { getInterestOverTime, getRisingQueries } from "@/lib/googletrends/client";
 import { googleTrends as searchApiTrends } from "@/lib/searchapi/client";
 import { runTrackedJob } from '@/lib/jobs/tracker';
-
-const db = new PrismaClient();
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 

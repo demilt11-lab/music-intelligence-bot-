@@ -4,11 +4,10 @@
  * Recommended schedule: every 30 minutes.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import { ScoutSources } from '../../lib/engine';
 import { emptyTrack } from '../../lib/talentScout/emptyTrack';
 
-const db = new PrismaClient();
 const COOLDOWN_HOURS = 24;
 type MetricKey = 'viralScore' | 'breakProbability' | 'streams7dDelta';
 

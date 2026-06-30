@@ -4,10 +4,8 @@
  * Recommended schedule: 06:00 UTC daily.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import { assembleDigest } from '../../lib/digest/assembler';
-
-const db = new PrismaClient();
 
 async function deliverWebhook(url: string, payload: object) {
   await fetch(url, {

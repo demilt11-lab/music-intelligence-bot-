@@ -1,8 +1,7 @@
 // scripts/automation/tenantAutomation.ts
-import { PrismaClient, TenantEnvironment } from '@prisma/client';
+import { TenantEnvironment } from '@prisma/client';
+import { db as prisma } from '@/lib/db';
 import crypto from 'crypto';
-
-const prisma = new PrismaClient();
 
 type AutomationCommand =
   | {

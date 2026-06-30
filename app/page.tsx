@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { BuddyCharacter } from '@/components/buddy/BuddyCharacter'
 import { ScoutingWorkflows } from '@/components/buddy/ScoutingWorkflows'
 
 const START_HERE = [
@@ -66,13 +65,18 @@ export default function HomePage() {
             <div className="relative flex min-h-full flex-col">
               {/* Header */}
               <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 sm:px-6">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                    NOV8TE Buddy
-                  </p>
-                  <p className="mt-0.5 text-sm text-zinc-400">
-                    Track artist momentum early — before the market reacts.
-                  </p>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-400/20 bg-emerald-500/10 text-base text-emerald-400">
+                    ◎
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+                      NOV8TE Buddy
+                    </p>
+                    <p className="text-sm text-zinc-400">
+                      Track artist momentum early — before the market reacts.
+                    </p>
+                  </div>
                 </div>
                 <Link
                   href="/analytics"
@@ -82,88 +86,82 @@ export default function HomePage() {
                 </Link>
               </div>
 
-              <div className="grid flex-1 gap-6 px-5 py-6 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:px-8">
-                <div className="flex flex-col gap-6">
-                  {/* Status + headline */}
-                  <div className="space-y-4">
-                    <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-300">
-                      <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]" />
-                      Buddy is online
-                    </div>
-
-                    <div className="max-w-2xl space-y-3">
-                      <h2 className="text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
-                        Your A&R intelligence command center.
-                      </h2>
-                      <p className="max-w-xl text-base leading-7 text-zinc-300">
-                        Scout breakout artists, track momentum across Spotify, YouTube, TikTok,
-                        playlists, charts, and radio — all in one workspace built for A&R.
-                      </p>
-                    </div>
+              <div className="flex flex-col gap-6 px-5 py-6 sm:px-6 lg:px-8">
+                {/* Status + headline */}
+                <div className="space-y-4">
+                  <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-300">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]" />
+                    Buddy is online
                   </div>
 
-                  {/* Search command */}
-                  <div className="rounded-[28px] border border-white/10 bg-black/25 p-5 backdrop-blur">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                      Quick search
+                  <div className="max-w-2xl space-y-3">
+                    <h2 className="text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
+                      Your A&R intelligence command center.
+                    </h2>
+                    <p className="max-w-xl text-base leading-7 text-zinc-300">
+                      Scout breakout artists, track momentum across Spotify, YouTube, TikTok,
+                      playlists, charts, and radio — all in one workspace built for A&R.
                     </p>
-
-                    <form
-                      action="/search"
-                      method="get"
-                      className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.04] p-4"
-                    >
-                      <div className="flex min-h-[100px] flex-col justify-between gap-4">
-                        <p className="text-sm leading-6 text-zinc-400">
-                          Search an artist, track, songwriter — or paste a Spotify / YouTube URL.
-                        </p>
-                        <div className="flex flex-col gap-3 sm:flex-row">
-                          <input
-                            type="text"
-                            name="q"
-                            placeholder='e.g. "Nova Rae" or "spotify:artist:…"'
-                            className="flex-1 rounded-2xl border border-white/10 bg-[#0a0d12] px-4 py-3 text-sm text-zinc-200 placeholder-zinc-500 outline-none transition focus:border-emerald-400/30"
-                            aria-label="Search the music intelligence graph"
-                          />
-                          <button
-                            type="submit"
-                            className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-5 py-3 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
-                          >
-                            Search
-                          </button>
-                        </div>
-                      </div>
-                    </form>
-                  </div>
-
-                  {/* Start here grid */}
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-                      Start here
-                    </p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      {START_HERE.map((item) => {
-                        const c = accentClasses(item.accent)
-                        return (
-                          <Link
-                            key={item.href}
-                            href={item.href}
-                            className={`flex items-start gap-3 rounded-[22px] border ${c.border} ${c.bg} p-4 transition hover:opacity-90`}
-                          >
-                            <span className={`mt-0.5 text-lg ${c.icon}`}>{item.icon}</span>
-                            <div className="min-w-0">
-                              <p className={`text-sm font-semibold ${c.text}`}>{item.label}</p>
-                              <p className="mt-1 text-xs leading-5 text-zinc-400">{item.description}</p>
-                            </div>
-                          </Link>
-                        )
-                      })}
-                    </div>
                   </div>
                 </div>
 
-                <div className="relative flex min-h-[500px] items-center justify-center rounded-[30px] border border-white/10 bg-[linear-gradient(180deg,rgba(9,12,18,0.55),rgba(5,7,10,0.85))] p-6">
-                  <BuddyCharacter />
+                {/* Search command */}
+                <div className="rounded-[28px] border border-white/10 bg-black/25 p-5 backdrop-blur">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+                    Quick search
+                  </p>
+
+                  <form
+                    action="/search"
+                    method="get"
+                    className="mt-4 rounded-[24px] border border-white/10 bg-white/[0.04] p-4"
+                  >
+                    <div className="flex min-h-[100px] flex-col justify-between gap-4">
+                      <p className="text-sm leading-6 text-zinc-400">
+                        Search an artist, track, songwriter — or paste a Spotify / YouTube URL.
+                      </p>
+                      <div className="flex flex-col gap-3 sm:flex-row">
+                        <input
+                          type="text"
+                          name="q"
+                          placeholder='Artist name, track title, or Spotify / YouTube URL'
+                          className="flex-1 rounded-2xl border border-white/10 bg-[#0a0d12] px-4 py-3 text-sm text-zinc-200 placeholder-zinc-500 outline-none transition focus:border-emerald-400/30"
+                          aria-label="Search the music intelligence graph"
+                        />
+                        <button
+                          type="submit"
+                          className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-5 py-3 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+                        >
+                          Search
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+
+                {/* Start here grid */}
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+                    Start here
+                  </p>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {START_HERE.map((item) => {
+                      const c = accentClasses(item.accent)
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={`flex items-start gap-3 rounded-[22px] border ${c.border} ${c.bg} p-4 transition hover:opacity-90`}
+                        >
+                          <span className={`mt-0.5 text-lg ${c.icon}`}>{item.icon}</span>
+                          <div className="min-w-0">
+                            <p className={`text-sm font-semibold ${c.text}`}>{item.label}</p>
+                            <p className="mt-1 text-xs leading-5 text-zinc-400">{item.description}</p>
+                          </div>
+                        </Link>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             </div>

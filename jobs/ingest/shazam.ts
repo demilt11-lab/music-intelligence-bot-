@@ -14,11 +14,9 @@
  * views and TikTok creations.
  */
 
-import { PrismaClient } from "@prisma/client";
+import { db } from "@/lib/db";
 import { getShazamCharts, ShazamChartTrack } from "@/lib/shazam/client";
 import { runTrackedJob } from '@/lib/jobs/tracker';
-
-const db = new PrismaClient();
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 

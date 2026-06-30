@@ -27,6 +27,6 @@ jobs:
 
       - name: Run discovery (songs to watch)
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npx tsx scripts/discovery_test.ts

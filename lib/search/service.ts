@@ -32,7 +32,7 @@ import {
   normalizeSongwriter,
   toSuggestion,
 } from './normalize';
-import { sampleSearch, isEmptyResult } from './sample-data';
+import { isEmptyResult } from './sample-data';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal helpers
@@ -217,15 +217,6 @@ export async function search(
     // DB unavailable (not generated, not connected, schema not migrated) —
     // reset and fall through to sample data below.
     grouped = {};
-  }
-
-  // When the database is empty OR unavailable, return sample demo data so the
-  // search UI is immediately usable without a live DB connection.
-  if (isEmptyResult(grouped)) {
-    const sample = sampleSearch(q, type);
-    if (!isEmptyResult(sample)) {
-      return { obj: sample, _demo: true } as SearchNormalResponse & { _demo: boolean };
-    }
   }
 
   return { obj: grouped };

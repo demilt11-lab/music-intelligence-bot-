@@ -5,7 +5,7 @@
 //
 // Requires env vars: DATABASE_URL, DIRECT_URL, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import {
   getTrackAudioFeatures,
   getTrackDetails,
@@ -17,8 +17,6 @@ import {
 } from '@/lib/spotify/client';
 import { resolveSpotifyTrack } from '@/lib/spotify/resolver';
 import { runTrackedJob } from '@/lib/jobs/tracker';
-
-const db = new PrismaClient();
 
 // ─── Editorial playlists to monitor ──────────────────────────────────────────
 

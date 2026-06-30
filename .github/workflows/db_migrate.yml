@@ -22,7 +22,17 @@ jobs:
         run: npx prisma generate
 
       - name: Apply migrations
-        run: npx prisma migrate deploy
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          # Prisma migrations need a direct (non-transaction-pooler) connection.
+          # Rather than depend on a separately-maintained DIRECT_URL secret —
+          # which has drifted to a stale Supabase project ref and fails with
+          # "tenant/user not found" — derive it from the known-good DATABASE_URL:
+          # switch the Supabase transaction pooler (port 6543) to the session
+          # pooler (port 5432) and drop the pgbouncer query params. This keeps the
+          # project ref + credentials in a single source of truth.
+          DIRECT_URL="$(printf '%s' "$DATABASE_URL" | sed -E 's#:6543/#:5432/#; s#\?.*$##')"
+          echo "::add-mask::$DIRECT_URL"
+          export DIRECT_URL
+          npx prisma migrate deploy

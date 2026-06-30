@@ -22,6 +22,6 @@ jobs:
 
       - name: Run artist ETL
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           # add any other env vars
         run: npm run etl:artist-all
