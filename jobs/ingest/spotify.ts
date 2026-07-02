@@ -1,7 +1,7 @@
 // jobs/ingest/spotify.ts
 //
 // Standalone Node.js ingestion script — run via:
-//   npx ts-node --project tsconfig.scripts.json jobs/ingest/spotify.ts
+//   npx tsx jobs/ingest/spotify.ts
 //
 // Requires env vars: DATABASE_URL, DIRECT_URL, SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET
 
