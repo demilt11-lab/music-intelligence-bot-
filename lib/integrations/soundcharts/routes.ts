@@ -15,7 +15,18 @@ export const soundchartsRoutes = {
       )}`, // [page:21]
     identifiers: (uuid: string) => `/api/v2/publisher/${encodeURIComponent(uuid)}/identifiers`, // [page:22]
   },
+  artist: {
+    byPlatform: (platform: string, identifier: string) =>
+      `/api/v2/artist/by-platform/${encodeURIComponent(platform)}/${encodeURIComponent(
+        identifier,
+      )}`,
+    audience: (uuid: string, platform: string) =>
+      `/api/v2/artist/${encodeURIComponent(uuid)}/audience/${encodeURIComponent(platform)}`,
+    localStreaming: (uuid: string, platform: string) =>
+      `/api/v2/artist/${encodeURIComponent(uuid)}/streaming/${encodeURIComponent(platform)}`,
+  },
   song: {
+    byIsrc: (isrc: string) => `/api/v2/song/by-isrc/${encodeURIComponent(isrc)}`,
     chartEntries: (uuid: string, platform: string) =>
       `/api/v2/song/${encodeURIComponent(uuid)}/charts/ranks/${encodeURIComponent(platform)}`, // [page:23]
     playlistEntries: (uuid: string, platform: string) =>

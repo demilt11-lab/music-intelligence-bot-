@@ -1,0 +1,44 @@
+name: Ingest Soundcharts
+
+# Fills the DSP gaps the first-party crawlers can't reach:
+# Apple Music / Amazon playlist placements + Spotify monthly-listener and
+# follower series (per artist). Budget-capped per run; entity resolution is
+# cached in external_ids so repeated runs only pay for new tracks/artists.
+
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+on:
+  schedule:
+    - cron: "0 5 * * *" # daily 05:00 UTC — before signal ETL (08:00) and artist ETL (08:30)
+  workflow_dispatch:
+
+jobs:
+  ingest-soundcharts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run Soundcharts ingestion
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SOUNDCHARTS_APP_ID: ${{ secrets.SOUNDCHARTS_APP_ID }}
+          SOUNDCHARTS_API_KEY: ${{ secrets.SOUNDCHARTS_API_KEY }}
+        run: npx tsx jobs/ingest/soundcharts.ts

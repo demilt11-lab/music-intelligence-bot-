@@ -90,6 +90,67 @@ export class SoundchartsConnector {
     );
   }
 
+  // ARTISTS ----------------------------------------------------------------
+
+  // GET /api/v2/artist/by-platform/{platform}/{identifier}
+  // Resolves a platform-native artist ID (e.g. a Spotify artist ID) to the
+  // Soundcharts artist object (incl. its UUID).
+  async getArtistByPlatformId(platform: string, identifier: string) {
+    return this.client.request<ApiEnvelope>(
+      soundchartsRoutes.artist.byPlatform(platform, identifier),
+    );
+  }
+
+  // GET /api/v2/artist/{uuid}/audience/{platform}
+  // Social/streaming audience time series (e.g. followers) per platform.
+  async getArtistAudience(
+    uuid: string,
+    platform: string,
+    params: DateWindowParams & PaginatedParams = {},
+  ) {
+    return this.client.request<ApiEnvelope>(
+      soundchartsRoutes.artist.audience(uuid, platform),
+      {
+        query: {
+          startDate: params.startDate,
+          endDate: params.endDate,
+          offset: params.offset ?? 0,
+          limit: params.limit ?? 100,
+        },
+      },
+    );
+  }
+
+  // GET /api/v2/artist/{uuid}/streaming/{platform}
+  // Streaming listening time series — for platform='spotify' this is the
+  // monthly-listeners series (the artist-level analogue of
+  // getSongLocalStreamingAudience below).
+  async getArtistLocalStreamingAudience(
+    uuid: string,
+    platform: string,
+    params: DateWindowParams & PaginatedParams = {},
+  ) {
+    return this.client.request<ApiEnvelope>(
+      soundchartsRoutes.artist.localStreaming(uuid, platform),
+      {
+        query: {
+          startDate: params.startDate,
+          endDate: params.endDate,
+          offset: params.offset ?? 0,
+          limit: params.limit ?? 100,
+        },
+      },
+    );
+  }
+
+  // SONG: LOOKUP -----------------------------------------------------------
+
+  // GET /api/v2/song/by-isrc/{isrc}
+  // Resolves an ISRC to the Soundcharts song object (incl. its UUID).
+  async getSongByIsrc(isrc: string) {
+    return this.client.request<ApiEnvelope>(soundchartsRoutes.song.byIsrc(isrc));
+  }
+
   // SONG: CHARTS ---------------------------------------------------------
 
   // GET /api/v2/song/{uuid}/charts/ranks/{platform} [page:23]
