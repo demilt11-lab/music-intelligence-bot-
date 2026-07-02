@@ -174,9 +174,12 @@ workflows you use, they require these repo secrets:
 
 > The **Soundcharts ingest** (`ingest_soundcharts.yml`, daily 05:00 UTC) is
 > what feeds Apple Music / Amazon playlist placements and Spotify
-> monthly-listener + follower series — without `SOUNDCHARTS_APP_ID` /
-> `SOUNDCHARTS_API_KEY` those datasets stay empty and the corresponding
-> directory pages show empty states. Per-run API budgets are tunable via
+> monthly-listener + follower series. It is an **optional** data source:
+> without `SOUNDCHARTS_APP_ID` / `SOUNDCHARTS_API_KEY` the workflow
+> **skips cleanly** (green run, no Slack alert) and those datasets stay
+> empty — the corresponding directory pages show honest empty states and
+> the ML listener features remain null (the models handle that). Add the
+> two repo secrets to activate it; per-run API budgets are tunable via
 > `SOUNDCHARTS_RESOLVE_BUDGET`, `SOUNDCHARTS_PLAYLIST_SONG_BUDGET`, and
 > `SOUNDCHARTS_ARTIST_BUDGET` (see `jobs/ingest/soundcharts.ts`).
 
