@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, use } from 'react';
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
 import { SkeletonBox } from '@/components/ui/Skeleton'
 import { TrendSparkline } from '@/components/ui/TrendSparkline'
+import { AddToWatchlistButton } from '@/components/watchlist/AddToWatchlistButton'
 
 type Artist = {
   id: string
@@ -331,6 +332,15 @@ export default function ArtistPage(
                     playlist lift, follower change, and release context so you can judge whether
                     the act deserves deeper A&R attention.
                   </p>
+                </div>
+
+                <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/5 py-1 pl-1.5 pr-3">
+                  <AddToWatchlistButton
+                    entityType="artist"
+                    entityId={Number(artist.id)}
+                    className="bg-black/20"
+                  />
+                  <span className="text-sm font-medium text-zinc-300">Watchlist</span>
                 </div>
               </div>
 
