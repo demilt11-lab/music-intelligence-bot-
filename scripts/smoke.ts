@@ -12,6 +12,7 @@
  */
 import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/auth/password';
+import crypto from 'crypto';
 
 const BASE_URL = process.env.SMOKE_BASE_URL ?? process.env.BASE_URL ?? 'http://localhost:3000';
 const AUTH_ON = !!process.env.AUTH_SECRET;
@@ -223,6 +224,89 @@ async function main() {
           headers: { cookie },
         });
         check('DELETE /api/ui/api-keys/:id → 200', delKey.status === 200, `status=${delKey.status}`);
+      }
+    }
+
+    // ── 10b. Multi-tenant isolation on the v1 API ───────────────────────────
+    // The launch-readiness audit flagged this as untested anywhere — the
+    // Database review found the tenant-scoping code was correctly written
+    // everywhere it checked, but there was no regression test keeping it
+    // that way. This creates two real tenants with real API keys and proves
+    // one tenant's alert rules are invisible and unreachable (404, not 403 —
+    // existence shouldn't leak either) to the other's key.
+    {
+      const suffix = Date.now();
+      const tenantA = await db.tenant.create({
+        data: { name: `Smoke Tenant A ${suffix}`, slug: `smoke-tenant-a-${suffix}`, environment: 'PROD' },
+      });
+      const tenantB = await db.tenant.create({
+        data: { name: `Smoke Tenant B ${suffix}`, slug: `smoke-tenant-b-${suffix}`, environment: 'PROD' },
+      });
+
+      function genKey() {
+        const raw = `mi_${crypto.randomBytes(24).toString('hex')}`;
+        const hash = crypto.createHash('sha256').update(raw).digest('hex');
+        return { raw, hash };
+      }
+      const keyA = genKey();
+      const keyB = genKey();
+      await db.apiKey.create({
+        data: { tenantId: tenantA.id, keyHash: keyA.hash, label: 'smoke-a', scopes: 'alerts:read,alerts:write' },
+      });
+      await db.apiKey.create({
+        data: { tenantId: tenantB.id, keyHash: keyB.hash, label: 'smoke-b', scopes: 'alerts:read,alerts:write' },
+      });
+
+      try {
+        const created = await getJson('/api/v1/alerts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': keyA.raw },
+          body: JSON.stringify({
+            entityType: 'watchlist',
+            metric: 'breakProbability',
+            operator: 'gt',
+            threshold: 0.7,
+            channel: 'email',
+            destination: 'tenant-a@smoke.test',
+          }),
+        });
+        check('Tenant A creates an alert rule → 201', created.status === 201, `status=${created.status}`);
+        const ruleId = created.body?.obj?.id;
+
+        const asOwner = await getJson('/api/v1/alerts', { headers: { 'x-api-key': keyA.raw } });
+        check('  Tenant A sees its own rule (positive control)',
+          (asOwner.body?.obj ?? []).some((r: any) => r.id === ruleId));
+
+        const asOther = await getJson('/api/v1/alerts', { headers: { 'x-api-key': keyB.raw } });
+        check('  Tenant B does NOT see Tenant A\'s rule in its list',
+          !(asOther.body?.obj ?? []).some((r: any) => r.id === ruleId),
+          `Tenant B list=${JSON.stringify(asOther.body?.obj)}`);
+
+        if (ruleId) {
+          const crossPatch = await getJson(`/api/v1/alerts/${ruleId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': keyB.raw },
+            body: JSON.stringify({ isActive: false }),
+          });
+          check('  Tenant B PATCHing Tenant A\'s rule by id → 404 (not 200, not 403)',
+            crossPatch.status === 404, `status=${crossPatch.status}`);
+
+          const crossDelete = await getJson(`/api/v1/alerts/${ruleId}`, {
+            method: 'DELETE',
+            headers: { 'x-api-key': keyB.raw },
+          });
+          check('  Tenant B DELETEing Tenant A\'s rule by id → 404',
+            crossDelete.status === 404, `status=${crossDelete.status}`);
+
+          const stillThere = await getJson('/api/v1/alerts', { headers: { 'x-api-key': keyA.raw } });
+          check('  Tenant A\'s rule survived Tenant B\'s attempts',
+            (stillThere.body?.obj ?? []).some((r: any) => r.id === ruleId && r.isActive === true));
+        }
+      } finally {
+        await db.alertRule.deleteMany({ where: { tenantId: { in: [tenantA.id, tenantB.id] } } }).catch(() => {});
+        await db.apiKey.deleteMany({ where: { tenantId: { in: [tenantA.id, tenantB.id] } } }).catch(() => {});
+        await db.tenant.delete({ where: { id: tenantA.id } }).catch(() => {});
+        await db.tenant.delete({ where: { id: tenantB.id } }).catch(() => {});
       }
     }
 

@@ -1,13 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { shouldFailOnErrorRate } from '@/lib/luminate/error-rate'
+import { isConsecutiveFailureAlert } from '@/lib/jobs/rules'
 
-// ── Error-rate threshold logic (extracted from luminate.ts) ───────────────────
-
-function shouldFailOnErrorRate(errors: number, trackCount: number): boolean {
-  const maxPossibleErrors = trackCount * 3 // 3 API calls per track
-  if (maxPossibleErrors === 0) return false
-  return errors / maxPossibleErrors > 0.5
-}
+// ── Error-rate threshold logic ─────────────────────────────────────────────────
+// Imports the real function jobs/ingest/luminate.ts uses to decide whether to
+// mark the job failed — a regression here (e.g. someone tweaking the 50%
+// threshold or the "3 calls per track" assumption) fails this test, not a
+// copy of it.
 
 test('no tracks → never fails on error rate', () => {
   assert.equal(shouldFailOnErrorRate(0, 0), false)
@@ -40,16 +40,9 @@ test('single track, 1 of 3 endpoints fails → does not fail (33%)', () => {
   assert.equal(shouldFailOnErrorRate(1, 1), false)
 })
 
-// ── Consecutive failure detection (mirrors tracker.ts logic) ──────────────────
-
-const THRESHOLD = 3
-
-function isConsecutiveFailureAlert(recentStatuses: string[]): boolean {
-  return (
-    recentStatuses.length >= THRESHOLD &&
-    recentStatuses.every((s) => s === 'failed')
-  )
-}
+// ── Consecutive failure detection ──────────────────────────────────────────────
+// Imports the real function from lib/jobs/tracker.ts (used inside
+// runTrackedJob to decide whether to log a CONSECUTIVE_FAILURE_ALERT).
 
 test('fewer than threshold consecutive failures → no alert', () => {
   assert.equal(isConsecutiveFailureAlert(['failed', 'failed']), false)

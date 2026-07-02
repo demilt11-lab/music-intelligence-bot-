@@ -19,6 +19,7 @@ import {
   ingestAirplayForEntity,
 } from '@/lib/luminate/ingest';
 import { runTrackedJob } from '@/lib/jobs/tracker';
+import { shouldFailOnErrorRate } from '@/lib/luminate/error-rate';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -166,8 +167,8 @@ async function main(): Promise<{ rowsWritten: number }> {
       `airplay=${airplayWritten} errors=${errors}`,
   );
 
-  const maxPossibleErrors = externalIds.length * 3;
-  if (maxPossibleErrors > 0 && errors / maxPossibleErrors > 0.5) {
+  if (shouldFailOnErrorRate(errors, externalIds.length)) {
+    const maxPossibleErrors = externalIds.length * 3;
     throw new Error(
       `[luminate] Error rate ${errors}/${maxPossibleErrors} (${Math.round((errors / maxPossibleErrors) * 100)}%) exceeded 50% threshold — marking job failed`,
     );
