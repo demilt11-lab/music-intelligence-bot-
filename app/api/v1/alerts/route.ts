@@ -66,7 +66,27 @@ export async function POST(req: NextRequest) {
     }
 
     if (channel === 'webhook') {
-      validateWebhookUrl(destination); // throws 400 if URL targets private ranges
+      await validateWebhookUrl(destination); // throws 400 if URL targets private ranges
+    }
+
+    // Idempotency: a retried request with the same payload (network timeout,
+    // double-click, etc.) should return the existing rule instead of
+    // creating a duplicate that would then fire twice.
+    const existing = await db.alertRule.findFirst({
+      where: {
+        tenantId: ctx.tenantId,
+        entityType,
+        entityId: entityId ?? null,
+        metric,
+        operator,
+        threshold,
+        channel,
+        destination,
+      },
+    });
+    if (existing) {
+      await logRequest(ctx, endpoint, 'POST', 200, startedAt);
+      return NextResponse.json({ obj: existing }, { status: 200 });
     }
 
     const rule = await db.alertRule.create({

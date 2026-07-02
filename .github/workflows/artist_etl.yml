@@ -1,5 +1,12 @@
 name: Artist ETL
 
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 on:
   schedule:
     - cron: "30 8 * * *" # 8:30 UTC daily — after ingestion (≤7:00) and signal ETL (8:00)
@@ -18,7 +25,7 @@ jobs:
           node-version: "20"
 
       - name: Install deps
-        run: npm install
+        run: npm ci
 
       - name: Run artist ETL
         env:

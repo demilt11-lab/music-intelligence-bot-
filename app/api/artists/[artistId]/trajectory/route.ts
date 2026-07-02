@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { Cache, TTL } from '@/lib/cache'
+import { requireSession, AuthError } from '@/lib/auth/guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,7 +107,7 @@ function buildExplanation(snapshot: {
   return factors
 }
 
-export async function GET(_req: NextRequest, props: { params: Promise<{ artistId: string }> }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ artistId: string }> }) {
   const params = await props.params;
   const artistId = Number(params.artistId)
 
@@ -114,13 +115,15 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ artistId
     return NextResponse.json({ error: 'Invalid artistId' }, { status: 400 })
   }
 
-  const cacheKey = `artist:trajectory:${artistId}`
-  const cached = Cache.get<object>(cacheKey)
-  if (cached) {
-    return NextResponse.json(cached, { headers: { 'x-cache': 'hit' } })
-  }
-
   try {
+    await requireSession(req)
+
+    const cacheKey = `artist:trajectory:${artistId}`
+    const cached = Cache.get<object>(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached, { headers: { 'x-cache': 'hit' } })
+    }
+
     const [artist, snapshot, history, releases, accuracy] = await Promise.all([
       db.artist.findUnique({ where: { id: artistId } }),
       db.artistTrajectorySnapshot.findFirst({
@@ -145,6 +148,11 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ artistId
         take: 100,
       }),
       db.modelAccuracyReport.findFirst({
+        // Scoped to artist-trajectory-relevant models — evaluate_predictions
+        // also reports accuracy for track-level models (e.g. track-viral),
+        // and an unscoped "most recent report" query could surface a track
+        // model's accuracy on an artist page.
+        where: { modelName: { in: ['compute_artist_signals', 'artist-trajectory'] } },
         orderBy: { evaluationDate: 'desc' },
       }),
     ])
@@ -196,7 +204,7 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ artistId
               recall: accuracy.recall,
             }
           : null,
-        history: history.map((h) => ({
+        history: history.map((h: any) => ({
           artistId: Number(h.artistId),
           date: h.date,
           totalStreams: h.totalStreams.toString(),
@@ -207,11 +215,11 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ artistId
           genres: h.genres,
           primaryCode2: h.primaryCode2,
         })),
-        releases: releases.map((r) => ({
+        releases: releases.map((r: any) => ({
           id: r.id.toString(),
           name: r.title,
           isrc: r.isrc ?? null,
-          albums: r.trackAlbums.map((ta) => ({
+          albums: r.trackAlbums.map((ta: any) => ({
             id: ta.album.id,
             name: ta.album.title,
           })),
@@ -228,6 +236,9 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ artistId
     Cache.set(cacheKey, payload, TTL.SHORT)
     return NextResponse.json(payload, { headers: { 'x-cache': 'miss' } })
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('[api/artists/:id/trajectory]', error)
     return NextResponse.json(
       { error: 'Failed to load artist trajectory' },

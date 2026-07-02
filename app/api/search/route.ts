@@ -3,6 +3,11 @@ import { validateSearchParams } from '@/lib/search/validate';
 import { search } from '@/lib/search/service';
 import { handleApiError } from '@/lib/shared/errors';
 import { successResponse } from '@/lib/shared/response';
+import { enforceKeyedRateLimit } from '@/lib/platform/rate-limit';
+
+// This route is intentionally public (no session/API key) and DB-heavy on
+// every call, so it's rate-limited by IP rather than by tenant.
+const MAX_REQUESTS_PER_MINUTE = 60;
 
 /**
  * GET /api/search
@@ -24,6 +29,16 @@ import { successResponse } from '@/lib/shared/response';
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
+    const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+    try {
+      await enforceKeyedRateLimit(ip, 'public:search', MAX_REQUESTS_PER_MINUTE);
+    } catch (err: any) {
+      if (err?.status === 429) {
+        return NextResponse.json({ error: 'Too many requests' }, { status: 429 });
+      }
+      throw err;
+    }
+
     const params = validateSearchParams(request.nextUrl.searchParams);
     const result = await search(params);
     return successResponse(result);

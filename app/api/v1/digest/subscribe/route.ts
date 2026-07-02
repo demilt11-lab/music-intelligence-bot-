@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     }
     if (webhookUrl) {
       try {
-        validateWebhookUrl(webhookUrl);
+        await validateWebhookUrl(webhookUrl);
       } catch (e: any) {
         return NextResponse.json({ error: e.message ?? 'Invalid webhookUrl' }, { status: 400 });
       }

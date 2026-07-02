@@ -6,10 +6,11 @@
 // unset and shipped a tenant key to the browser bundle.
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireSession, AuthError } from '@/lib/auth/guard'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(_request: NextRequest, props: { params: Promise<{ artistId: string }> }) {
+export async function GET(request: NextRequest, props: { params: Promise<{ artistId: string }> }) {
   const params = await props.params;
   const artistId = Number(params.artistId)
   if (!Number.isInteger(artistId) || artistId <= 0) {
@@ -17,6 +18,8 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ arti
   }
 
   try {
+    await requireSession(request)
+
     const [artist, snapshot, externalIds] = await Promise.all([
       db.artist.findUnique({ where: { id: artistId } }),
       db.artistTrajectorySnapshot.findFirst({
@@ -36,7 +39,7 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ arti
       id: artist.id.toString(),
       name: artist.name,
       country: artist.country ?? null,
-      externalIds: externalIds.reduce<Record<string, string[]>>((acc, e) => {
+      externalIds: externalIds.reduce<Record<string, string[]>>((acc: Record<string, string[]>, e: { platform: string; externalId: string }) => {
         if (!acc[e.platform]) acc[e.platform] = []
         acc[e.platform].push(e.externalId)
         return acc
@@ -58,6 +61,9 @@ export async function GET(_request: NextRequest, props: { params: Promise<{ arti
 
     return NextResponse.json({ obj })
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('[api/artists/:id]', error)
     return NextResponse.json(
       { error: 'Failed to fetch artist detail' },
