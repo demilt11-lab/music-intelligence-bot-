@@ -90,6 +90,29 @@ const SYSTEM_PROMPT =
   'you only speak to the data you are given, never fabricate metrics, and keep ' +
   'briefings tight and decision-oriented. No emojis, no preamble.'
 
+const MIN_BRIEF_LENGTH = 20
+const MAX_BRIEF_LENGTH = 1200
+
+/**
+ * Cheap, reliable sanity check on a model-generated brief before it ships —
+ * not a full hallucination detector (that would need semantic parsing this
+ * codebase doesn't have), but it catches the failure modes that matter most:
+ * a response that never even grounds itself in the real top track, or one
+ * that's empty/garbage/runaway. There was previously no check of any kind —
+ * any non-empty string from the model shipped as-is.
+ */
+export function isPlausibleBrief(text: string, input: ScoutBriefInput): boolean {
+  if (text.length < MIN_BRIEF_LENGTH || text.length > MAX_BRIEF_LENGTH) return false
+  if (!input.topTracks.length) return false
+
+  const lead = input.topTracks[0]
+  const normalized = text.toLowerCase()
+  // The prompt explicitly asks the model to lead with the top track — a
+  // response that never names it either ignored the instruction or drifted
+  // off the real data, either way not safe to label as a grounded briefing.
+  return normalized.includes(lead.name.toLowerCase())
+}
+
 /**
  * Produce the scout briefing. Uses Claude when configured and the batch is
  * signal-backed; otherwise returns the deterministic heuristic.
@@ -114,5 +137,9 @@ export async function generateScoutBrief(
   })
 
   if (!text) return fallback
+  if (!isPlausibleBrief(text, input)) {
+    console.warn('[ai/scout-brief] model response failed plausibility check — falling back to heuristic')
+    return fallback
+  }
   return { text, source: 'ai', model: aiModel() }
 }

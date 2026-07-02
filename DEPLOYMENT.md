@@ -13,11 +13,13 @@ Vercel + Postgres + an optional Python ML sidecar).
 | Database | PostgreSQL (Prisma ORM) | Supabase (or any managed Postgres) |
 | Rate limiting | Upstash Redis (optional) | Upstash |
 | Scheduled jobs | Vercel Cron + GitHub Actions | Vercel / GitHub |
-| ML inference | FastAPI (`ml/api`, `services/ar-api`) | Railway / Fly.io (separate service) |
+| ML inference (artist trajectory) | In-process TS model (`lib/ml/`) | Same Vercel deployment — no separate service |
 
-The Next.js app is fully functional **without** the ML service and Redis — those
-degrade gracefully (rate limiting is skipped if Redis env vars are absent; the
-ML trajectory endpoint returns an error only if called without `ML_ARTIST_TRAJECTORY_URL`).
+The Next.js app is fully functional **without** Redis — rate limiting falls
+back to a real (if per-instance) in-memory limiter when Redis env vars are
+absent, never to unlimited. There is a separate, optional Python/FastAPI ML
+service (`ml/api`) that has never been deployed and that nothing in the app
+calls by default — see §7.
 
 ---
 
@@ -91,6 +93,25 @@ npx prisma migrate deploy
 `npx prisma migrate dev --name <change>`, commit it, and run
 `npx prisma migrate deploy` against production (or trigger the Database
 Migrations workflow).
+
+**Backups & recovery:** this project does not run its own backup job — it
+relies entirely on the managed Postgres provider's backup posture. On
+Supabase specifically:
+- **Free/Pro tier**: daily backups, retained per the plan's window (Pro:
+  7 days by default, longer with the PITR add-on). Point-in-time recovery
+  (restore to any second, not just a daily snapshot) is a paid add-on, not
+  enabled by default.
+- Verify the actual plan/retention window in the Supabase dashboard
+  (**Database → Backups**) — the defaults above can change and this repo
+  has no way to confirm what's actually configured for your project.
+- If a real RPO/RTO requirement exists (e.g. "no more than 1 hour of data
+  loss is acceptable"), confirm PITR is enabled before launch — the daily
+  snapshot default does not meet that bar.
+- `jobs/etl/data_retention.ts` and `db_seed.yml`/`cleanup_junk_tracks.yml`
+  are additive/idempotent or dry-run-gated (see their own docs), so none of
+  them should be a routine source of unrecoverable data loss — but they are
+  not a substitute for provider-level backups if something goes wrong
+  upstream of this app (e.g. a bad manual query against the database).
 
 ---
 
@@ -196,10 +217,60 @@ call it — as of now, setting that variable alone does nothing.
    handling, v1 auth enforcement, and cron fail-closed behavior, cleaning up its
    own fixture data afterwards.
 3. Spot-check a real track page: `https://<domain>/tracks/<id>`.
+4. Check `https://<domain>/status` (sign in first) for job health, data
+   freshness, and any unacknowledged high-severity anomalies.
 
 ---
 
-## 9. Deployment debt (tracked, not yet resolved)
+## 9. Rollback & incident response
+
+**A bad app deploy (broken build, regressed behavior, not a DB issue):**
+1. Vercel → Project → Deployments → find the last known-good deployment →
+   **⋯ → Promote to Production** (a.k.a. Instant Rollback). This is
+   immediate and does not require a new build.
+2. If the bad deploy already merged to `main`, also `git revert` the
+   offending commit(s) on `main` so the next deploy doesn't reintroduce it.
+
+**A bad migration (schema change broke something):**
+1. Prisma migrations are forward-only by default — there is no
+   `prisma migrate down`. Write a new migration that reverses the change
+   (e.g. drop the column/index a prior migration added) and deploy it via
+   `db_migrate.yml`, the same path as any other migration.
+2. If the migration hasn't been applied to production yet (caught in
+   review), just remove the migration folder before merging — nothing to
+   roll back.
+3. For a destructive migration already applied to production with data
+   loss: restore from a Supabase backup (see §4) to a **branch/point-in-time
+   snapshot first**, verify the data there, then decide whether to restore
+   the whole database or hand-copy the affected rows back. Do not restore
+   the primary database directly without inspecting the snapshot first.
+
+**A bad model promotion (ML model regressed in production):**
+Should be rare — the promotion gate in `lib/ml/models/{artist-trajectory,
+track-viral}.ts` already blocks a retrain that regresses held-out accuracy
+by more than 2 points vs. the incumbent. If a bad model still got promoted
+(e.g. the regression was subtle enough to pass the gate but wrong in
+practice): call `POST /api/internal/ml/train` again once the underlying
+data issue is fixed — training always compares against the current
+incumbent, so a good retrain will simply replace the bad one. There is no
+separate "previous model" store to roll back to (`ml_models` holds one row
+per model type) — this is a known gap, not a solved one.
+
+**A bad pipeline run (ingest/ETL wrote bad data):**
+Check `/status` or the `job_runs` table for the specific run, then check
+`pipeline_alerts.yml` (Slack, if configured) for what fired. Most ETL jobs
+recompute derived tables from source data rather than incrementally
+mutating them, so re-running the job after fixing the root cause (bad
+credential, upstream API change, etc.) self-heals in most cases — this is
+job-specific, there is no single "undo" command.
+
+**Who to page:** not formalized in this repo — no on-call rotation or
+incident-severity definitions exist yet. At minimum, confirm who owns
+watching `/status` and the Slack alerts channel before launch.
+
+---
+
+## 10. Deployment debt (tracked, not yet resolved)
 
 - **One moderate npm advisory.** postcss <8.5.10 pinned *inside Next's own
   bundle* (`node_modules/next/node_modules/postcss`) — present in every Next

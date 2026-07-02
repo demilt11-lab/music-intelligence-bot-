@@ -9,10 +9,17 @@ concurrency:
 
 # One-button cold start: runs every configured provider ingest in dependency
 # order, the full ETL chain, and the reconciliation gate. Providers without
-# secrets are skipped loudly. Safe to re-run (idempotent jobs).
+# secrets are skipped loudly. Safe to re-run (idempotent jobs) — but it does
+# run the full prod ingest+ETL chain against whatever DATABASE_URL points at,
+# so it requires an explicit "apply" confirmation like db_seed.yml and
+# cleanup_junk_tracks.yml, rather than firing on a bare workflow_dispatch.
 on:
   workflow_dispatch:
     inputs:
+      apply:
+        description: "Actually run the cold-start sequence (leave unchecked to no-op safely)"
+        type: boolean
+        default: false
       skip_ingest:
         description: "Skip Phase 1 ingestion (ETL + reconcile only)"
         type: boolean
@@ -29,10 +36,17 @@ jobs:
           node-version: "20"
           cache: "npm"
       - name: Install dependencies
+        if: ${{ inputs.apply }}
         run: npm ci
       - name: Generate Prisma client
+        if: ${{ inputs.apply }}
         run: npx prisma generate
+      - name: Skipped (apply not checked)
+        if: ${{ !inputs.apply }}
+        run: |
+          echo "::warning::Cold-start was skipped because 'apply' was not checked. This runs the full ingest+ETL chain against whatever DATABASE_URL points at (production) — re-run with 'apply' checked only if that's intended."
       - name: Run cold-start sequence
+        if: ${{ inputs.apply }}
         run: bash scripts/coldstart.sh
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   try {
     await requireSession(req);
 
-    const [latestRuns, recentFailures, lastReconcile, latestUgcDate, latestUgcGenreDate, latestPlaylistGenreDate] = await Promise.all([
+    const [latestRuns, recentFailures, lastReconcile, latestUgcDate, latestUgcGenreDate, latestPlaylistGenreDate, recentAnomalies] = await Promise.all([
       db.$queryRawUnsafe<
         {
           jobName: string;
@@ -61,6 +61,18 @@ export async function GET(req: NextRequest) {
         orderBy: { date: 'desc' },
         select: { date: true },
       }),
+      // anomaly_detection.ts computes real rolling z-scores every 2 hours
+      // (severity: low/medium/high), but nothing surfaced them anywhere
+      // before this — high-severity, unacknowledged, last 7 days.
+      db.anomalyLog.findMany({
+        where: {
+          severity: 'high',
+          acknowledged: false,
+          detectedAt: { gte: new Date(Date.now() - 7 * 86_400_000) },
+        },
+        orderBy: { detectedAt: 'desc' },
+        take: 25,
+      }),
     ]);
 
     const freshness = {
@@ -70,12 +82,54 @@ export async function GET(req: NextRequest) {
       genrePlaylistMetrics: freshnessStatus(latestPlaylistGenreDate?.date),
     };
 
+    const anomalyTrackIds = recentAnomalies
+      .map((a: { trackId: number | null }) => a.trackId)
+      .filter((id: number | null): id is number => id != null);
+    const anomalyArtistIds = recentAnomalies
+      .map((a: { artistId: number | null }) => a.artistId)
+      .filter((id: number | null): id is number => id != null);
+    const [anomalyTracks, anomalyArtists] = await Promise.all([
+      anomalyTrackIds.length
+        ? db.track.findMany({ where: { id: { in: anomalyTrackIds } }, select: { id: true, title: true } })
+        : Promise.resolve([] as Array<{ id: number; title: string }>),
+      anomalyArtistIds.length
+        ? db.artist.findMany({ where: { id: { in: anomalyArtistIds } }, select: { id: true, name: true } })
+        : Promise.resolve([] as Array<{ id: number; name: string }>),
+    ]);
+    const trackNameById = new Map(anomalyTracks.map((t: { id: number; title: string }) => [t.id, t.title]));
+    const artistNameById = new Map(anomalyArtists.map((a: { id: number; name: string }) => [a.id, a.name]));
+
+    const anomalies = recentAnomalies.map((a: {
+      id: number;
+      trackId: number | null;
+      artistId: number | null;
+      metric: string;
+      zScore: number;
+      currentValue: number;
+      baselineMean: number;
+      severity: string;
+      detectedAt: Date;
+    }) => ({
+      id: a.id,
+      entityType: a.trackId != null ? 'track' : 'artist',
+      entityId: a.trackId ?? a.artistId,
+      entityName:
+        (a.trackId != null ? trackNameById.get(a.trackId) : artistNameById.get(a.artistId!)) ?? null,
+      metric: a.metric,
+      zScore: a.zScore,
+      currentValue: a.currentValue,
+      baselineMean: a.baselineMean,
+      severity: a.severity,
+      detectedAt: a.detectedAt,
+    }));
+
     return NextResponse.json({
       obj: {
         jobs: latestRuns,
         recentFailures,
         lastReconcile,
         freshness,
+        anomalies,
       },
     });
   } catch (err) {
