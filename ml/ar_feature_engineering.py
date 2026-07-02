@@ -43,6 +43,7 @@ def _fetch_artist_daily_stats(conn, target_date: date) -> pd.DataFrame:
             "totalListeners",
             "totalFollowers",
             "totalStreams",
+            "airplayPlays",
             "platformStreams",
             "platformListeners"
         FROM artist_daily_stats
@@ -108,6 +109,32 @@ def _fetch_track_platform_saves_streams(conn, target_date: date) -> pd.DataFrame
         FROM track_platform_stats_daily t
         JOIN track_artists ta ON ta."trackId" = t."trackId"
         WHERE t."date" >= %(start)s AND t."date" <= %(end)s
+        GROUP BY ta."artistId"
+    """
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(sql, {"start": start, "end": target_date})
+        rows = cur.fetchall()
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+def _fetch_chart_presence(conn, target_date: date) -> pd.DataFrame:
+    """
+    Pull per-artist chart presence/momentum from chart_rows for the last 7d,
+    across every chart platform (billboard, applemusic, spotify, ...) —
+    deliberately platform-agnostic so crawl4ai-sourced charts count the same
+    as API-sourced ones.
+    """
+    start = target_date - timedelta(days=7)
+    sql = """
+        SELECT
+            ta."artistId",
+            COUNT(DISTINCT cs."chartName" || '|' || cs.platform) AS chart_presence_7d,
+            AVG(cr."previousRank" - cr.rank)
+                FILTER (WHERE cr."previousRank" IS NOT NULL)     AS chart_rank_improvement_7d
+        FROM chart_rows cr
+        JOIN chart_snapshots cs ON cs.id = cr."snapshotId"
+        JOIN track_artists ta ON ta."trackId" = cr."trackId"
+        WHERE cs."snapshotDate" >= %(start)s AND cs."snapshotDate" <= %(end)s
         GROUP BY ta."artistId"
     """
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -209,6 +236,7 @@ def compute_artist_features_for_date(conn, target_date: date) -> None:
     ugc_df = _fetch_ugc_metrics(conn, target_date)
     playlist_df = _fetch_playlist_adds(conn, target_date)
     saves_df = _fetch_track_platform_saves_streams(conn, target_date)
+    chart_df = _fetch_chart_presence(conn, target_date)
 
     if ads_df.empty:
         logger.warning("No artist_daily_stats found for date window, skipping.")
@@ -218,6 +246,7 @@ def compute_artist_features_for_date(conn, target_date: date) -> None:
     ads_df["date"] = pd.to_datetime(ads_df["date"])
     ads_df["totalListeners"] = pd.to_numeric(ads_df["totalListeners"], errors="coerce")
     ads_df["totalFollowers"] = pd.to_numeric(ads_df["totalFollowers"], errors="coerce")
+    ads_df["airplayPlays"] = pd.to_numeric(ads_df["airplayPlays"], errors="coerce")
 
     artist_ids = ads_df["artistId"].unique()
     logger.info(f"Found {len(artist_ids)} artists to process")
@@ -241,6 +270,25 @@ def compute_artist_features_for_date(conn, target_date: date) -> None:
         # --- Follower growth ---
         feat["followersGrowth7d"] = _compute_growth_window(grp, "totalFollowers", 7, target_date)
         feat["followersGrowth30d"] = _compute_growth_window(grp, "totalFollowers", 30, target_date)
+
+        # --- Radio airplay growth (crawl4ai crawl_radio_spins.ts -> RadioAirplayFact -> airplayPlays) ---
+        feat["airplayGrowth7d"] = _compute_growth_window(grp, "airplayPlays", 7, target_date)
+        feat["airplayGrowth30d"] = _compute_growth_window(grp, "airplayPlays", 30, target_date)
+
+        # --- Chart presence/momentum (billboard, applemusic, spotify, ... — platform-agnostic) ---
+        if not chart_df.empty and "artistId" in chart_df.columns:
+            chart_row = chart_df[chart_df["artistId"] == artist_id]
+            if not chart_row.empty:
+                presence = chart_row.iloc[0]["chart_presence_7d"]
+                improvement = chart_row.iloc[0]["chart_rank_improvement_7d"]
+                feat["chartPresence7d"] = int(presence) if pd.notna(presence) else None
+                feat["chartRankImprovement7d"] = float(improvement) if pd.notna(improvement) else None
+            else:
+                feat["chartPresence7d"] = None
+                feat["chartRankImprovement7d"] = None
+        else:
+            feat["chartPresence7d"] = None
+            feat["chartRankImprovement7d"] = None
 
         # --- Velocity & Acceleration ---
         feat["listenersVelocity7d"] = _compute_velocity(grp, "totalListeners", 7, target_date)
@@ -323,6 +371,8 @@ def compute_artist_features_for_date(conn, target_date: date) -> None:
             "artistId", date,
             "listenersGrowth7d", "listenersGrowth14d", "listenersGrowth30d", "listenersGrowth90d",
             "followersGrowth7d", "followersGrowth30d",
+            "airplayGrowth7d", "airplayGrowth30d",
+            "chartPresence7d", "chartRankImprovement7d",
             "listenersVelocity7d", "listenersAcceleration7d",
             "tiktokVideosPerDay7d", "tiktokViewsGrowth7d",
             "crossPlatformSpikes7d",
@@ -335,6 +385,8 @@ def compute_artist_features_for_date(conn, target_date: date) -> None:
             %(artistId)s, %(date)s,
             %(listenersGrowth7d)s, %(listenersGrowth14d)s, %(listenersGrowth30d)s, %(listenersGrowth90d)s,
             %(followersGrowth7d)s, %(followersGrowth30d)s,
+            %(airplayGrowth7d)s, %(airplayGrowth30d)s,
+            %(chartPresence7d)s, %(chartRankImprovement7d)s,
             %(listenersVelocity7d)s, %(listenersAcceleration7d)s,
             %(tiktokVideosPerDay7d)s, %(tiktokViewsGrowth7d)s,
             %(crossPlatformSpikes7d)s,
@@ -350,6 +402,10 @@ def compute_artist_features_for_date(conn, target_date: date) -> None:
             "listenersGrowth90d"         = EXCLUDED."listenersGrowth90d",
             "followersGrowth7d"          = EXCLUDED."followersGrowth7d",
             "followersGrowth30d"         = EXCLUDED."followersGrowth30d",
+            "airplayGrowth7d"            = EXCLUDED."airplayGrowth7d",
+            "airplayGrowth30d"           = EXCLUDED."airplayGrowth30d",
+            "chartPresence7d"            = EXCLUDED."chartPresence7d",
+            "chartRankImprovement7d"     = EXCLUDED."chartRankImprovement7d",
             "listenersVelocity7d"        = EXCLUDED."listenersVelocity7d",
             "listenersAcceleration7d"    = EXCLUDED."listenersAcceleration7d",
             "tiktokVideosPerDay7d"       = EXCLUDED."tiktokVideosPerDay7d",

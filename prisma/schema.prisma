@@ -1450,6 +1450,14 @@ model ArtistFeaturesDaily {
   followersGrowth7d           Float?
   followersGrowth30d          Float?
 
+  // Radio airplay growth % (from crawl4ai radio-spins ingestion, via ArtistDailyStats.airplayPlays)
+  airplayGrowth7d              Float?
+  airplayGrowth30d             Float?
+
+  // Chart presence/momentum (Billboard, Apple Music, etc — platform-agnostic; see chart_rows/chart_snapshots)
+  chartPresence7d              Int?   // # distinct charts an artist's tracks appeared on (7d)
+  chartRankImprovement7d       Float? // avg(previousRank - rank) across current chart rows; positive = climbing
+
   // Velocity = change per day over last 7d; acceleration = delta of velocity
   listenersVelocity7d         Float?
   listenersAcceleration7d     Float?
