@@ -62,6 +62,7 @@ Copy `.env.example` → `.env.local` for local dev. In production set them in
 | `SCOUT_SAMPLE_FALLBACK` | Set to `1` to let the Talent Scout return clearly-labeled sample rows when no UGC/ML/chart data exists (default off: an honest empty state is shown instead). |
 | `ML_ARTIST_TRAJECTORY_URL` | Artist trajectory prediction endpoint (points at the FastAPI ML service). |
 | `CRAWLER_API_URL` + `CRAWLER_API_KEY` | crawl4ai crawler service (points at `services/crawler-api`). Required by `ingest:billboard`, `ingest:crawl-dsp-apple`, `ingest:crawl-social-x`, `ingest:crawl-radio-spins`; the serving API is unaffected if unset. |
+| `AR_API_URL` | Predictive A&R FastAPI service (`services/ar-api`). Required by the `/ar-bot` chat's tool-calling loop (`lib/bot/execute.ts`); combined with `ANTHROPIC_API_KEY` for the reply itself. If unset, `/ar-bot` shows an "unconfigured" banner instead of failing. |
 | `UPSTASH_REDIS_URL` + `UPSTASH_REDIS_TOKEN` | Rate limiting. If absent, rate limiting is disabled (all requests allowed). |
 | `ALLOWED_ORIGIN` | CORS allow-origin for `/api/*`. Defaults to `*`; set to your domain. |
 | Data-provider keys | The ingest/ETL jobs (see `.env.example` for the full list). |
@@ -190,7 +191,24 @@ See `services/crawler-api/README.md` for the API surface.
 
 ---
 
-## 9. Post-deploy verification
+## 9. A&R bot service (optional)
+
+`services/ar-api` (Predictive A&R API) is deployed the same way:
+```bash
+cd services/ar-api
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8080
+```
+Point `AR_API_URL` at its public URL. It's consumed by the `/ar-bot` chat page
+via a Claude tool-calling loop (`lib/ai/agent.ts` + `lib/bot/tools.ts` +
+`lib/bot/execute.ts`) — requires both `AR_API_URL` and `ANTHROPIC_API_KEY` to
+produce real replies; the page shows which one is missing otherwise. Note
+`playlists_to_pitch` intentionally returns 501 (unimplemented) — the UI
+surfaces that as a plain error rather than fabricating recommendations.
+
+---
+
+## 10. Post-deploy verification
 
 1. **Health:** `curl https://<domain>/api/health` → `{"status":"ok","db":"up"}`.
 2. **Smoke test** (against any environment with DB access + a running server):
@@ -204,7 +222,7 @@ See `services/crawler-api/README.md` for the API surface.
 
 ---
 
-## 10. Deployment debt (tracked, not yet resolved)
+## 11. Deployment debt (tracked, not yet resolved)
 
 - **One moderate npm advisory.** postcss <8.5.10 pinned *inside Next's own
   bundle* (`node_modules/next/node_modules/postcss`) — present in every Next

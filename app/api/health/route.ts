@@ -32,6 +32,7 @@ export async function GET() {
     googleTrends: has('SEARCHAPI_KEY'),
     billboard: has('CRAWLER_API_URL'),
     crawler: has('CRAWLER_API_URL'),
+    arApi: has('AR_API_URL'),
     ai: isAiConfigured(),
     redis: has('UPSTASH_REDIS_URL') && has('UPSTASH_REDIS_TOKEN'),
   };

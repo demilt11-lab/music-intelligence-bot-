@@ -533,6 +533,28 @@ Extending to a source not covered yet (Amazon Music, Tidal, Facebook, more
 chart sites) means adding a target URL + a parse function following one of
 the existing jobs as a template — no new infrastructure required.
 
+crawl4ai data feeds A&R scoring too: `crawl_radio_spins.ts` and the chart jobs
+above roll up into `ArtistFeaturesDaily.airplayGrowth7d/30d` and
+`chartPresence7d`/`chartRankImprovement7d` (computed in
+`ml/ar_feature_engineering.py`, folded into `ml/scoring.py`'s heat/stability
+formulas), which is what `/ar-bot` (below) actually reads.
+
+---
+
+## A&R Bot
+
+`/ar-bot` is a chat UI for `services/ar-api` (the Predictive A&R scoring
+service) — the first live consumer of `lib/bot/tools.ts`'s tool schemas,
+which previously had no runtime behind them. A Claude tool-calling loop
+(`lib/ai/agent.ts`) executes `search_artists` / `explain_artist` /
+`playlists_to_pitch` against ar-api (`lib/bot/execute.ts`) and the UI renders
+the results as artist cards / feature breakdowns alongside Buddy's reply.
+
+Requires `ANTHROPIC_API_KEY` (the reply) and `AR_API_URL` (the data) — the
+page shows which is missing rather than failing silently if either is unset.
+`playlists_to_pitch` is intentionally unimplemented upstream (ar-api returns
+501); the bot reports that plainly instead of inventing recommendations.
+
 ---
 
 ## Prisma Schema

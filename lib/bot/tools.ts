@@ -175,3 +175,13 @@ export const OPENAI_BOT_TOOLS = Object.entries(BOT_TOOLS).map(([name, def]) => (
     parameters: def.parameters,
   },
 }));
+
+// ---------------------------------------------------------------------------
+// Anthropic-format tools array (for use with the Messages API `tools` param)
+// ---------------------------------------------------------------------------
+
+export const ANTHROPIC_BOT_TOOLS = Object.entries(BOT_TOOLS).map(([name, def]) => ({
+  name,
+  description: def.description,
+  input_schema: def.parameters,
+}));
