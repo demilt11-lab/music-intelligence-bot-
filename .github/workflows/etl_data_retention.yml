@@ -1,5 +1,12 @@
 name: Data Retention (GDPR/CCPA)
 
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 on:
   schedule:
     - cron: '0 3 * * *' # daily at 03:00 UTC, off-peak

@@ -1,5 +1,12 @@
 name: Cold Start Ingestion
 
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 # One-button cold start: runs every configured provider ingest in dependency
 # order, the full ETL chain, and the reconciliation gate. Providers without
 # secrets are skipped loudly. Safe to re-run (idempotent jobs).

@@ -1,5 +1,12 @@
 name: Discovery Test — Songs To Watch
 
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 # Manually-triggered run of the "songs to watch" discovery ranker against the
 # production database. Ranks tracks by month-over-month streaming growth +
 # growth in curated-playlist features. Read-only (SELECT queries only).
