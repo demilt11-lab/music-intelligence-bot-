@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { Cache, TTL } from '@/lib/cache'
+import { requireSession, AuthError } from '@/lib/auth/guard'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,7 +107,7 @@ function buildExplanation(snapshot: {
   return factors
 }
 
-export async function GET(_req: NextRequest, props: { params: Promise<{ artistId: string }> }) {
+export async function GET(req: NextRequest, props: { params: Promise<{ artistId: string }> }) {
   const params = await props.params;
   const artistId = Number(params.artistId)
 
@@ -114,13 +115,15 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ artistId
     return NextResponse.json({ error: 'Invalid artistId' }, { status: 400 })
   }
 
-  const cacheKey = `artist:trajectory:${artistId}`
-  const cached = Cache.get<object>(cacheKey)
-  if (cached) {
-    return NextResponse.json(cached, { headers: { 'x-cache': 'hit' } })
-  }
-
   try {
+    await requireSession(req)
+
+    const cacheKey = `artist:trajectory:${artistId}`
+    const cached = Cache.get<object>(cacheKey)
+    if (cached) {
+      return NextResponse.json(cached, { headers: { 'x-cache': 'hit' } })
+    }
+
     const [artist, snapshot, history, releases, accuracy] = await Promise.all([
       db.artist.findUnique({ where: { id: artistId } }),
       db.artistTrajectorySnapshot.findFirst({
@@ -228,6 +231,9 @@ export async function GET(_req: NextRequest, props: { params: Promise<{ artistId
     Cache.set(cacheKey, payload, TTL.SHORT)
     return NextResponse.json(payload, { headers: { 'x-cache': 'miss' } })
   } catch (error) {
+    if (error instanceof AuthError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('[api/artists/:id/trajectory]', error)
     return NextResponse.json(
       { error: 'Failed to load artist trajectory' },

@@ -8,25 +8,25 @@ import {
   SESSION_COOKIE,
 } from '@/lib/auth/session';
 import { assertSameOrigin, AuthError } from '@/lib/auth/guard';
+import { enforceKeyedRateLimit } from '@/lib/platform/rate-limit';
+import { getUiTenantId } from '@/lib/platform/ui-tenant';
 
 export const dynamic = 'force-dynamic';
 
-// Fixed-window per-IP limiter against credential stuffing. In-memory is per
-// serverless instance; Upstash (when configured) would make it global — this
-// is the conservative local floor either way.
-const attempts = new Map<string, { count: number; resetAt: number }>();
+// Fixed-window per-IP limiter against credential stuffing. Backed by Upstash
+// when configured (shared across every serverless instance); degrades to a
+// real per-instance in-memory limiter otherwise — never allow-all.
 const MAX_ATTEMPTS = 10;
 const WINDOW_MS = 15 * 60 * 1000;
 
-function rateLimited(ip: string): boolean {
-  const now = Date.now();
-  const bucket = attempts.get(ip);
-  if (!bucket || bucket.resetAt < now) {
-    attempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
+async function rateLimited(ip: string): Promise<boolean> {
+  try {
+    await enforceKeyedRateLimit(ip, 'auth:login', MAX_ATTEMPTS, WINDOW_MS);
     return false;
+  } catch (err: any) {
+    if (err?.status === 429) return true;
+    throw err;
   }
-  bucket.count++;
-  return bucket.count > MAX_ATTEMPTS;
 }
 
 export async function POST(req: NextRequest) {
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     const ip =
       req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
-    if (rateLimited(ip)) {
+    if (await rateLimited(ip)) {
       return NextResponse.json(
         { error: 'Too many login attempts — try again in 15 minutes' },
         { status: 429 },
@@ -67,9 +67,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
     }
 
+    // Scoped to the UI's single workspace tenant (see lib/platform/ui-tenant) —
+    // TenantUser.email is only unique per-tenant, and an unscoped lookup would
+    // resolve to whichever tenant happens to have the lowest id if the same
+    // email were ever provisioned under more than one.
+    const tenantId = await getUiTenantId();
     const user = await db.tenantUser.findFirst({
-      where: { email },
-      orderBy: { id: 'asc' },
+      where: { email, tenantId },
     });
 
     // Constant-shape failure: same message whether the user or password is wrong.

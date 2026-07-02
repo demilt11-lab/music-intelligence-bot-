@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { Cache, TTL } from "@/lib/cache";
+import { requireSession, AuthError } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,8 @@ type LeaderboardRow = {
 
 export async function GET(req: NextRequest) {
   try {
+    await requireSession(req);
+
     const { searchParams } = new URL(req.url);
 
     const statusParam = searchParams.get("status");
@@ -127,6 +130,9 @@ export async function GET(req: NextRequest) {
     Cache.set(cacheKey, payload, TTL.SHORT);
     return NextResponse.json(payload, { headers: { "x-cache": "miss" } });
   } catch (err) {
+    if (err instanceof AuthError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
     console.error("[api/artists/breaking]", err);
     return NextResponse.json(
       { error: "Failed to load breaking artists" },
