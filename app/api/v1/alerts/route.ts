@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (channel === 'webhook') {
-      validateWebhookUrl(destination); // throws 400 if URL targets private ranges
+      await validateWebhookUrl(destination); // throws 400 if URL targets private ranges
     }
 
     const rule = await db.alertRule.create({
