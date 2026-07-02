@@ -70,6 +70,35 @@ async function main() {
       (unauthPage.headers.get('location') ?? '').includes('/login'),
       `status=${unauthPage.status} location=${unauthPage.headers.get('location')}`);
 
+    // These five routes were live P0 findings (F-02, F-03, F-06) — each was
+    // reachable with no session at all until this remediation. Nothing above
+    // exercised the unauthenticated path for any of them, so a regression
+    // here would have shipped silently. IDs don't need to exist: every one of
+    // these routes checks the session before touching the DB.
+    const unauthBreaking = await getJson('/api/artists/breaking');
+    check('GET /api/artists/breaking without session → 401', unauthBreaking.status === 401,
+      `status=${unauthBreaking.status}`);
+
+    const unauthArtist = await getJson('/api/artists/1');
+    check('GET /api/artists/:id without session → 401', unauthArtist.status === 401,
+      `status=${unauthArtist.status}`);
+
+    const unauthTrajectory = await getJson('/api/artists/1/trajectory');
+    check('GET /api/artists/:id/trajectory without session → 401', unauthTrajectory.status === 401,
+      `status=${unauthTrajectory.status}`);
+
+    const unauthScoutBrief = await getJson('/api/ai/scout-brief', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ market: 'US', mode: 'general', isSignalBacked: true, topTracks: [] }),
+    });
+    check('POST /api/ai/scout-brief without session → 401', unauthScoutBrief.status === 401,
+      `status=${unauthScoutBrief.status}`);
+
+    const unauthHealth = await getJson('/api/talent-scout/health');
+    check('GET /api/talent-scout/health without internal auth → 401', unauthHealth.status === 401,
+      `status=${unauthHealth.status}`);
+
     const badLogin = await getJson('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
