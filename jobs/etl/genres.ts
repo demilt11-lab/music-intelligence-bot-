@@ -2,7 +2,9 @@
 //
 // Aggregates per-genre momentum metrics for the genre breakout detector:
 //   UgcGenreMetrics      <- UgcTrackMetrics (TikTok UGC)
-//   GenrePlaylistMetrics <- TrackPlatformStatsDaily (Spotify streams/adds)
+//   GenrePlaylistMetrics <- TrackPlatformStatsDaily (Spotify streams/adds,
+//                           with YouTube views-gained as the volume fallback
+//                           via lib/features/streaming-volume)
 //   GenreAirplayMetrics  <- LuminateAirplay (US radio)
 //
 // A track's genre comes from real associations only: TrackTag(category=genre)
@@ -10,6 +12,7 @@
 // 'Unknown' so totals remain traceable instead of silently dropped.
 import { db } from '@/lib/db';
 import { runTrackedJob } from '@/lib/jobs/tracker';
+import { loadStreamingVolumeByTrack } from '@/lib/features/streaming-volume';
 
 const GLOBAL = 'GLOBAL';
 const ALL_FORMATS = 'ALL';
@@ -136,40 +139,52 @@ async function aggregatePlaylistGenre(
   sevenDaysAgo: Date,
   fourteenDaysAgo: Date,
 ): Promise<number> {
-  const window = async (gte: Date, lt: Date) =>
+  // Streaming volume per track (Spotify streams preferred, YouTube
+  // views-gained fallback) so the rollup works from live sources.
+  const [currentVolume, previousVolume] = await Promise.all([
+    loadStreamingVolumeByTrack(sevenDaysAgo, date),
+    loadStreamingVolumeByTrack(fourteenDaysAgo, sevenDaysAgo),
+  ]);
+
+  // Playlist adds remain Spotify-only (no other source reports them).
+  const addsWindow = async (gte: Date, lt: Date) =>
     db.trackPlatformStatsDaily.groupBy({
       by: ['trackId'],
       where: { platform: 'spotify', date: { gte, lt } },
-      _sum: { streams: true, playlistAdds: true },
+      _sum: { playlistAdds: true },
     });
-
-  const [current, previous] = await Promise.all([
-    window(sevenDaysAgo, date),
-    window(fourteenDaysAgo, sevenDaysAgo),
+  const [currentAdds, previousAdds] = await Promise.all([
+    addsWindow(sevenDaysAgo, date),
+    addsWindow(fourteenDaysAgo, sevenDaysAgo),
   ]);
+  const addsByTrackCurr = new Map(currentAdds.map((r) => [r.trackId, Number(r._sum.playlistAdds ?? 0n)]));
+  const addsByTrackPrev = new Map(previousAdds.map((r) => [r.trackId, Number(r._sum.playlistAdds ?? 0n)]));
 
-  if (!current.length) {
-    console.log('[genre-etl] no spotify daily stats in window - skipping playlist rollup');
+  if (currentVolume.size === 0) {
+    console.log('[genre-etl] no spotify/youtube daily stats in window - skipping playlist rollup');
     return 0;
   }
 
-  const genreByTrack = await loadTrackGenres(current.map((r) => r.trackId));
+  const genreByTrack = await loadTrackGenres([...currentVolume.keys()]);
 
   type Agg = { streams: bigint; adds: number };
-  const sumByGenre = (rows: typeof current): Map<string, Agg> => {
+  const sumByGenre = (
+    volume: Map<number, number>,
+    adds: Map<number, number>,
+  ): Map<string, Agg> => {
     const m = new Map<string, Agg>();
-    for (const r of rows) {
-      const genre = genreByTrack.get(r.trackId) ?? 'Unknown';
+    for (const [trackId, vol] of volume) {
+      const genre = genreByTrack.get(trackId) ?? 'Unknown';
       const agg = m.get(genre) ?? { streams: 0n, adds: 0 };
-      agg.streams += r._sum.streams ?? 0n;
-      agg.adds += Number(r._sum.playlistAdds ?? 0n);
+      agg.streams += BigInt(Math.round(vol));
+      agg.adds += adds.get(trackId) ?? 0;
       m.set(genre, agg);
     }
     return m;
   };
 
-  const currByGenre = sumByGenre(current);
-  const prevByGenre = sumByGenre(previous);
+  const currByGenre = sumByGenre(currentVolume, addsByTrackCurr);
+  const prevByGenre = sumByGenre(previousVolume, addsByTrackPrev);
 
   // TrackPlatformStatsDaily has no per-country split - aggregate as GLOBAL.
   for (const [genre, agg] of currByGenre.entries()) {
