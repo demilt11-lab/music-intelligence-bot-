@@ -28,7 +28,42 @@ export type DailyRow = {
   totalStreams: bigint;
   playlistCount: number | null;
   totalFollowers: bigint | null;
+  totalListeners: bigint | null;
 };
+
+/**
+ * Latest listener count in the window plus the pct delta vs. the value 28
+ * days earlier — same latest-vs-28d-ago semantics as followersDelta28d.
+ * Listener data is sparse (only artists covered by the Soundcharts ingest
+ * have it), so both values are null when the series is empty.
+ */
+export function computeListenerWindow(listeners: (number | null)[]): {
+  listeners28d: bigint | null;
+  listenersDelta28d: number | null;
+} {
+  const latestIdx = listeners.length - 1;
+  let latest: number | null = null;
+  for (let i = latestIdx; i >= 0 && i > latestIdx - 28; i--) {
+    if (listeners[i] != null) {
+      latest = listeners[i];
+      break;
+    }
+  }
+  if (latest == null) return { listeners28d: null, listenersDelta28d: null };
+
+  let prev: number | null = null;
+  for (let i = latestIdx - 28; i >= 0 && i > latestIdx - 56; i--) {
+    if (listeners[i] != null) {
+      prev = listeners[i];
+      break;
+    }
+  }
+
+  return {
+    listeners28d: BigInt(Math.round(latest)),
+    listenersDelta28d: prev != null && prev !== 0 ? (latest - prev) / prev : null,
+  };
+}
 
 export function inferBreakoutRegionAndGenre(predictions: TrackTrendPred[]) {
   const genreScores = new Map<string, number>();
@@ -212,6 +247,7 @@ export async function buildArtistTrajectorySnapshots(dateStr: string) {
       totalStreams: r.totalStreams,
       playlistCount: r.playlistCount ?? 0,
       totalFollowers: r.totalFollowers ?? null,
+      totalListeners: r.totalListeners ?? null,
     });
     byArtist.set(r.artistId, list);
   }
@@ -232,6 +268,10 @@ export async function buildArtistTrajectorySnapshots(dateStr: string) {
 
       const latest = history[history.length - 1];
       const deltas = computeWindowDeltas(streams, playlists, followers);
+      const listenerSeries = history.map((h) =>
+        h.totalListeners != null ? Number(h.totalListeners) : null,
+      );
+      const listenerWindow = computeListenerWindow(listenerSeries);
 
       const { status, statusScore, breakProbability } = classifyStatus({
         streams28dDelta: deltas.streams28dDelta,
@@ -292,8 +332,8 @@ export async function buildArtistTrajectorySnapshots(dateStr: string) {
         streams7dDelta: deltas.streams7dDelta,
         streams28dDelta: deltas.streams28dDelta,
         streams90dDelta: deltas.streams90dDelta,
-        listeners28d: null,
-        listenersDelta28d: null,
+        listeners28d: listenerWindow.listeners28d,
+        listenersDelta28d: listenerWindow.listenersDelta28d,
         followersDelta28d: deltas.followersDelta28d,
         playlistsDelta28d: deltas.playlistsDelta28d,
         editorialAdds28d: null,

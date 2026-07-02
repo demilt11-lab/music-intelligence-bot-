@@ -1,6 +1,6 @@
 /**
  * Cron job: evaluate active alert rules and fire notifications.
- * Run: npx ts-node jobs/alerts/check-alert-rules.ts
+ * Run: npx tsx jobs/alerts/check-alert-rules.ts
  * Recommended schedule: every 30 minutes.
  */
 

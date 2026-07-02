@@ -148,13 +148,14 @@ Vercel **Hobby** plan only allows daily schedules. To run alert checks more
 frequently (e.g. every 2h: `0 */2 * * *`), upgrade to the **Pro** plan.
 
 ### GitHub Actions (ingestion, ETL, ML)
-The 30 workflows under `.github/workflows/` run ingestion, ETL, ML training,
+The 31 workflows under `.github/workflows/` run ingestion, ETL, ML training,
 and pipeline ops on schedules / manual dispatch. Depending on which
 workflows you use, they require these repo secrets:
 - `DATABASE_URL` — required by nearly all of them.
 - Provider keys: `SPOTIFY_CLIENT_ID/SECRET`, `YOUTUBE_API_KEY`, `TIKTOK_*`,
   `RAPIDAPI_KEY`, `SHAZAM_API_KEY`, `FIRECRAWL_API_KEY`, `SEARCHAPI_KEY`,
-  `META_*`, `LUMINATE_*`, `SOUNDCHARTS_*`, `SONGSTATS_*`.
+  `META_*`, `LUMINATE_*`, `SOUNDCHARTS_APP_ID`/`SOUNDCHARTS_API_KEY`,
+  `SONGSTATS_*`.
 - `CRON_SECRET` — same value as the Vercel env var; some workflows call back
   into the deployed app's `/api/cron/*` routes and need it to authenticate.
 - `INTERNAL_ADMIN_SECRET` — used by `ml_train.yml` and `provision_user.yml`
@@ -170,6 +171,17 @@ workflows you use, they require these repo secrets:
 - `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` — used by `db_seed.yml` and
   `provision_user.yml` to create the first admin user.
 - `SLACK_WEBHOOK_URL` — optional; `pipeline_alerts.yml` no-ops without it.
+
+> The **Soundcharts ingest** (`ingest_soundcharts.yml`, daily 05:00 UTC) is
+> what feeds Apple Music / Amazon playlist placements and Spotify
+> monthly-listener + follower series. It is an **optional** data source:
+> without `SOUNDCHARTS_APP_ID` / `SOUNDCHARTS_API_KEY` the workflow
+> **skips cleanly** (green run, no Slack alert) and those datasets stay
+> empty — the corresponding directory pages show honest empty states and
+> the ML listener features remain null (the models handle that). Add the
+> two repo secrets to activate it; per-run API budgets are tunable via
+> `SOUNDCHARTS_RESOLVE_BUDGET`, `SOUNDCHARTS_PLAYLIST_SONG_BUDGET`, and
+> `SOUNDCHARTS_ARTIST_BUDGET` (see `jobs/ingest/soundcharts.ts`).
 
 > The **artist-trajectory ETL** runs via the `artist_etl.yml` workflow daily
 > at 8:30 UTC (after ingestion). The `/api/cron/etl-artist-trajectory` route

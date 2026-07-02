@@ -196,7 +196,7 @@ if (require.main === module) {
   const dateArg = process.argv[2];
   if (!dateArg) {
     console.error(
-      "Usage: ts-node jobs/etl/artist_spotify_release_stats.ts YYYY-MM-DD",
+      "Usage: npx tsx jobs/etl/artist_spotify_release_stats.ts YYYY-MM-DD",
     );
     process.exit(1);
   }

@@ -32,7 +32,6 @@ import {
   normalizeSongwriter,
   toSuggestion,
 } from './normalize';
-import { isEmptyResult } from './sample-data';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal helpers

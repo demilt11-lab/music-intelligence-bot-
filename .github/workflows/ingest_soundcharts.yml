@@ -1,0 +1,67 @@
+name: Ingest Soundcharts
+
+# Fills the DSP gaps the first-party crawlers can't reach:
+# Apple Music / Amazon playlist placements + Spotify monthly-listener and
+# follower series (per artist). Budget-capped per run; entity resolution is
+# cached in external_ids so repeated runs only pay for new tracks/artists.
+#
+# OPTIONAL DATA SOURCE: this workflow no-ops (green, with a skip notice)
+# when SOUNDCHARTS_APP_ID / SOUNDCHARTS_API_KEY are not configured, so a
+# missing subscription doesn't produce a failing run + Slack alert every
+# day. Add the two secrets to activate it — no code change needed.
+
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+on:
+  schedule:
+    - cron: "0 5 * * *" # daily 05:00 UTC — before signal ETL (08:00) and artist ETL (08:30)
+  workflow_dispatch:
+
+jobs:
+  ingest-soundcharts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Soundcharts credentials
+        id: creds
+        env:
+          SOUNDCHARTS_APP_ID: ${{ secrets.SOUNDCHARTS_APP_ID }}
+          SOUNDCHARTS_API_KEY: ${{ secrets.SOUNDCHARTS_API_KEY }}
+        run: |
+          if [ -z "$SOUNDCHARTS_APP_ID" ] || [ -z "$SOUNDCHARTS_API_KEY" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::SOUNDCHARTS_APP_ID / SOUNDCHARTS_API_KEY not set — skipping Soundcharts ingest. Add the repo secrets to activate this data source."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.creds.outputs.configured == 'true'
+        uses: actions/checkout@v4
+
+      - name: Use Node 20
+        if: steps.creds.outputs.configured == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install deps
+        if: steps.creds.outputs.configured == 'true'
+        run: npm ci
+
+      - name: Generate Prisma client
+        if: steps.creds.outputs.configured == 'true'
+        run: npx prisma generate
+
+      - name: Run Soundcharts ingestion
+        if: steps.creds.outputs.configured == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          SOUNDCHARTS_APP_ID: ${{ secrets.SOUNDCHARTS_APP_ID }}
+          SOUNDCHARTS_API_KEY: ${{ secrets.SOUNDCHARTS_API_KEY }}
+        run: npx tsx jobs/ingest/soundcharts.ts

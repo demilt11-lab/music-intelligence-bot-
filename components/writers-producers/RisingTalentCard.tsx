@@ -79,7 +79,7 @@ function ClusterEventRow({ event }: { event: ClusterEvent }) {
             </span>
           )}
           <span className="truncate text-[10px] text-zinc-400">
-            on "{event.name}"{event.type === 'playlist' ? followerStr : ''}
+            on &ldquo;{event.name}&rdquo;{event.type === 'playlist' ? followerStr : ''}
           </span>
         </div>
         <p className="mt-0.5 truncate text-[10px] text-zinc-500">

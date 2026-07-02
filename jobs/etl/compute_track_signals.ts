@@ -763,7 +763,6 @@ export async function computeTrackSignals(dateStr: string): Promise<void> {
   const p95Chart = computeP95(signalArrays.chart);
   const p95Playlist = computeP95(signalArrays.playlist);
   const p95Youtube = computeP95(signalArrays.youtube);
-  const p95Spotify = computeP95(signalArrays.spotify);
 
   // Fetch the max multiTrackPresence score across all songwriters credited on
   // each track.  A high value means one of the track's creators is currently

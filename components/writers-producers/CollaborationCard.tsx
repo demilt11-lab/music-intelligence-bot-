@@ -32,9 +32,7 @@ function platformClass(platform: string): string {
 
 export function CollaborationCard({ collab }: CollaborationCardProps) {
   const hasCharts = collab.chartPositions.length > 0
-  const topChart = collab.chartPositions[0]
   const hasPlaylists = collab.playlists.length > 0
-  const topPlaylist = collab.playlists[0]
 
   return (
     <div className="rounded-[20px] border border-white/10 bg-[rgba(18,18,20,0.96)] p-4 space-y-3">

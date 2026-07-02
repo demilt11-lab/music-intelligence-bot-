@@ -83,7 +83,6 @@ function getHref(bucket: string, item: { id?: number | string | null }): string 
   return null
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getSubtitle(bucket: string, item: any): string | null {
   switch (bucket) {
     case 'tracks': {
@@ -185,7 +184,6 @@ function WatchlistButton({
   )
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ResultRow({ item, bucket }: { item: any; bucket: string }) {
   const name = String(item.name ?? item.title ?? item.id ?? '—')
   const sub = getSubtitle(bucket, item)
@@ -436,7 +434,7 @@ export default function SearchClient({
                     ⌕
                   </div>
                   <div className="space-y-2">
-                    <p className="text-sm font-medium text-zinc-200">No results for "{q}"</p>
+                    <p className="text-sm font-medium text-zinc-200">No results for &ldquo;{q}&rdquo;</p>
                     <p className="max-w-md text-sm leading-6 text-zinc-500">
                       Try a broader keyword, different spelling, or paste a direct Spotify or YouTube URL.
                     </p>
@@ -459,7 +457,6 @@ export default function SearchClient({
 
                       <div className="overflow-hidden rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.82),rgba(10,10,11,0.94))]">
                         {result[bucket]!.map((item, i) => (
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           <ResultRow key={(item as any).id ?? i} item={item} bucket={bucket} />
                         ))}
                       </div>
