@@ -278,6 +278,34 @@ watching `/status` and the Slack alerts channel before launch.
   postcss is patched. CI's blocking `npm audit --audit-level=high` gate is
   unaffected.
 
+- **Branch protection on `main` is still unverified.** Needs a repo admin to
+  require the `ci.yml` checks in GitHub Settings → Branches — not something
+  that can be confirmed or set from inside the repository or via any
+  available tool. Until this is set, a failing-CI PR can still merge.
+
+- **Validation rigor still varies by route** (some go through
+  `lib/shared/validation.ts` + a dedicated `validate.ts`, others do an inline
+  check in the route). Audited the highest-risk intersection — routes that
+  both take user input and feed a raw `$queryRaw(Unsafe)` query (the airplay
+  chart endpoints) — and found every one properly parameterized (positional
+  binds or an allowlisted identifier, never string-concatenated user input).
+  No actual bug found; left as a style-consistency backlog item rather than
+  sweeping all ~80 routes to one pattern, which would be a large, low-value
+  refactor of a stable, shipped API surface.
+
+- **No APM/error-tracking product** (Sentry or similar) — Vercel's own
+  runtime-error/log dashboards remain the only production visibility. Needs a
+  vendor account and DSN this repo doesn't have; nothing to wire up without
+  that.
+
+- **No browser-based E2E framework.** `npm run smoke` (`scripts/smoke.ts`) is
+  a real HTTP-level integration test that runs in CI and now explicitly
+  checks that F-02/F-03/F-06's previously-open routes (`/api/artists/breaking`,
+  `/api/artists/:id`, `/api/artists/:id/trajectory`, `/api/ai/scout-brief`,
+  `/api/talent-scout/health`) 401 without a session — that gap existed until
+  2026-07-02. A true browser-driving suite (Playwright: render JS, click
+  through the UI) is still a separate, larger lift not started here.
+
 Resolved 2026-06-11: **Next.js 16.2.9 + React 19 migration** — clears all
 high-severity framework advisories. Includes async request APIs (codemod),
 `middleware.ts` → `proxy.ts`, `serverExternalPackages`, ESLint 9 flat config

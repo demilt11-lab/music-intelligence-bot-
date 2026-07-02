@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     await requireSession(req);
 
     const [latestRuns, recentFailures, lastReconcile, latestUgcDate, latestUgcGenreDate, latestPlaylistGenreDate, recentAnomalies] = await Promise.all([
-      db.$queryRawUnsafe<
+      db.$queryRaw<
         {
           jobName: string;
           status: string;
@@ -24,12 +24,10 @@ export async function GET(req: NextRequest) {
           rowsWritten: number | null;
           error: string | null;
         }[]
-      >(
-        `SELECT DISTINCT ON ("jobName")
+      >`SELECT DISTINCT ON ("jobName")
            "jobName", status, "startedAt", "durationMs", "rowsWritten", error
          FROM job_runs
          ORDER BY "jobName", "startedAt" DESC`,
-      ),
       db.jobRun.findMany({
         where: {
           status: 'failed',
