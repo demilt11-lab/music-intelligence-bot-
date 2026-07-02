@@ -41,7 +41,14 @@ export type TrainResult = {
   classCounts: Record<string, number>;
   skipped: boolean;
   reason?: string;
+  promoted?: boolean;
+  incumbentAccuracy?: number;
 };
+
+// A retrain can dip slightly on held-out accuracy just from sampling noise —
+// don't require strict improvement, but block a real regression from
+// silently overwriting a better incumbent model.
+const MAX_ACCURACY_REGRESSION = 0.02;
 
 /** Train on all available ArtistTrajectorySnapshot data and save to DB. */
 export async function trainArtistTrajectoryModel(): Promise<TrainResult> {
@@ -76,6 +83,32 @@ export async function trainArtistTrajectoryModel(): Promise<TrainResult> {
     l2: 1e-4,
   });
 
+  // Promotion gate: don't let a retrain silently overwrite a meaningfully
+  // better incumbent. The daily cron ran unconditionally before this — a bad
+  // ingest day could degrade live predictions with no automatic protection
+  // and no visibility that it happened.
+  const incumbent = await db.mlModel.findUnique({ where: { modelType: MODEL_TYPE } });
+  const incumbentAccuracy = incumbent?.accuracy ?? null;
+  const regressed =
+    incumbentAccuracy != null && model.accuracy < incumbentAccuracy - MAX_ACCURACY_REGRESSION;
+
+  if (regressed) {
+    console.warn(
+      `[ml:artist-trajectory] retrain REJECTED — held-out accuracy ${model.accuracy.toFixed(3)} ` +
+        `regresses more than ${MAX_ACCURACY_REGRESSION} below incumbent ${incumbentAccuracy!.toFixed(3)}. ` +
+        `Keeping the existing model in production.`,
+    );
+    return {
+      accuracy: model.accuracy,
+      nSamples: model.nSamples,
+      classCounts,
+      skipped: false,
+      promoted: false,
+      incumbentAccuracy: incumbentAccuracy!,
+      reason: `held-out accuracy regressed vs incumbent (${model.accuracy.toFixed(3)} < ${incumbentAccuracy!.toFixed(3)} - ${MAX_ACCURACY_REGRESSION})`,
+    };
+  }
+
   await db.mlModel.upsert({
     where: { modelType: MODEL_TYPE },
     update: {
@@ -96,9 +129,20 @@ export async function trainArtistTrajectoryModel(): Promise<TrainResult> {
   });
 
   invalidateCache();
-  console.log(`[ml:artist-trajectory] trained — samples=${model.nSamples} accuracy=${model.accuracy.toFixed(3)}`);
+  console.log(
+    `[ml:artist-trajectory] trained + promoted — samples=${model.nSamples} ` +
+      `heldOutAccuracy=${model.accuracy.toFixed(3)} (train=${model.trainAccuracy.toFixed(3)}, ` +
+      `heldOut=${model.heldOut}, nTest=${model.nTestSamples})`,
+  );
 
-  return { accuracy: model.accuracy, nSamples: model.nSamples, classCounts, skipped: false };
+  return {
+    accuracy: model.accuracy,
+    nSamples: model.nSamples,
+    classCounts,
+    skipped: false,
+    promoted: true,
+    ...(incumbentAccuracy != null ? { incumbentAccuracy } : {}),
+  };
 }
 
 export type ArtistPrediction = {

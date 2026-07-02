@@ -148,6 +148,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ artistId:
         take: 100,
       }),
       db.modelAccuracyReport.findFirst({
+        // Scoped to artist-trajectory-relevant models — evaluate_predictions
+        // also reports accuracy for track-level models (e.g. track-viral),
+        // and an unscoped "most recent report" query could surface a track
+        // model's accuracy on an artist page.
+        where: { modelName: { in: ['compute_artist_signals', 'artist-trajectory'] } },
         orderBy: { evaluationDate: 'desc' },
       }),
     ])

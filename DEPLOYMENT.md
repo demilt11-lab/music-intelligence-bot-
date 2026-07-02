@@ -160,15 +160,28 @@ workflows you use, they require these repo secrets:
 
 ---
 
-## 7. ML service (optional)
+## 7. ML service (optional, not required)
 
-The Python FastAPI service is deployed separately:
+Artist trajectory predictions (`/api/v1/artist/trajectory/predict` and the
+public forwarding route) are served by the in-process TypeScript model at
+`lib/ml/models/artist-trajectory.ts` — trained and promoted via
+`/api/internal/ml/train` (see `ml_train.yml`), stored in the `ml_models`
+table, no separate service to deploy or keep alive. This is real,
+functioning ML: a logistic regression trained on historical trajectory
+snapshots, evaluated on a held-out split, gated against regressing below the
+current production model before being promoted.
+
+The standalone Python/FastAPI service (`ml/api/artist_trajectory_service.py`)
+is separate research scaffolding — a from-scratch XGBoost/PyTorch pipeline
+with real training code but no deployment target and no trained model
+artifacts committed anywhere. **Nothing in this app calls it.** If you want
+to stand it up as an independent, more sophisticated alternative:
 ```bash
 pip install -r requirements.txt
 uvicorn ml.api.artist_trajectory_service:app --host 0.0.0.0 --port 8000
 ```
-Point `ML_ARTIST_TRAJECTORY_URL` at its public URL. If the service is not
-deployed, only the artist-trajectory prediction endpoints are affected.
+then point `ML_ARTIST_TRAJECTORY_URL` at its public URL and wire a route to
+call it — as of now, setting that variable alone does nothing.
 
 ---
 
