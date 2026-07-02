@@ -51,6 +51,11 @@ interface VideoRecord {
   rank: number;
 }
 
+// Counts 401/403 responses across all providers so main() can distinguish
+// "no trending data today" (fine) from "our credentials are broken" (a
+// failure that must surface in job_runs / pipeline alerts, not a green run).
+let credentialFailures = 0;
+
 async function fetchTrendingVideos(): Promise<VideoRecord[]> {
   const today = new Date();
   const endDate = formatDate(today);
@@ -58,6 +63,8 @@ async function fetchTrendingVideos(): Promise<VideoRecord[]> {
 
   const all: VideoRecord[] = [];
   let rank = 1;
+
+  const isCredentialError = (err: unknown) => /\((401|403)\)/.test(String((err as Error).message));
 
   for (const hashtag of MUSIC_HASHTAGS) {
     console.log(`[tiktok] Fetching videos for #${hashtag}…`);
@@ -96,6 +103,7 @@ async function fetchTrendingVideos(): Promise<VideoRecord[]> {
         });
       }
     } catch (err) {
+      if (isCredentialError(err)) credentialFailures++;
       console.warn(`[tiktok] Research API failed for #${hashtag}:`, (err as Error).message);
     }
 
@@ -133,6 +141,7 @@ async function fetchTrendingVideos(): Promise<VideoRecord[]> {
         });
       }
     } catch (err) {
+      if (isCredentialError(err)) credentialFailures++;
       console.warn(`[tiktok] RapidAPI failed for "${keyword}":`, (err as Error).message);
     }
     await sleep(300);
@@ -578,8 +587,17 @@ async function main(): Promise<void> {
     console.warn("[tiktok] [WARN] Creator ingestion failed:", (err as Error).message);
   }
 
-  console.log("[tiktok] Ingestion job complete.");
   await db.$disconnect();
+
+  if (videos.length === 0 && credentialFailures > 0) {
+    throw new Error(
+      `TikTok ingest fetched 0 records with ${credentialFailures} credential failure(s) (401/403). ` +
+        `Check TIKTOK_CLIENT_KEY/TIKTOK_CLIENT_SECRET (Research API access must be approved for the app) ` +
+        `and the RAPIDAPI_KEY subscription for the TikTok sound-search API.`,
+    );
+  }
+
+  console.log("[tiktok] Ingestion job complete.");
 }
 
 runTrackedJob('ingest:tiktok', main).catch((err) => {

@@ -43,6 +43,7 @@ model Track {
   trendPredictions      TrackTrendPrediction[]
   playlistTracks        PlaylistTrack[]
   songwriterTracks      SongwriterTrack[]
+  talentScoutScores     TalentScoutScore[]
 
   @@map("tracks")
 }
@@ -1236,6 +1237,8 @@ model TalentScoutScore {
   rightsComplexityScore Float
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
 
   @@unique([trackId, code2, date])
   @@index([date, viralScore])
