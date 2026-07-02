@@ -106,11 +106,31 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const finalEntityId = entityType === 'watchlist' ? null : entityId;
+
+    // Idempotency: a retried request with the same payload should return the
+    // existing rule instead of creating a duplicate that would fire twice.
+    const existing = await db.alertRule.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        entityType,
+        entityId: finalEntityId,
+        metric,
+        operator,
+        threshold,
+        channel,
+        destination,
+      },
+    });
+    if (existing) {
+      return NextResponse.json({ obj: existing }, { status: 200 });
+    }
+
     const rule = await db.alertRule.create({
       data: {
         tenantId: user.tenantId,
         entityType,
-        entityId: entityType === 'watchlist' ? null : entityId,
+        entityId: finalEntityId,
         metric,
         threshold,
         operator,
