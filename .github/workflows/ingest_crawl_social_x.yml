@@ -1,12 +1,12 @@
-name: Ingest Billboard Charts
+name: Ingest X Follower Counts
 
 on:
   schedule:
-    - cron: "0 6 * * *" # daily at 6am UTC — before ETL at 8am
+    - cron: "30 6 * * *" # daily at 6:30am UTC
   workflow_dispatch:
 
 jobs:
-  ingest-billboard:
+  ingest-crawl-social-x:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,10 +23,10 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Run Billboard ingestion
+      - name: Run X follower ingestion
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           CRAWLER_API_URL: ${{ secrets.CRAWLER_API_URL }}
           CRAWLER_API_KEY: ${{ secrets.CRAWLER_API_KEY }}
-        run: npx tsx jobs/ingest/billboard.ts
+        run: npx tsx jobs/ingest/crawl_social_x.ts

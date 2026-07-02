@@ -70,7 +70,8 @@ Optional / other data:
 SEARCHAPI_KEY                         # Google Trends interest (alt streaming proxy; not read now)
 YOUTUBE_API_KEY                       # videoViews (not summed)
 RAPIDAPI_KEY                          # TikTok UGC (feeds the other Talent Scout lens)
-FIRECRAWL_API_KEY                     # Billboard charts
+FIRECRAWL_API_KEY                     # blog article search (lib/writersProducers)
+CRAWLER_API_URL  CRAWLER_API_KEY      # crawl4ai service — Billboard, Apple Music charts, X followers, radio spins
 META_APP_ID  META_APP_SECRET  IG_USER_ID   # Instagram
 ```
 

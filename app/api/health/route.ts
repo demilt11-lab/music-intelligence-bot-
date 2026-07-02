@@ -30,7 +30,8 @@ export async function GET() {
     shazam: has('SHAZAM_API_KEY'),
     instagram: has('META_APP_ID') && has('META_APP_SECRET'),
     googleTrends: has('SEARCHAPI_KEY'),
-    billboard: has('FIRECRAWL_API_KEY'),
+    billboard: has('CRAWLER_API_URL'),
+    crawler: has('CRAWLER_API_URL'),
     ai: isAiConfigured(),
     redis: has('UPSTASH_REDIS_URL') && has('UPSTASH_REDIS_TOKEN'),
   };
