@@ -26,7 +26,7 @@ jobs:
           node-version: "20"
 
       - name: Install deps
-        run: npm install
+        run: npm ci
 
       - name: Log and evaluate predictions
         env:

@@ -48,16 +48,25 @@ type AnthropicResponse = {
   stop_reason?: string
 }
 
-/**
- * Single-shot text generation. Returns the assembled text, or null on any
- * failure (missing key, HTTP error, refusal, timeout, malformed body).
- */
-export async function generateText(
-  opts: GenerateTextOptions,
-): Promise<string | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return null
+// Retry only transient failures (rate limit, server-side) — a 4xx like bad
+// request or auth failure will never succeed on retry, so don't burn the
+// latency budget on those.
+const RETRYABLE_STATUS = new Set([408, 429, 500, 502, 503, 504])
+const MAX_ATTEMPTS = 2
+const RETRY_BACKOFF_MS = 400
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+type AttemptResult =
+  | { ok: true; text: string | null }
+  | { ok: false; retryable: boolean }
+
+async function attempt(
+  apiKey: string,
+  opts: GenerateTextOptions,
+): Promise<AttemptResult> {
   const controller = new AbortController()
   const timer = setTimeout(
     () => controller.abort(),
@@ -84,7 +93,7 @@ export async function generateText(
     if (!res.ok) {
       const body = await res.text().catch(() => '')
       console.error(`[ai] Anthropic request failed ${res.status}: ${body.slice(0, 300)}`)
-      return null
+      return { ok: false, retryable: RETRYABLE_STATUS.has(res.status) }
     }
 
     const data = (await res.json()) as AnthropicResponse
@@ -92,7 +101,7 @@ export async function generateText(
     // Safety classifiers can decline with a 200 + stop_reason "refusal".
     if (data.stop_reason === 'refusal') {
       console.warn('[ai] Anthropic declined the request (refusal)')
-      return null
+      return { ok: true, text: null }
     }
 
     const text = (data.content ?? [])
@@ -101,12 +110,35 @@ export async function generateText(
       .join('')
       .trim()
 
-    return text || null
+    return { ok: true, text: text || null }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error(`[ai] Anthropic call errored: ${message}`)
-    return null
+    // A timeout/network abort is worth one retry; treat as transient.
+    return { ok: false, retryable: true }
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * Single-shot text generation. Returns the assembled text, or null on any
+ * failure (missing key, HTTP error, refusal, timeout, malformed body).
+ * Retries once on transient failures (429/5xx/timeout) with a short backoff
+ * — a momentary blip previously fell straight through to the heuristic
+ * fallback with no distinction from "the model declined."
+ */
+export async function generateText(
+  opts: GenerateTextOptions,
+): Promise<string | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY
+  if (!apiKey) return null
+
+  for (let i = 0; i < MAX_ATTEMPTS; i++) {
+    const result = await attempt(apiKey, opts)
+    if (result.ok) return result.text
+    if (!result.retryable || i === MAX_ATTEMPTS - 1) return null
+    await sleep(RETRY_BACKOFF_MS * (i + 1))
+  }
+  return null
 }
