@@ -204,7 +204,7 @@ export async function GET(req: NextRequest, props: { params: Promise<{ artistId:
               recall: accuracy.recall,
             }
           : null,
-        history: history.map((h) => ({
+        history: history.map((h: any) => ({
           artistId: Number(h.artistId),
           date: h.date,
           totalStreams: h.totalStreams.toString(),
@@ -215,11 +215,11 @@ export async function GET(req: NextRequest, props: { params: Promise<{ artistId:
           genres: h.genres,
           primaryCode2: h.primaryCode2,
         })),
-        releases: releases.map((r) => ({
+        releases: releases.map((r: any) => ({
           id: r.id.toString(),
           name: r.title,
           isrc: r.isrc ?? null,
-          albums: r.trackAlbums.map((ta) => ({
+          albums: r.trackAlbums.map((ta: any) => ({
             id: ta.album.id,
             name: ta.album.title,
           })),

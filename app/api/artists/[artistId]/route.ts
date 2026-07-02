@@ -39,7 +39,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ artis
       id: artist.id.toString(),
       name: artist.name,
       country: artist.country ?? null,
-      externalIds: externalIds.reduce<Record<string, string[]>>((acc, e) => {
+      externalIds: externalIds.reduce<Record<string, string[]>>((acc: Record<string, string[]>, e: { platform: string; externalId: string }) => {
         if (!acc[e.platform]) acc[e.platform] = []
         acc[e.platform].push(e.externalId)
         return acc
