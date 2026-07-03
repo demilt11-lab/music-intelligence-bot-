@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
         const msg = `Alert: ${target.entityType} ${target.entityId} — ${rule.metric} is ${value.toFixed(4)} (${rule.operator} ${rule.threshold})`;
         if (rule.channel === 'webhook') {
           try {
-            validateWebhookUrl(rule.destination);
+            await validateWebhookUrl(rule.destination);
           } catch (e: any) {
             console.warn(`[alert-rules] Skipping invalid webhook URL for rule ${rule.id}: ${e.message}`);
             continue;

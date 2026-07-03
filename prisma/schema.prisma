@@ -43,6 +43,7 @@ model Track {
   trendPredictions      TrackTrendPrediction[]
   playlistTracks        PlaylistTrack[]
   songwriterTracks      SongwriterTrack[]
+  talentScoutScores     TalentScoutScore[]
 
   @@map("tracks")
 }
@@ -257,6 +258,8 @@ model DigestSubscription {
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
+  // send-daily-digest sweeps all tenants with this exact filter.
+  @@index([isActive, frequency])
   @@map("digest_subscriptions")
 }
 
@@ -276,6 +279,10 @@ model AlertRule {
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
+  // tenantId serves the per-tenant list (GET /api/ui|v1/alerts); isActive
+  // serves check-alert-rules, which sweeps active rules across all tenants.
+  @@index([tenantId])
+  @@index([isActive])
   @@map("alert_rules")
 }
 
@@ -342,6 +349,8 @@ model ApiKey {
   lastUsedAt DateTime?
 
   tenant     Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
 }
 
 model Plan {
@@ -379,6 +388,12 @@ model RequestLog {
   statusCode Int
   latencyMs  Int
   createdAt  DateTime @default(now())
+
+  // Written on every authenticated v1 API call; read by the per-tenant usage
+  // dashboard (tenantId + createdAt range) and the admin summary (groupBy
+  // tenantId, endpoint) — both were full table scans without these.
+  @@index([tenantId, createdAt])
+  @@index([tenantId, endpoint])
 }
 
 // ─────────────────────────────────────────────
@@ -1222,6 +1237,8 @@ model TalentScoutScore {
   rightsComplexityScore Float
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+
+  track Track @relation(fields: [trackId], references: [id], onDelete: Cascade)
 
   @@unique([trackId, code2, date])
   @@index([date, viralScore])

@@ -1,15 +1,15 @@
 # Music Intelligence API
 
-A full internal Music Intelligence API built with Next.js 14 App Router and TypeScript.
+A full internal Music Intelligence API built with Next.js 16 App Router and TypeScript.
 Uses canonical internal IDs and our own data warehouse. Supports platform-native IDs via an external ID graph.
 
 ---
 
 ## Stack
 
-- **Next.js 14** — App Router, TypeScript
+- **Next.js 16** — App Router, TypeScript
 - **Prisma** — DB abstraction (`lib/db.ts`)
-- **Zod** — not used directly; validation is hand-rolled with shared helpers for performance
+- **Zod** — request validation on newer routes (MCP, validators); older data endpoints use hand-rolled shared helpers for performance
 - **PostgreSQL** — primary data store
 
 ---

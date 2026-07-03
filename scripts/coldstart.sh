@@ -65,7 +65,7 @@ if [ "${COLDSTART_SKIP_INGEST:-0}" != "1" ]; then
   run_provider "ingest:spotify"      "SPOTIFY_CLIENT_ID,SPOTIFY_CLIENT_SECRET" npx tsx jobs/ingest/spotify.ts
   run_provider "ingest:billboard"    "CRAWLER_API_URL"                         npx tsx jobs/ingest/billboard.ts
   run_provider "ingest:youtube"      "YOUTUBE_API_KEY"                         npx tsx jobs/ingest/youtube.ts
-  run_provider "ingest:tiktok"       "RAPIDAPI_KEY"                            npx tsx jobs/ingest/tiktok.ts
+  run_provider "ingest:tiktok"       "CRAWLER_API_URL"                         npx tsx jobs/ingest/tiktok.ts
   run_provider "ingest:shazam"       "SHAZAM_API_KEY"                          npx tsx jobs/ingest/shazam.ts
   run_provider "ingest:googletrends" "SEARCHAPI_KEY"                           npx tsx jobs/ingest/googletrends.ts
   run_provider "ingest:instagram"    "META_APP_ID,META_APP_SECRET,IG_USER_ID"  npx tsx jobs/ingest/instagram.ts

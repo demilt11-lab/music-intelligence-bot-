@@ -18,7 +18,7 @@ async function main() {
 
   if (!name || !slug) {
     console.error(
-      'Usage: ts-node scripts/create-tenant.ts "<Tenant Name>" <slug> [label] [scopes]',
+      'Usage: npx tsx scripts/create-tenant.ts "<Tenant Name>" <slug> [label] [scopes]',
     );
     process.exit(1);
   }

@@ -49,8 +49,6 @@ function detectIsSigned(label: string | null): { isSigned: boolean; signedLabel:
 }
 
 export async function computeRisingScores(date: Date): Promise<ScoredCreator[]> {
-  const dateStr = date.toISOString().split('T')[0];
-
   const weekAgo = new Date(date.getTime() - 7 * 24 * 60 * 60 * 1000);
   const twoWeeksAgo = new Date(date.getTime() - 14 * 24 * 60 * 60 * 1000);
   const yesterday = new Date(date.getTime() - 24 * 60 * 60 * 1000);

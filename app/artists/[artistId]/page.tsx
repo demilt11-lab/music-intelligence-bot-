@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, use } from 'react';
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
 import { SkeletonBox } from '@/components/ui/Skeleton'
 import { TrendSparkline } from '@/components/ui/TrendSparkline'
+import { AddToWatchlistButton } from '@/components/watchlist/AddToWatchlistButton'
 
 type Artist = {
   id: string
@@ -146,13 +147,22 @@ export default function ArtistPage(
   const params = use(props.params);
   const [data, setData] = useState<TrajectoryResponse['obj'] | null>(null)
   const [loading, setLoading] = useState(true)
+  const [needsAuth, setNeedsAuth] = useState(false)
 
   useEffect(() => {
     async function load() {
       setLoading(true)
+      setNeedsAuth(false)
 
       try {
         const res = await fetch(`/api/artists/${params.artistId}/trajectory`)
+
+        if (res.status === 401) {
+          setData(null)
+          setNeedsAuth(true)
+          setLoading(false)
+          return
+        }
 
         if (!res.ok) {
           setData(null)
@@ -248,27 +258,42 @@ export default function ArtistPage(
               Artist intelligence
             </p>
             <h1 className="text-2xl font-semibold tracking-[-0.03em] text-white">
-              Artist trajectory not available
+              {needsAuth ? 'Sign in to view this artist' : 'Artist trajectory not available'}
             </h1>
             <p className="max-w-2xl text-sm leading-6 text-zinc-400">
-              Buddy couldn’t load this artist intelligence record from the trajectory endpoint.
+              {needsAuth
+                ? 'Artist intelligence is only visible to signed-in workspace members.'
+                : "Buddy couldn’t load this artist intelligence record from the trajectory endpoint."}
             </p>
           </div>
 
           <div className="mt-6">
             <CompanionMessage
               type="warning"
-              message="Open another artist from the Artists table or Search and try again."
+              message={
+                needsAuth
+                  ? 'Sign in to continue, then reopen this artist.'
+                  : 'Open another artist from the Artists table or Search and try again.'
+              }
             />
           </div>
 
-          <div className="mt-6">
-            <Link
-              href="/artists"
-              className="inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
-            >
-              Back to Artist Intelligence
-            </Link>
+          <div className="mt-6 flex gap-3">
+            {needsAuth ? (
+              <Link
+                href="/login"
+                className="inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+              >
+                Sign in
+              </Link>
+            ) : (
+              <Link
+                href="/artists"
+                className="inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+              >
+                Back to Artist Intelligence
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -307,6 +332,15 @@ export default function ArtistPage(
                     playlist lift, follower change, and release context so you can judge whether
                     the act deserves deeper A&R attention.
                   </p>
+                </div>
+
+                <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/5 py-1 pl-1.5 pr-3">
+                  <AddToWatchlistButton
+                    entityType="artist"
+                    entityId={Number(artist.id)}
+                    className="bg-black/20"
+                  />
+                  <span className="text-sm font-medium text-zinc-300">Watchlist</span>
                 </div>
               </div>
 

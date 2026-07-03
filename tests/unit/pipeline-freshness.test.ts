@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { freshnessStatus, FRESHNESS_SLA_HOURS } from '@/lib/jobs/freshness'
+import { shouldTriggerZeroRowAlert } from '@/lib/jobs/rules'
 
 // ── freshnessStatus ───────────────────────────────────────────────────────────
 
@@ -60,21 +61,9 @@ test('ageHours is rounded to one decimal place', () => {
   assert.ok(Math.abs(rounded) <= 0.1, `expected ageHours≈1.5, got ${s.ageHours}`)
 })
 
-// ── Zero-row consecutive detection (mirrors tracker.ts logic) ─────────────────
-
-const ZERO_ROW_ALERT_THRESHOLD = 3
-
-function shouldTriggerZeroRowAlert(
-  currentRowsWritten: number,
-  priorRunRowCounts: Array<number | null>,
-): boolean {
-  if (currentRowsWritten !== 0) return false
-  const priorZeros = priorRunRowCounts.filter((n) => (n ?? 0) === 0).length
-  return (
-    priorRunRowCounts.length >= ZERO_ROW_ALERT_THRESHOLD - 1 &&
-    priorZeros === ZERO_ROW_ALERT_THRESHOLD - 1
-  )
-}
+// ── Zero-row consecutive detection ─────────────────────────────────────────────
+// Imports the real function from lib/jobs/tracker.ts (used inside
+// runTrackedJob to decide whether to throw ZERO_ROW_ALERT).
 
 test('non-zero current run → no alert regardless of history', () => {
   assert.equal(shouldTriggerZeroRowAlert(5, [0, 0]), false)

@@ -91,6 +91,10 @@ class CrawlRequest(BaseModel):
     wait_for_timeout_ms: Optional[int] = None
     css_selector: Optional[str] = Field(None, description="Scope extraction to this selector")
     js_code: Optional[list[str]] = Field(None, description="JS to run after page load, e.g. scroll/click")
+    js_code_before_wait: Optional[list[str]] = Field(
+        None,
+        description="JS to run BEFORE wait_for is evaluated (e.g. an in-page fetch that produces the awaited element)",
+    )
     scan_full_page: bool = Field(False, description="Auto-scroll to trigger lazy-loaded content")
     magic: bool = Field(True, description="Stealth mode: randomized UA, masks automation signals")
     delay_before_return_html_s: float = Field(0.5, description="Pause before capturing final HTML (SPA render time)")
@@ -139,6 +143,7 @@ async def crawl(req: CrawlRequest, authorization: Optional[str] = Header(None)) 
         wait_for_timeout=req.wait_for_timeout_ms,
         css_selector=req.css_selector,
         js_code=req.js_code,
+        js_code_before_wait=req.js_code_before_wait,
         scan_full_page=req.scan_full_page,
         magic=req.magic,
         delay_before_return_html=req.delay_before_return_html_s,

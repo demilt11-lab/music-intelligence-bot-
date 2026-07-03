@@ -1,8 +1,12 @@
 import { db } from '@/lib/db';
+import {
+  isConsecutiveFailureAlert,
+  shouldTriggerZeroRowAlert,
+  CONSECUTIVE_FAILURE_THRESHOLD,
+} from './rules';
 
 export type JobResult = Record<string, unknown> & { rowsWritten?: number };
 
-const CONSECUTIVE_FAILURE_THRESHOLD = 3;
 const ZERO_ROW_ALERT_THRESHOLD = 3;
 
 export async function runTrackedJob<T extends JobResult | void>(
@@ -45,12 +49,10 @@ export async function runTrackedJob<T extends JobResult | void>(
             select: { rowsWritten: true },
           });
 
-          const priorZeros = priorRuns.filter((r) => (r.rowsWritten ?? 0) === 0).length;
+          const priorRowCounts: Array<number | null> = priorRuns.map((r: { rowsWritten: number | null }) => r.rowsWritten);
+          const priorZeros = priorRowCounts.filter((n: number | null) => (n ?? 0) === 0).length;
 
-          if (
-            priorRuns.length >= ZERO_ROW_ALERT_THRESHOLD - 1 &&
-            priorZeros === ZERO_ROW_ALERT_THRESHOLD - 1
-          ) {
+          if (shouldTriggerZeroRowAlert(rowsWritten, priorRowCounts)) {
             throw new Error(
               `ZERO_ROW_ALERT: ${jobName} has written 0 rows for ${ZERO_ROW_ALERT_THRESHOLD} consecutive runs`,
             );
@@ -105,10 +107,7 @@ export async function runTrackedJob<T extends JobResult | void>(
           select: { status: true },
         });
 
-        if (
-          recentRuns.length >= CONSECUTIVE_FAILURE_THRESHOLD &&
-          recentRuns.every((r) => r.status === 'failed')
-        ) {
+        if (isConsecutiveFailureAlert(recentRuns.map((r: { status: string }) => r.status))) {
           console.error(
             `[job-tracker] CONSECUTIVE_FAILURE_ALERT: ${jobName} has failed ${recentRuns.length} consecutive times`,
             JSON.stringify({ jobName, consecutiveFailures: recentRuns.length }),

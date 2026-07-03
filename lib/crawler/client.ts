@@ -35,6 +35,12 @@ export interface CrawlOptions {
   cssSelector?: string;
   /** JS to run after page load, e.g. scroll/click to reveal lazy content. */
   jsCode?: string[];
+  /**
+   * JS to run BEFORE the waitFor condition is evaluated — use when the
+   * script itself produces whatever waitFor is waiting for (e.g. an in-page
+   * API fetch that writes its result into the DOM).
+   */
+  jsCodeBeforeWait?: string[];
   /** Auto-scroll to trigger lazy-loaded content (infinite lists, playlists). */
   scanFullPage?: boolean;
   /** Stealth mode: randomized user agent, masks automation signals. Default true. */
@@ -82,6 +88,7 @@ export async function crawlUrl<T = unknown>(
         wait_for_timeout_ms: options.waitForTimeoutMs,
         css_selector: options.cssSelector,
         js_code: options.jsCode,
+        js_code_before_wait: options.jsCodeBeforeWait,
         scan_full_page: options.scanFullPage ?? false,
         magic: options.magic ?? true,
         delay_before_return_html_s: options.delayBeforeReturnHtmlSeconds ?? 0.5,

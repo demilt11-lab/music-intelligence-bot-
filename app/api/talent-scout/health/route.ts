@@ -1,9 +1,17 @@
 // app/api/talent-scout/health/route.ts
-// Hit /api/talent-scout/health to diagnose data pipeline issues
+// Diagnostic route for the talent-scout data pipeline. Internal-only: it
+// leaks credential-configuration state and makes a real outbound Spotify API
+// call on every hit, so it must not be reachable by the public internet.
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireInternalAuth } from '@/lib/platform/internal-auth';
 
-export async function GET() {
+export const dynamic = 'force-dynamic';
+
+export async function GET(req: NextRequest) {
+  const denied = requireInternalAuth(req);
+  if (denied) return denied;
+
   const results: Record<string, unknown> = {};
 
   // 1. DB connectivity
@@ -19,12 +27,10 @@ export async function GET() {
     results.db = { error: err.message };
   }
 
-  // 2. Spotify credentials present
+  // 2. Spotify credentials present (boolean only — no lengths, even behind auth)
   results.spotifyEnv = {
     clientIdPresent: !!process.env.SPOTIFY_CLIENT_ID,
-    clientIdLength: process.env.SPOTIFY_CLIENT_ID?.length ?? 0,
     clientSecretPresent: !!process.env.SPOTIFY_CLIENT_SECRET,
-    clientSecretLength: process.env.SPOTIFY_CLIENT_SECRET?.length ?? 0,
   };
 
   // 3. Spotify token fetch

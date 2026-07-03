@@ -448,7 +448,7 @@ function SearchSlot({
           ))}
         </div>
       ) : query && !searching ? (
-        <p className="mt-2 text-xs text-zinc-500">No results for "{query}".</p>
+        <p className="mt-2 text-xs text-zinc-500">No results for &ldquo;{query}&rdquo;.</p>
       ) : null}
     </div>
   )

@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
       const payload = await assembleDigest(sub.tenantId, (sub as any).tenant.name, today);
 
       if (sub.webhookUrl) {
-        validateWebhookUrl(sub.webhookUrl); // throws if URL targets a private range
+        await validateWebhookUrl(sub.webhookUrl); // throws if URL targets a private range
         await fetch(sub.webhookUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
