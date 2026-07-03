@@ -13,9 +13,13 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
+# SCHEDULE PAUSED 2026-07-03: TikTok removed the public Creative Center
+# music chart (the Trends hub has no music tab; the sound rank_list API
+# returns 40101 "no permission" without an authenticated session). Run
+# manually via workflow_dispatch while evaluating paid sources — the
+# Soundcharts connector (lib/integrations/soundcharts) already includes a
+# TikTok music weekly ranking endpoint that activates with a subscription.
 on:
-  schedule:
-    - cron: "0 */12 * * *" # every 12 hours
   workflow_dispatch:
 
 jobs:
