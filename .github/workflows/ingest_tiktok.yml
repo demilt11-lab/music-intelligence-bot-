@@ -1,13 +1,31 @@
 name: Ingest TikTok
 
+# TikTok trending-music data via the self-hosted crawl4ai service
+# (services/crawler-api), which is booted INSIDE this runner — no TikTok
+# Research API approval, RapidAPI subscription, or external crawler
+# deployment required. Set the CRAWLER_API_URL secret to use a deployed
+# crawler instance instead of the in-runner one.
+
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+# SCHEDULE PAUSED 2026-07-03: TikTok removed the public Creative Center
+# music chart (the Trends hub has no music tab; the sound rank_list API
+# returns 40101 "no permission" without an authenticated session). Run
+# manually via workflow_dispatch while evaluating paid sources — the
+# Soundcharts connector (lib/integrations/soundcharts) already includes a
+# TikTok music weekly ranking endpoint that activates with a subscription.
 on:
-  schedule:
-    - cron: "0 */12 * * *" # every 12 hours
   workflow_dispatch:
 
 jobs:
   ingest-tiktok:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -18,16 +36,40 @@ jobs:
           node-version: "20"
 
       - name: Install deps
-        run: npm install
+        run: npm ci
 
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Set up Python for crawler service
+        if: ${{ !vars.CRAWLER_API_URL }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Start crawl4ai crawler service (in-runner)
+        if: ${{ !vars.CRAWLER_API_URL }}
+        run: |
+          pip install -q -r services/crawler-api/requirements.txt
+          python -m playwright install --with-deps chromium
+          (cd services/crawler-api && nohup uvicorn main:app --host 127.0.0.1 --port 8090 > /tmp/crawler.log 2>&1 &)
+          # Wait for the service to come up (max ~30s)
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8090/health > /dev/null; then
+              echo "crawler service is up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "crawler service failed to start:"; cat /tmp/crawler.log; exit 1
+
       - name: Run TikTok ingestion
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
-          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          CRAWLER_API_URL: ${{ vars.CRAWLER_API_URL || 'http://127.0.0.1:8090' }}
+          CRAWLER_API_KEY: ${{ secrets.CRAWLER_API_KEY }}
         run: npx tsx jobs/ingest/tiktok.ts
+
+      - name: Crawler service logs (on failure)
+        if: failure()
+        run: cat /tmp/crawler.log || true

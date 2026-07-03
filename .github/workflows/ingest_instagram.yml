@@ -1,5 +1,12 @@
 name: Ingest Instagram Reels
 
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 on:
   schedule:
     - cron: "0 */10 * * *" # every 10 hours
@@ -18,14 +25,14 @@ jobs:
           node-version: "20"
 
       - name: Install deps
-        run: npm install
+        run: npm ci
 
       - name: Generate Prisma client
         run: npx prisma generate
 
       - name: Run Instagram Reels ingestion
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           META_APP_ID: ${{ secrets.META_APP_ID }}
           META_APP_SECRET: ${{ secrets.META_APP_SECRET || secrets.META_SECRET }}

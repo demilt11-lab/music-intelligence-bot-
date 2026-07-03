@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import Link from 'next/link'
 import { CompanionHeader } from './CompanionHeader'
 import { ScoutTrackCard, type ScoutTrack } from './ScoutTrackCard'
 import { TrackCardSkeleton } from '@/components/ui/Skeleton'
@@ -61,6 +62,8 @@ export function DailyTalentScout() {
   const [dataSource, setDataSource] = React.useState<string | null>(null)
   const [isSignalBacked, setIsSignalBacked] = React.useState(true)
   const [dataWarning, setDataWarning] = React.useState<string | null>(null)
+  const [aiBrief, setAiBrief] = React.useState<string | null>(null)
+  const [briefSource, setBriefSource] = React.useState<'ai' | 'heuristic' | null>(null)
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true)
@@ -99,6 +102,44 @@ export function DailyTalentScout() {
   React.useEffect(() => {
     void fetchData()
   }, [fetchData])
+
+  // Fetch a grounded A&R briefing for the current scan. The endpoint generates
+  // it with a real model when one is configured and the batch is signal-backed;
+  // otherwise it returns a deterministic summary. We render the templated text
+  // until this resolves, so the panel is never blank.
+  React.useEffect(() => {
+    if (isLoading || error || data.length === 0) {
+      setAiBrief(null)
+      setBriefSource(null)
+      return
+    }
+
+    let active = true
+    const topTracks = data.slice(0, 5).map((t) => ({
+      name: t.name,
+      artists: t.artists,
+      score: t.totalScore,
+    }))
+
+    fetch('/api/ai/scout-brief', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ market: code2, mode, isSignalBacked, topTracks }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (!active || !body?.obj?.brief) return
+        setAiBrief(body.obj.brief as string)
+        setBriefSource((body.obj.source as 'ai' | 'heuristic') ?? null)
+      })
+      .catch(() => {
+        /* keep the templated fallback */
+      })
+
+    return () => {
+      active = false
+    }
+  }, [data, isSignalBacked, mode, code2, isLoading, error])
 
   // Client-side re-order based on the active sort key.
   const sortedData = React.useMemo(() => sortTracks(data, sortKey), [data, sortKey])
@@ -196,14 +237,21 @@ export function DailyTalentScout() {
 
               <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
                 <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
+                  {briefSource === 'ai' ? (
+                    <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+                      AI briefing
+                    </div>
+                  ) : null}
                   <CompanionMessage
                     type="info"
                     message={
-                      topTrack && isSignalBacked
+                      aiBrief ??
+                      (topTrack && isSignalBacked
                         ? 'Top priority right now is ' + topTrack.name + (topTrack.artists.length ? ' by ' + topTrack.artists.join(', ') : '') + '. It is leading this scan based on combined momentum signals and should be reviewed first for A&R follow-up.'
                         : topTrack
                           ? "I'm showing " + topTrack.name + ' and other tracks from fallback data while live breakout signals are unavailable for this market.'
-                          : "I'm standing by with the latest scout pass. Once signals load in, I'll highlight the best breakout opportunities for immediate review."
+                          : "I'm standing by with the latest scout pass. Once signals load in, I'll highlight the best breakout opportunities for immediate review.")
                     }
                   />
                 </div>
@@ -266,19 +314,27 @@ export function DailyTalentScout() {
                 ◎
               </div>
               <div className="mt-5 max-w-md space-y-2">
-                <p className="text-sm font-medium text-zinc-200">No live scout signals yet</p>
+                <p className="text-sm font-medium text-zinc-200">No scout signals for {code2} yet</p>
                 <p className="text-sm leading-6 text-zinc-500">
                   {mode === 'ugc_early'
-                    ? 'Buddy is watching for early UGC breakouts in this market. The ingest pipeline refreshes throughout the day, so new signals should appear as momentum builds.'
-                    : 'No tracks match the active scout lens right now. Try switching market or returning to early-breakout mode.'}
+                    ? `The UGC ingest pipeline hasn't loaded breakout data for ${code2} in this session. Try switching to a different market using the controls above, or switch to General Momentum mode.`
+                    : `No tracks match the active scout lens in ${code2}. Try a different market or switch back to Early UGC Breakout mode.`}
                 </p>
               </div>
-              <button
-                onClick={fetchData}
-                className="mt-6 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
-              >
-                Refresh scout feed
-              </button>
+              <div className="mt-6 flex flex-wrap justify-center gap-3">
+                <button
+                  onClick={fetchData}
+                  className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+                >
+                  Refresh feed
+                </button>
+                <Link
+                  href="/search"
+                  className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-zinc-300 transition hover:bg-white/10"
+                >
+                  Search instead
+                </Link>
+              </div>
             </div>
           ) : null}
 

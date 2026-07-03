@@ -3,22 +3,12 @@
 import React from 'react'
 import Link from 'next/link'
 
-/**
- * Editable scouting workflows + directive.
- *
- * QA flagged that the home-page "Scouting workflows" panel and its directive
- * were hardcoded with no way to edit or adjust them. This component makes both
- * user-editable and persists changes locally (per browser) under a versioned
- * key. It is intentionally backend-free for this iteration — when a per-user
- * workflow API lands, swap the localStorage read/write for fetch calls and keep
- * the same UI.
- */
-
 type Workflow = {
   id: string
   label: string
   href?: string
 }
+
 
 const WORKFLOWS_KEY = 'buddy.scoutingWorkflows.v1'
 const DIRECTIVE_KEY = 'buddy.directive.v1'
@@ -258,12 +248,8 @@ export function ScoutingWorkflows() {
                     </button>
                   </div>
                 </div>
-              ) : task.href ? (
-                <Link href={task.href} className="flex-1 text-sm leading-6 text-zinc-300 hover:text-zinc-100">
-                  {task.label}
-                </Link>
               ) : (
-                <p className="flex-1 text-sm leading-6 text-zinc-300">{task.label}</p>
+                <WorkflowItem task={task} />
               )}
             </div>
           </div>
@@ -305,3 +291,31 @@ export function ScoutingWorkflows() {
 }
 
 export default ScoutingWorkflows
+
+// ─── WorkflowItem: direct navigation link ────────────────────────────────────
+
+function WorkflowItem({ task }: { task: Workflow }) {
+  return (
+    <div className="flex-1 min-w-0">
+      {task.href ? (
+        <Link href={task.href} className="block text-sm leading-6 text-zinc-300 hover:text-zinc-100 transition-colors">
+          {task.label}
+        </Link>
+      ) : (
+        <p className="text-sm leading-6 text-zinc-300">{task.label}</p>
+      )}
+
+      {task.href ? (
+        <div className="mt-2">
+          <Link
+            href={task.href}
+            className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-300 transition hover:bg-emerald-500/20"
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+            Open
+          </Link>
+        </div>
+      ) : null}
+    </div>
+  )
+}

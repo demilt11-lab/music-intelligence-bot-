@@ -2,7 +2,10 @@
 //
 // Assigns a trend label (VIRAL / TRENDING / POPULAR / NONE) per track for a
 // snapshot date, combining:
-//   - Spotify stream growth AND absolute volume (TrackPlatformStatsDaily, 7d vs prior 7d)
+//   - Streaming volume growth AND absolute volume (7d vs prior 7d) from
+//     lib/features/streaming-volume: Spotify daily streams when a stream
+//     source is configured, else YouTube views-gained — so labels warm up
+//     from the sources that actually ingest today.
 //   - UGC view growth (UgcTrackMetrics, latest 7d window vs the window 7d earlier)
 //   - genre-level playlist base volume (GenrePlaylistMetrics)
 //
@@ -15,6 +18,7 @@
 // targets, so growth windows only ever look backward from the snapshot date.
 import { db } from "@/lib/db";
 import { runTrackedJob } from '@/lib/jobs/tracker';
+import { loadStreamingVolumeByTrack } from '@/lib/features/streaming-volume';
 
 function pctDelta(curr: number, prev: number): number {
   if (!prev || prev === 0) return 0;
@@ -120,22 +124,12 @@ export async function buildTrackTrendLabels(dateStr: string) {
   const d7 = daysBefore(snapshotDate, 7);
   const d14 = daysBefore(snapshotDate, 14);
 
-  // 1) Spotify streams per track: trailing 7d vs prior 7d
-  const sumWindow = (gte: Date, lt: Date) =>
-    db.trackPlatformStatsDaily.groupBy({
-      by: ["trackId"],
-      where: { platform: "spotify", date: { gte, lt } },
-      _sum: { streams: true },
-    });
-
-  const [currStreams, prevStreams] = await Promise.all([
-    sumWindow(d7, snapshotDate),
-    sumWindow(d14, d7),
+  // 1) Streaming volume per track: trailing 7d vs prior 7d
+  //    (Spotify streams preferred, YouTube views-gained fallback)
+  const [currStreamsByTrack, prevStreamsByTrack] = await Promise.all([
+    loadStreamingVolumeByTrack(d7, snapshotDate),
+    loadStreamingVolumeByTrack(d14, d7),
   ]);
-
-  const prevStreamsByTrack = new Map<number, number>(
-    prevStreams.map((r) => [r.trackId, Number(r._sum.streams ?? 0n)]),
-  );
 
   // 2) UGC views per track+country: each UgcTrackMetrics row is already a
   //    rolling 7d window, so take the latest row at/before the snapshot and
@@ -169,7 +163,7 @@ export async function buildTrackTrendLabels(dateStr: string) {
   // 3) Genre per track (TrackTag category=genre, then existing trend label)
   const trackIds = Array.from(
     new Set([
-      ...currStreams.map((r) => r.trackId),
+      ...currStreamsByTrack.keys(),
       ...latestUgcByTrack.keys(),
     ]),
   );
@@ -197,10 +191,6 @@ export async function buildTrackTrendLabels(dateStr: string) {
   }
 
   // 5) Label every track with any signal this window
-  const currStreamsByTrack = new Map<number, number>(
-    currStreams.map((r) => [r.trackId, Number(r._sum.streams ?? 0n)]),
-  );
-
   let labeled = 0;
   for (const trackId of trackIds) {
     const streams7d = currStreamsByTrack.get(trackId) ?? 0;

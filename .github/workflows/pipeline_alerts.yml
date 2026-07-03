@@ -2,22 +2,46 @@ name: Pipeline Alerts
 
 # Fires after any data-pipeline workflow finishes; posts to Slack on failure.
 # No-op when SLACK_WEBHOOK_URL isn't configured.
+#
+# Coverage must include every workflow in .github/workflows/ that isn't CI
+# (ci.yml has its own visibility via PR status checks) or this file itself.
+# The original production incident this repo's remediation work traces back
+# to was a silently-failing ingest job nobody was notified about — 17 of the
+# 30 workflows here were still exposed to that exact failure mode until this
+# list was made exhaustive. When adding a new scheduled or data-affecting
+# workflow, add its `name:` here too.
 on:
   workflow_run:
     workflows:
       - "Ingest Spotify"
+      - "Ingest Soundcharts"
       - "Ingest TikTok"
       - "Ingest YouTube"
       - "Ingest Instagram Reels"
       - "Ingest Billboard Charts"
       - "Ingest Shazam"
       - "Ingest Google Trends"
+      - "Ingest Luminate"
       - "Artist ETL"
       - "ETL — Compute Signals"
+      - "ETL — Writer & Producer Rising Scores"
+      - "Data Retention (GDPR/CCPA)"
       - "Data Reconciliation"
       - "ML Pipeline — Predictive A&R"
+      - "ML Training Pipeline"
+      - "ML Drift Check & Retrain"
+      - "ML Inference Service"
+      - "ML — Writer & Producer Breakout Predictor"
+      - "ml-audio-clustering"
       - "Evaluate Predictions"
       - "anomaly-detection"
+      - "Clean Junk Catalog Rows"
+      - "Cold Start Ingestion"
+      - "Database Migrations"
+      - "Database Push (schema sync)"
+      - "Seed Database"
+      - "Discovery Test — Songs To Watch"
+      - "Provision Admin User"
     types: [completed]
 
 jobs:

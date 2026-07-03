@@ -1,5 +1,12 @@
 name: Data Reconciliation
 
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 on:
   schedule:
     - cron: "30 9 * * *" # 9:30 UTC daily — after the full ETL chain

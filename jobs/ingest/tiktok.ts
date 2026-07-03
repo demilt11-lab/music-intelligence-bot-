@@ -1,7 +1,9 @@
 /**
  * TikTok ingestion job
  *
- * - Fetches trending videos for music hashtags (#newmusic, #viral, #trending, #music, #fyp)
+ * - Crawls TikTok Creative Center's public trending-music charts (popular +
+ *   surging) via the self-hosted crawl4ai service — no TikTok Research API
+ *   approval or RapidAPI subscription required. Requires CRAWLER_API_URL.
  * - Resolves sound → canonical Track via ExternalId or creates stubs
  * - Upserts TiktokVideoChartSnapshot + TiktokVideoChartRow (daily snapshot)
  * - Upserts TiktokVideoMetricsDaily per video
@@ -11,13 +13,12 @@
  */
 
 import { db } from "@/lib/db";
-import { queryVideos, queryCreators, searchSounds } from "@/lib/tiktok/client";
+import { fetchCreativeCenterChart, fetchCreatorProfile } from "@/lib/tiktok/crawler";
 import { resolveTiktokSound } from "@/lib/tiktok/resolver";
 import { runTrackedJob } from '@/lib/jobs/tracker';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const MUSIC_HASHTAGS = ["newmusic", "viral", "trending", "music", "fyp"];
 const TOP_CREATORS = [
   "charlidamelio",
   "addisonre",
@@ -25,13 +26,6 @@ const TOP_CREATORS = [
   "bellapoarch",
   "itsjojosiwa",
 ];
-
-function formatDate(d: Date): string {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}${m}${day}`;
-}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -51,81 +45,36 @@ interface VideoRecord {
   rank: number;
 }
 
-async function fetchTrendingVideos(): Promise<VideoRecord[]> {
-  const today = new Date();
-  const endDate = formatDate(today);
-  const startDate = formatDate(new Date(today.getTime() - 7 * 86_400_000));
+// Counts crawler-level failures (service unreachable, page blocked) so
+// main() can distinguish "no trending data today" (fine) from "the crawl
+// pipeline is broken" (a failure that must surface in job_runs / pipeline
+// alerts, not a green run).
+let crawlerFailures = 0;
 
+/**
+ * Trending sounds via the self-hosted crawl4ai service scraping TikTok
+ * Creative Center's public charts (lib/tiktok/crawler.ts) — this replaced
+ * the TikTok Research API (401: requires an approved research app) and the
+ * RapidAPI sound-search fallback (403: unsubscribed). Each crawled sound
+ * becomes one sound-grain VideoRecord: rank/title/author are real chart
+ * data; per-video engagement counts are not exposed by Creative Center, so
+ * they stay 0 rather than being fabricated.
+ */
+async function fetchTrendingVideos(): Promise<VideoRecord[]> {
   const all: VideoRecord[] = [];
   let rank = 1;
 
-  for (const hashtag of MUSIC_HASHTAGS) {
-    console.log(`[tiktok] Fetching videos for #${hashtag}…`);
+  for (const chart of ['popular', 'surging'] as const) {
+    console.log(`[tiktok] Crawling Creative Center ${chart} music chart…`);
     try {
-      const resp = await queryVideos({
-        query: {
-          and: [
-            {
-              field_name: "hashtag_name",
-              field_values: [hashtag],
-              operation: "EQ",
-            },
-          ],
-        },
-        start_date: startDate,
-        end_date: endDate,
-        max_count: 100,
-      });
-
-      if (resp.error?.code && resp.error.code !== "ok" && resp.error.code !== "") {
-        console.warn(`[tiktok] API error for #${hashtag}: ${resp.error.message}`);
-        continue;
-      }
-
-      for (const v of resp.data?.videos ?? []) {
+      const sounds = await fetchCreativeCenterChart(chart);
+      for (const s of sounds) {
         all.push({
-          videoId: v.id,
-          soundId: v.music_id ?? v.music?.id ?? "",
-          soundTitle: v.music?.title ?? "Unknown",
-          soundAuthor: v.music?.author_name ?? v.username ?? "Unknown",
-          views: BigInt(v.view_count ?? 0),
-          likes: BigInt(v.like_count ?? 0),
-          shares: BigInt(v.share_count ?? 0),
-          comments: BigInt(v.comment_count ?? 0),
-          rank: rank++,
-        });
-      }
-    } catch (err) {
-      console.warn(`[tiktok] Research API failed for #${hashtag}:`, (err as Error).message);
-    }
-
-    await sleep(200);
-  }
-
-  if (all.length > 0) return all;
-
-  // ── RapidAPI fallback when Research API is unavailable ──
-  console.log("[tiktok] Research API returned 0 results — falling back to RapidAPI sound search…");
-  const MUSIC_KEYWORDS = ["pop 2024", "hip hop trending", "r&b viral", "new music", "trending song"];
-  for (const keyword of MUSIC_KEYWORDS) {
-    console.log(`[tiktok] RapidAPI: searching sounds for "${keyword}"…`);
-    try {
-      const resp = await searchSounds(keyword);
-      if (resp.code !== 0 && resp.code !== 200) {
-        console.warn(`[tiktok] RapidAPI error for "${keyword}": ${resp.msg}`);
-        continue;
-      }
-      for (const item of resp.data?.music_list ?? []) {
-        const info = item.music_info;
-        if (!info?.id) continue;
-        // Use first video ID as a proxy videoId (best we can do without video API)
-        const proxyVideoId = item.music_videos?.[0]?.video_id ?? `rapidapi-${info.id}`;
-        all.push({
-          videoId: proxyVideoId,
-          soundId: info.id,
-          soundTitle: info.title ?? "Unknown",
-          soundAuthor: info.author ?? "Unknown",
-          views: BigInt(item.music_videos?.[0]?.play_count ?? 0),
+          videoId: `cc-${chart}-${s.soundId}`,
+          soundId: s.soundId,
+          soundTitle: s.title,
+          soundAuthor: s.author,
+          views: BigInt(0),
           likes: BigInt(0),
           shares: BigInt(0),
           comments: BigInt(0),
@@ -133,12 +82,13 @@ async function fetchTrendingVideos(): Promise<VideoRecord[]> {
         });
       }
     } catch (err) {
-      console.warn(`[tiktok] RapidAPI failed for "${keyword}":`, (err as Error).message);
+      crawlerFailures++;
+      console.warn(`[tiktok] Creative Center crawl failed for ${chart}:`, (err as Error).message);
     }
-    await sleep(300);
+    await sleep(500);
   }
 
-  console.log(`[tiktok] RapidAPI fallback returned ${all.length} sound records`);
+  console.log(`[tiktok] Crawled ${all.length} trending sound records`);
   return all;
 }
 
@@ -427,18 +377,15 @@ async function ingestCreators(today: Date): Promise<void> {
 
   let rank = 1;
   for (const username of TOP_CREATORS) {
-    console.log(`[tiktok] Fetching creator info for @${username}…`);
+    console.log(`[tiktok] Crawling creator profile @${username}…`);
     try {
-      const resp = await queryCreators({ username });
-
-      if (resp.error?.code && resp.error.code !== "ok" && resp.error.code !== "") {
-        console.warn(`[tiktok] Creator API error for @${username}: ${resp.error.message}`);
-        rank++;
-        continue;
-      }
-
-      const info = resp.data;
-      if (!info) {
+      // Best-effort: TikTok profile pages are aggressively bot-walled from
+      // datacenter IPs, so a missing follower count is a normal outcome and
+      // must never fail the job — the creator chart is enrichment, not a
+      // core signal.
+      const info = await fetchCreatorProfile(username);
+      if (info.followerCount === null) {
+        console.warn(`[tiktok] No follower count crawled for @${username} — skipping row`);
         rank++;
         continue;
       }
@@ -455,27 +402,6 @@ async function ingestCreators(today: Date): Promise<void> {
 
       if (extId) {
         artistId = extId.entityId;
-      } else {
-        // Try to find by display name
-        const artist = await db.artist.findFirst({
-          where: {
-            name: { equals: info.display_name, mode: "insensitive" },
-          },
-        });
-        if (artist) {
-          artistId = artist.id;
-          // Attach ExternalId
-          await db.externalId.create({
-            data: {
-              entityType: "artist",
-              entityId: artistId,
-              platform: "tiktok",
-              externalId: username,
-            },
-          }).catch(() => {
-            // Ignore duplicate key errors
-          });
-        }
       }
 
       await db.tiktokUserChartRow.upsert({
@@ -490,20 +416,20 @@ async function ingestCreators(today: Date): Promise<void> {
           artistId,
           tiktokUserId: username,
           rank,
-          followers: BigInt(info.follower_count ?? 0),
-          likes: BigInt(info.likes_count ?? 0),
+          followers: info.followerCount,
+          likes: BigInt(0),
         },
         update: {
           artistId,
           tiktokUserId: username,
-          followers: BigInt(info.follower_count ?? 0),
-          likes: BigInt(info.likes_count ?? 0),
+          followers: info.followerCount,
+          likes: BigInt(0),
         },
       });
 
       rank++;
     } catch (err) {
-      console.error(`[tiktok] Failed to fetch creator @${username}:`, err);
+      console.warn(`[tiktok] Creator profile crawl failed for @${username}:`, (err as Error).message);
       rank++;
     }
 
@@ -578,8 +504,19 @@ async function main(): Promise<void> {
     console.warn("[tiktok] [WARN] Creator ingestion failed:", (err as Error).message);
   }
 
-  console.log("[tiktok] Ingestion job complete.");
   await db.$disconnect();
+
+  // Creative Center always has trending music, so zero records never means
+  // "quiet day" — it means the crawl or the extraction broke.
+  if (videos.length === 0) {
+    throw new Error(
+      `TikTok ingest fetched 0 records (${crawlerFailures} crawler-level failure(s)). ` +
+        `Check that the crawl4ai service (services/crawler-api) is reachable at CRAWLER_API_URL ` +
+        `and see the rank_list/markdown-head diagnostics above for what Creative Center served.`,
+    );
+  }
+
+  console.log("[tiktok] Ingestion job complete.");
 }
 
 runTrackedJob('ingest:tiktok', main).catch((err) => {

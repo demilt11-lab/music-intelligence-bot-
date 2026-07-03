@@ -1,5 +1,12 @@
 name: ETL — Writer & Producer Rising Scores
 
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 on:
   schedule:
     - cron: "30 5 * * *" # 05:30 UTC daily — after streaming stats ingested
@@ -18,14 +25,14 @@ jobs:
           node-version: "20"
 
       - name: Install deps
-        run: npm install
+        run: npm ci
 
       - name: Generate Prisma client
         run: npx prisma generate
 
       - name: Compute rising scores
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: npx tsx jobs/etl/compute_writer_producer_scores.ts $(date -u +%Y-%m-%d)

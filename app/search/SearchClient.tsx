@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { PageShell } from '@/components/ui/PageShell'
 import { CompanionMessage } from '@/components/ui/CompanionMessage'
@@ -66,22 +66,14 @@ function bucketLabel(k: string) {
 
 function bucketIcon(bucket: string) {
   switch (bucket) {
-    case 'tracks':
-      return '♫'
-    case 'artists':
-      return '♪'
-    case 'playlists':
-      return '▤'
-    case 'curators':
-      return '✦'
-    case 'albums':
-      return '◫'
-    case 'stations':
-      return '◉'
-    case 'songwriters':
-      return '✎'
-    default:
-      return '◎'
+    case 'tracks': return '♫'
+    case 'artists': return '♪'
+    case 'playlists': return '▤'
+    case 'curators': return '✦'
+    case 'albums': return '◫'
+    case 'stations': return '◉'
+    case 'songwriters': return '✎'
+    default: return '◎'
   }
 }
 
@@ -91,7 +83,6 @@ function getHref(bucket: string, item: { id?: number | string | null }): string 
   return null
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function getSubtitle(bucket: string, item: any): string | null {
   switch (bucket) {
     case 'tracks': {
@@ -109,6 +100,7 @@ function getSubtitle(bucket: string, item: any): string | null {
       const parts: string[] = []
       if (item.platform) parts.push(String(item.platform))
       if (item.ownerName) parts.push(String(item.ownerName))
+      if (item.followers) parts.push(`${Number(item.followers).toLocaleString()} followers`)
       return parts.join(' · ') || null
     }
     case 'curators': {
@@ -136,12 +128,69 @@ function getSubtitle(bucket: string, item: any): string | null {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function WatchlistButton({
+  entityType,
+  entityId,
+}: {
+  entityType: 'artist' | 'track'
+  entityId: number
+}) {
+  const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
+  const handleSave = useCallback(
+    async (e: React.MouseEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (status === 'saving' || status === 'saved') return
+      setStatus('saving')
+      try {
+        const res = await fetch('/api/ui/watchlist', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entityType, entityId }),
+        })
+        if (res.ok || res.status === 409) {
+          setStatus('saved')
+        } else {
+          setStatus('error')
+          setTimeout(() => setStatus('idle'), 2000)
+        }
+      } catch {
+        setStatus('error')
+        setTimeout(() => setStatus('idle'), 2000)
+      }
+    },
+    [entityType, entityId, status],
+  )
+
+  if (status === 'saved') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-300">
+        ✓ Saved
+      </span>
+    )
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleSave}
+      disabled={status === 'saving'}
+      title="Save to watchlist"
+      className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-medium text-zinc-400 transition hover:border-emerald-400/20 hover:bg-emerald-500/10 hover:text-emerald-300 disabled:opacity-50"
+    >
+      {status === 'saving' ? '…' : '+ Watch'}
+    </button>
+  )
+}
+
 function ResultRow({ item, bucket }: { item: any; bucket: string }) {
   const name = String(item.name ?? item.title ?? item.id ?? '—')
   const sub = getSubtitle(bucket, item)
   const href = getHref(bucket, item)
   const imageUrl = typeof item.imageUrl === 'string' ? item.imageUrl : null
+  const isWatchable = bucket === 'artists' || bucket === 'tracks'
+  const entityType = bucket === 'artists' ? 'artist' : 'track'
 
   return (
     <div className="flex items-center gap-3 border-b border-white/10 px-4 py-3 transition-colors last:border-0 hover:bg-white/[0.03]">
@@ -180,14 +229,26 @@ function ResultRow({ item, bucket }: { item: any; bucket: string }) {
         )}
       </div>
 
-      {item.score != null && (
-        <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium tabular-nums text-zinc-400">
-          {Number(item.score).toFixed(2)}
-        </span>
-      )}
+      <div className="flex shrink-0 items-center gap-2">
+        {item.score != null && (
+          <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium tabular-nums text-zinc-400">
+            {Number(item.score).toFixed(0)}
+          </span>
+        )}
+        {isWatchable && item.id && (
+          <WatchlistButton entityType={entityType} entityId={Number(item.id)} />
+        )}
+      </div>
     </div>
   )
 }
+
+const EXAMPLE_QUERIES = [
+  'Search by artist name',
+  'Search by track title',
+  'Paste a Spotify URL',
+  'Search by playlist name',
+]
 
 export default function SearchClient({
   initialQuery = '',
@@ -220,8 +281,9 @@ export default function SearchClient({
 
         const data = await res.json()
         setResult(data.obj)
-      } catch (err: any) {
-        setError(err.message ?? 'Unknown error')
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Unknown error'
+        setError(msg)
         setResult(null)
       } finally {
         setLoading(false)
@@ -230,7 +292,6 @@ export default function SearchClient({
     [],
   )
 
-  // Deep links (e.g. the home-page command bar) land here with ?q= set.
   React.useEffect(() => {
     if (initialQuery.trim()) void runSearch(initialQuery, 'all')
   }, [initialQuery, runSearch])
@@ -254,7 +315,7 @@ export default function SearchClient({
   return (
     <PageShell
       title="Search"
-      description="Search across artists, tracks, playlists, curators, albums, stations, and songwriters from one Buddy-powered discovery surface."
+      description="Search across artists, tracks, playlists, curators, and more — or paste a Spotify, YouTube, or Apple Music URL to jump directly to an entity."
     >
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
@@ -270,37 +331,29 @@ export default function SearchClient({
 
                     <div className="space-y-2">
                       <h2 className="text-xl font-semibold tracking-[-0.03em] text-white sm:text-2xl">
-                        Buddy can search the full music intelligence graph
+                        Search the music intelligence graph
                       </h2>
                       <p className="max-w-3xl text-sm leading-6 text-zinc-300">
-                        Find artists, tracks, playlists, curators, albums, stations, and songwriters from one fast discovery surface.
+                        Find artists, tracks, playlists, curators, albums, and stations — or paste a direct Spotify / YouTube URL to resolve instantly.
                       </p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-3 lg:min-w-[360px]">
                     <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">
-                        Query
-                      </p>
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">Query</p>
                       <p className="mt-1 truncate text-sm font-semibold text-white">
                         {q.trim() ? q : '—'}
                       </p>
                     </div>
-
                     <div className="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3">
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-200/70">
-                        Type
-                      </p>
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-cyan-200/70">Type</p>
                       <p className="mt-1 text-sm font-semibold text-cyan-300">
                         {TYPES.find((t) => t.value === type)?.label ?? 'All'}
                       </p>
                     </div>
-
                     <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-4 py-3">
-                      <p className="text-[10px] uppercase tracking-[0.22em] text-emerald-200/70">
-                        Results
-                      </p>
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-emerald-200/70">Results</p>
                       <p className="mt-1 text-sm font-semibold text-emerald-300">
                         {searched && !loading ? totalResults : '—'}
                       </p>
@@ -321,7 +374,7 @@ export default function SearchClient({
                   <select
                     value={type}
                     onChange={(e) => setType(e.target.value as SearchType)}
-                    className="h-11 rounded-full border border-white/10 bg-white/5 px-4 text-sm text-zinc-200 outline-none transition focus:border-cyan-400/30 focus:bg-white/10"
+                    className="h-11 rounded-full border border-white/10 bg-[#0a0d12] px-4 text-sm text-zinc-200 outline-none transition focus:border-cyan-400/30"
                     aria-label="Search type"
                   >
                     {TYPES.map((t) => (
@@ -345,12 +398,12 @@ export default function SearchClient({
                     type="insight"
                     message={
                       loading
-                        ? 'I’m searching across artists, tracks, playlists, curators, and other catalog entities now.'
+                        ? 'Searching across artists, tracks, playlists, curators, and other catalog entities now.'
                         : searched && totalResults === 0
                         ? `Nothing matched "${q}". Try a different spelling, broader keyword, or paste a direct URL.`
                         : searched
-                        ? `I found ${totalResults} result${totalResults !== 1 ? 's' : ''} for "${q}". Review the grouped buckets below and open the strongest match.`
-                        : 'Use search when you already know the entity you want to inspect, validate, or route into deeper analysis.'
+                        ? `Found ${totalResults} result${totalResults !== 1 ? 's' : ''} for "${q}". Review the grouped buckets and save promising artists to your watchlist.`
+                        : 'Search by artist name, track title, playlist, or paste a Spotify / YouTube URL to jump directly to an entity.'
                     }
                   />
                 </div>
@@ -381,9 +434,7 @@ export default function SearchClient({
                     ⌕
                   </div>
                   <div className="space-y-2">
-                    <p className="text-sm font-medium text-zinc-200">
-                      No results for “{q}”
-                    </p>
+                    <p className="text-sm font-medium text-zinc-200">No results for &ldquo;{q}&rdquo;</p>
                     <p className="max-w-md text-sm leading-6 text-zinc-500">
                       Try a broader keyword, different spelling, or paste a direct Spotify or YouTube URL.
                     </p>
@@ -406,7 +457,7 @@ export default function SearchClient({
 
                       <div className="overflow-hidden rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,24,27,0.82),rgba(10,10,11,0.94))]">
                         {result[bucket]!.map((item, i) => (
-                          <ResultRow key={item.id ?? i} item={item} bucket={bucket} />
+                          <ResultRow key={(item as any).id ?? i} item={item} bucket={bucket} />
                         ))}
                       </div>
                     </section>
@@ -415,17 +466,26 @@ export default function SearchClient({
               )}
 
               {!searched && !loading && (
-                <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
+                <div className="flex flex-col items-center justify-center gap-6 py-20 text-center">
                   <div className="flex h-16 w-16 items-center justify-center rounded-3xl border border-white/10 bg-white/5 text-3xl text-zinc-600">
                     ⌕
                   </div>
                   <div className="space-y-2">
-                    <p className="text-sm font-medium text-zinc-200">
-                      Start with a name, title, or URL
-                    </p>
+                    <p className="text-sm font-medium text-zinc-200">Start with a name, title, or URL</p>
                     <p className="max-w-md text-sm leading-6 text-zinc-500">
-                      Search is best for jumping directly into artist, track, playlist, curator, or catalog-level intelligence.
+                      Search is the fastest way to jump into artist, track, playlist, or curator intelligence.
                     </p>
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <p className="w-full text-[11px] uppercase tracking-wider text-zinc-600">Search examples</p>
+                    {EXAMPLE_QUERIES.map((hint) => (
+                      <span
+                        key={hint}
+                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-zinc-400"
+                      >
+                        {hint}
+                      </span>
+                    ))}
                   </div>
                 </div>
               )}
@@ -436,23 +496,27 @@ export default function SearchClient({
         <aside className="space-y-5">
           <section className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,23,0.95),rgba(10,10,11,0.98))] p-5 shadow-[0_16px_48px_rgba(0,0,0,0.24)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
-              Buddy read
+              What you can search
             </p>
-
-            <div className="mt-4 space-y-3">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs font-medium text-zinc-400">Best use case</p>
-                <p className="mt-1 text-sm leading-6 text-zinc-300">
-                  Use search when you know the entity you want and need to jump quickly into its intelligence page or grouped result bucket.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs font-medium text-zinc-400">Tip</p>
-                <p className="mt-1 text-sm leading-6 text-zinc-300">
-                  Direct URLs and exact titles usually return the fastest path to the right record.
-                </p>
-              </div>
+            <div className="mt-4 space-y-2">
+              {[
+                { icon: '♪', label: 'Artists', desc: 'By name or Spotify artist URL' },
+                { icon: '♫', label: 'Tracks', desc: 'By title or Spotify track URL' },
+                { icon: '▤', label: 'Playlists', desc: 'Editorial and algorithmic playlists' },
+                { icon: '✦', label: 'Curators', desc: 'Playlist curators by platform' },
+                { icon: '◫', label: 'Albums', desc: 'By title or YouTube URL' },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/5 p-3"
+                >
+                  <span className="mt-0.5 text-sm text-zinc-400">{item.icon}</span>
+                  <div>
+                    <p className="text-xs font-semibold text-zinc-200">{item.label}</p>
+                    <p className="text-[11px] leading-4 text-zinc-500">{item.desc}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
 
@@ -460,13 +524,12 @@ export default function SearchClient({
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
               Search workflow
             </p>
-
             <div className="mt-4 space-y-3">
               {[
-                'Enter a title, artist, or URL',
-                'Select a search scope if needed',
-                'Review grouped result buckets',
-                'Open the strongest entity match',
+                'Enter a name, title, or paste a URL',
+                'Select a scope filter if needed',
+                'Review grouped results by entity type',
+                'Save promising artists to your watchlist',
               ].map((step, index) => (
                 <div
                   key={step}
@@ -478,6 +541,22 @@ export default function SearchClient({
                   <p className="text-sm leading-6 text-zinc-300">{step}</p>
                 </div>
               ))}
+            </div>
+          </section>
+
+          <section className="rounded-[24px] border border-white/10 bg-[linear-gradient(180deg,rgba(20,20,23,0.95),rgba(10,10,11,0.98))] p-5 shadow-[0_16px_48px_rgba(0,0,0,0.24)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-zinc-500">
+              Looking for something else?
+            </p>
+            <div className="mt-4 space-y-3">
+              <Link href="/talent-scout" className="block rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:bg-white/10">
+                <p className="text-sm font-semibold text-white">Talent Scout</p>
+                <p className="mt-1 text-xs leading-5 text-zinc-400">AI-curated breakout discovery feed</p>
+              </Link>
+              <Link href="/compare" className="block rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:bg-white/10">
+                <p className="text-sm font-semibold text-white">Compare Artists</p>
+                <p className="mt-1 text-xs leading-5 text-zinc-400">Side-by-side momentum analysis</p>
+              </Link>
             </div>
           </section>
         </aside>

@@ -56,12 +56,14 @@ export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const isProd = process.env.NODE_ENV === 'production';
 
-  // CORS preflight
+  // CORS preflight — explicit allowlist, matching next.config.js's stance:
+  // never default to a wildcard. Falls back to localhost (a safe, non-wildcard
+  // default matching next.config.js) if ALLOWED_ORIGIN is ever unset.
   if (req.method === 'OPTIONS') {
     return new NextResponse(null, {
       status: 204,
       headers: {
-        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN ?? '*',
+        'Access-Control-Allow-Origin': process.env.ALLOWED_ORIGIN || 'http://localhost:3000',
         'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, x-api-key, x-request-id',
         'Access-Control-Max-Age': '86400',

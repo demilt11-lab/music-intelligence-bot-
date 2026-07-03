@@ -1,6 +1,6 @@
 // lib/luminate/ingest.ts
 
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import {
   AirplayRecord,
   SalesRecord,
@@ -16,8 +16,6 @@ import {
 import { parseStreamsMetrics } from './parsers/streams';
 import { parseSalesMetrics } from './parsers/sales';
 import { parseAirplayMetrics } from './parsers/airplay';
-
-const db = new PrismaClient();
 
 async function saveStreams(records: StreamRecord[]) {
   if (!records.length) return;

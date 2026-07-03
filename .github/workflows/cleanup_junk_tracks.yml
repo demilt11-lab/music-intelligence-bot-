@@ -1,5 +1,12 @@
 name: Clean Junk Catalog Rows
 
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 # Manually-triggered cleanup of scraped non-song rows in the tracks catalog.
 # DRY RUN unless the "apply" input is checked. Single-statement queries only,
 # so it runs over the connection pooler.
@@ -25,7 +32,7 @@ jobs:
           node-version: "20"
 
       - name: Install deps
-        run: npm install
+        run: npm ci
 
       - name: Generate Prisma client
         run: npx prisma generate
@@ -33,7 +40,7 @@ jobs:
       - name: Clean junk catalog rows
         env:
           # Pooler connection (reachable from runners; the direct db.<ref> host is not).
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}?pgbouncer=true&connection_limit=1
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           CONFIRM_DELETE: ${{ inputs.apply && '1' || '0' }}
         run: npx tsx scripts/clean_junk_tracks.ts

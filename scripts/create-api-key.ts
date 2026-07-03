@@ -1,8 +1,6 @@
 // scripts/create-api-key.ts
-import { PrismaClient } from '@prisma/client';
+import { db as prisma } from '@/lib/db';
 import crypto from 'crypto';
-
-const prisma = new PrismaClient();
 
 function generateApiKey(): { raw: string; hash: string } {
   const raw = `mi_${crypto.randomBytes(32).toString('hex')}`;
@@ -19,7 +17,7 @@ async function main() {
 
   if (!tenantIdArg) {
     console.error(
-      'Usage: ts-node scripts/create-api-key.ts <tenantId> [label] [scopes]',
+      'Usage: npx tsx scripts/create-api-key.ts <tenantId> [label] [scopes]',
     );
     process.exit(1);
   }

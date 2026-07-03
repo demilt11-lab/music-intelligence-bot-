@@ -116,12 +116,38 @@ export async function logPredictions(dateStr: string): Promise<void> {
   }));
 
   // ─────────────────────────────────────────────
+  // 4b. ml_trend_label predictions from the *actual trained model's own
+  //     output* (TrackTrendPrediction), not the rule-based heuristic it was
+  //     trained on. Without this, evaluate_predictions only ever scores the
+  //     heuristic against itself/outcomes — the trained ML model's own
+  //     accuracy was never measured against anything.
+  // ─────────────────────────────────────────────
+  const mlPredictions = await db.trackTrendPrediction.findMany({
+    where: { modelName: "track-viral" },
+  });
+
+  console.log(
+    `[log_predictions] Found ${mlPredictions.length} ML track-viral prediction(s) to snapshot for ${dateStr}.`,
+  );
+
+  const mlTrendLabelData = mlPredictions.map((row) => ({
+    trackId: row.trackId,
+    artistId: null as number | null,
+    predictionType: "ml_trend_label",
+    predictedValue: row.label,
+    predictedAt: todayDate,
+    modelName: row.modelName,
+    modelVersion: row.modelVersion as string | null,
+  }));
+
+  // ─────────────────────────────────────────────
   // 5. Bulk insert all prediction outcomes
   // ─────────────────────────────────────────────
   const allPredictions = [
     ...trendLabelData,
     ...viralScoreData,
     ...breakProbData,
+    ...mlTrendLabelData,
   ];
 
   if (allPredictions.length === 0) {

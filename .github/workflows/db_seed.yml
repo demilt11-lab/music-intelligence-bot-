@@ -1,7 +1,25 @@
 name: Seed Database
 
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+# This runs against whatever DATABASE_URL is configured — i.e. production,
+# same as every other workflow here. Seeding is mostly upsert-based so it
+# won't duplicate rows, but it WILL silently overwrite real records if a
+# seed slug (e.g. "hot-97") ever collides with a real onboarded entity.
+# Requires explicitly checking "apply" — same confirmation pattern as
+# cleanup_junk_tracks.yml — rather than running on a bare workflow_dispatch.
 on:
   workflow_dispatch:
+    inputs:
+      apply:
+        description: "Actually seed (leave unchecked to no-op safely)"
+        type: boolean
+        default: false
 
 jobs:
   seed:
@@ -16,13 +34,21 @@ jobs:
           cache: "npm"
 
       - name: Install dependencies
+        if: ${{ inputs.apply }}
         run: npm ci
 
       - name: Generate Prisma client
+        if: ${{ inputs.apply }}
         run: npx prisma generate
 
       - name: Seed database
+        if: ${{ inputs.apply }}
         run: npm run db:seed
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
+
+      - name: Skipped (apply not checked)
+        if: ${{ !inputs.apply }}
+        run: |
+          echo "::warning::Seeding was skipped because 'apply' was not checked. This workflow seeds whatever DATABASE_URL points at (production) — re-run with 'apply' checked only if that's intended."

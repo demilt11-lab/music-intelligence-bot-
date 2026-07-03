@@ -41,7 +41,14 @@ export type TrainResult = {
   classCounts: Record<string, number>;
   skipped: boolean;
   reason?: string;
+  promoted?: boolean;
+  incumbentAccuracy?: number;
 };
+
+// A retrain can dip slightly on held-out accuracy just from sampling noise —
+// don't require strict improvement, but block a real regression from
+// silently overwriting a better incumbent model.
+const MAX_ACCURACY_REGRESSION = 0.02;
 
 export async function trainTrackViralModel(): Promise<TrainResult> {
   const data = await extractTrackTrainingData();
@@ -74,6 +81,30 @@ export async function trainTrackViralModel(): Promise<TrainResult> {
     l2: 1e-4,
   });
 
+  // Promotion gate: don't let a retrain silently overwrite a meaningfully
+  // better incumbent (see artist-trajectory.ts for the fuller rationale).
+  const incumbent = await db.mlModel.findUnique({ where: { modelType: MODEL_TYPE } });
+  const incumbentAccuracy = incumbent?.accuracy ?? null;
+  const regressed =
+    incumbentAccuracy != null && model.accuracy < incumbentAccuracy - MAX_ACCURACY_REGRESSION;
+
+  if (regressed) {
+    console.warn(
+      `[ml:track-viral] retrain REJECTED — held-out accuracy ${model.accuracy.toFixed(3)} ` +
+        `regresses more than ${MAX_ACCURACY_REGRESSION} below incumbent ${incumbentAccuracy!.toFixed(3)}. ` +
+        `Keeping the existing model in production.`,
+    );
+    return {
+      accuracy: model.accuracy,
+      nSamples: model.nSamples,
+      classCounts,
+      skipped: false,
+      promoted: false,
+      incumbentAccuracy: incumbentAccuracy!,
+      reason: `held-out accuracy regressed vs incumbent (${model.accuracy.toFixed(3)} < ${incumbentAccuracy!.toFixed(3)} - ${MAX_ACCURACY_REGRESSION})`,
+    };
+  }
+
   await db.mlModel.upsert({
     where: { modelType: MODEL_TYPE },
     update: {
@@ -94,9 +125,20 @@ export async function trainTrackViralModel(): Promise<TrainResult> {
   });
 
   invalidateCache();
-  console.log(`[ml:track-viral] trained — samples=${model.nSamples} accuracy=${model.accuracy.toFixed(3)}`);
+  console.log(
+    `[ml:track-viral] trained + promoted — samples=${model.nSamples} ` +
+      `heldOutAccuracy=${model.accuracy.toFixed(3)} (train=${model.trainAccuracy.toFixed(3)}, ` +
+      `heldOut=${model.heldOut}, nTest=${model.nTestSamples})`,
+  );
 
-  return { accuracy: model.accuracy, nSamples: model.nSamples, classCounts, skipped: false };
+  return {
+    accuracy: model.accuracy,
+    nSamples: model.nSamples,
+    classCounts,
+    skipped: false,
+    promoted: true,
+    ...(incumbentAccuracy != null ? { incumbentAccuracy } : {}),
+  };
 }
 
 export const MODEL_NAME = MODEL_TYPE;

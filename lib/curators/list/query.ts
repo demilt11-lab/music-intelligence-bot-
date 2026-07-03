@@ -29,15 +29,14 @@ export interface RawCuratorRow {
 }
 
 /**
- * Builds a Prisma `where` clause for the curator list query based on the
- * validated parameters.
+ * Builds a Prisma `where` clause for the curator list query.
  *
- * @param params - Validated curator list parameters.
- * @returns A Prisma-compatible `where` object.
+ * The Curator model is thinner than the public filter surface: filters with
+ * no schema backing (majorLabel, brand, popularIndie, audiobook) are accepted
+ * but currently match nothing special — they are ignored rather than crashing
+ * the query. `editorial`/`indie` map to the closest real column (isVerified).
  */
- 
 function buildWhere(params: CuratorListParams): Record<string, any> {
-   
   const where: Record<string, any> = {
     platform: params.platform,
   };
@@ -47,29 +46,17 @@ function buildWhere(params: CuratorListParams): Record<string, any> {
   }
 
   if (params.nameSearch) {
-    where.ownerName = { contains: params.nameSearch, mode: 'insensitive' };
+    where.name = { contains: params.nameSearch, mode: 'insensitive' };
   }
 
   if (params.editorial !== undefined) {
-    where.editorial = params.editorial;
-  }
-  if (params.majorLabel !== undefined) {
-    where.majorLabel = params.majorLabel;
-  }
-  if (params.brand !== undefined) {
-    where.brand = params.brand;
-  }
-  if (params.popularIndie !== undefined) {
-    where.popularIndie = params.popularIndie;
+    where.isVerified = params.editorial;
   }
   if (params.indie !== undefined) {
-    where.indie = params.indie;
-  }
-  if (params.audiobook !== undefined) {
-    where.audiobook = params.audiobook;
+    where.isVerified = !params.indie;
   }
   if (params.code2 !== undefined) {
-    where.code2 = params.code2;
+    where.countryCode = params.code2;
   }
 
   if (params.playlistKeywordSearch) {
@@ -90,12 +77,29 @@ function buildWhere(params: CuratorListParams): Record<string, any> {
 }
 
 /**
+ * Maps a public sort column to a Prisma orderBy the Curator model supports.
+ * Metric-history sorts (total_reach, num_updates, …) have no per-curator
+ * history table yet, so they fall back to the nearest real ordering.
+ */
+function buildOrderBy(sortColumn: string, sortOrderDesc: boolean): Record<string, any> {
+  const dir = sortOrderDesc ? 'desc' : 'asc';
+  switch (sortColumn) {
+    case 'followers':
+    case 'fdiff_month':
+    case 'fdiff_percent_month':
+    case 'total_reach':
+      return { followerCount: dir };
+    case 'num_playlists':
+    case 'num_updates':
+    case 'num_tracks_updated':
+    default:
+      return { curatorPlaylists: { _count: dir } };
+  }
+}
+
+/**
  * Queries the `curators` table (with latest metrics join) and returns a page
  * of results together with the total matched count.
- *
- * The function performs two database operations in parallel:
- * 1. A `findMany` for the paginated rows.
- * 2. A `count` for the total matching rows (ignoring pagination).
  *
  * @param params - Validated {@link CuratorListParams}.
  * @returns An object with `data` (raw rows) and `total` (unfiltered count).
@@ -104,10 +108,7 @@ export async function queryCurators(
   params: CuratorListParams,
 ): Promise<{ data: RawCuratorRow[]; total: number }> {
   const where = buildWhere(params);
-
-  const orderBy = {
-    [params.sortColumn]: params.sortOrderDesc ? 'desc' : 'asc',
-  };
+  const orderBy = buildOrderBy(params.sortColumn, params.sortOrderDesc);
 
   const [rows, total] = await Promise.all([
     db.curator.findMany({
@@ -120,6 +121,9 @@ export async function queryCurators(
           orderBy: { date: 'desc' },
           take: 1,
         },
+        _count: {
+          select: { curatorPlaylists: true },
+        },
       },
     }),
     db.curator.count({ where }),
@@ -127,30 +131,28 @@ export async function queryCurators(
 
   // Flatten metrics into the curator row shape
   const data: RawCuratorRow[] = rows.map((row) => {
-     
-    const r = row as any;
-    const metrics = r.curatorMetrics?.[0] ?? null;
+    const metrics = row.curatorMetrics?.[0] ?? null;
     return {
-      id: r.id,
-      platform: r.platform,
-      externalOwnerId: r.externalOwnerId ?? null,
-      ownerName: r.ownerName ?? null,
-      imageUrl: r.imageUrl ?? null,
-      numPlaylists: r.numPlaylists ?? metrics?.numPlaylists ?? null,
+      id: row.id,
+      platform: row.platform,
+      externalOwnerId: row.externalId ?? null,
+      ownerName: row.name ?? null,
+      imageUrl: row.imageUrl ?? null,
+      numPlaylists: row._count?.curatorPlaylists ?? metrics?.playlistCount ?? null,
       totalReach: metrics?.totalReach ?? null,
-      followers: metrics?.followers ?? null,
-      followerDiffMonth: metrics?.followerDiffMonth ?? null,
-      followerDiffPercentMonth: metrics?.followerDiffPercentMonth ?? null,
-      tags: r.tags ?? [],
-      numUpdates: metrics?.numUpdates ?? null,
-      numTracksUpdated: metrics?.numTracksUpdated ?? null,
-      editorial: r.editorial ?? null,
-      majorLabel: r.majorLabel ?? null,
-      brand: r.brand ?? null,
-      popularIndie: r.popularIndie ?? null,
-      indie: r.indie ?? null,
-      audiobook: r.audiobook ?? null,
-      code2: r.code2 ?? null,
+      followers: row.followerCount ?? metrics?.followerCount ?? null,
+      followerDiffMonth: null,
+      followerDiffPercentMonth: null,
+      tags: [],
+      numUpdates: null,
+      numTracksUpdated: null,
+      editorial: row.isVerified ?? null,
+      majorLabel: null,
+      brand: null,
+      popularIndie: null,
+      indie: row.isVerified != null ? !row.isVerified : null,
+      audiobook: null,
+      code2: row.countryCode ?? null,
     };
   });
 

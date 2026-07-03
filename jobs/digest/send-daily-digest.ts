@@ -1,13 +1,11 @@
 /**
  * Cron job: send daily A&R digest to all active subscribers.
- * Run via: npx ts-node jobs/digest/send-daily-digest.ts
+ * Run via: npx tsx jobs/digest/send-daily-digest.ts
  * Recommended schedule: 06:00 UTC daily.
  */
 
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import { assembleDigest } from '../../lib/digest/assembler';
-
-const db = new PrismaClient();
 
 async function deliverWebhook(url: string, payload: object) {
   await fetch(url, {

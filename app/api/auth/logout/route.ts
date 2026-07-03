@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { revokeSession, SESSION_COOKIE } from '@/lib/auth/session';
+import { revokeSession, revokeAllUserSessions, validateSessionToken, SESSION_COOKIE } from '@/lib/auth/session';
 import { assertSameOrigin, AuthError } from '@/lib/auth/guard';
 
 export const dynamic = 'force-dynamic';
@@ -8,7 +8,17 @@ export async function POST(req: NextRequest) {
   try {
     assertSameOrigin(req);
     const token = req.cookies.get(SESSION_COOKIE)?.value;
-    if (token) await revokeSession(token);
+
+    // Optional { everywhere: true } body revokes every session for this
+    // user (e.g. "I think my account is compromised on another device"),
+    // not just the one presented by this request's cookie.
+    const body = (await req.json().catch(() => ({}))) as { everywhere?: unknown };
+    if (body.everywhere === true && token) {
+      const user = await validateSessionToken(token);
+      if (user) await revokeAllUserSessions(user.userId);
+    } else if (token) {
+      await revokeSession(token);
+    }
 
     const res = NextResponse.json({ ok: true });
     res.cookies.set(SESSION_COOKIE, '', { httpOnly: true, path: '/', maxAge: 0 });

@@ -13,11 +13,13 @@ Vercel + Postgres + an optional Python ML sidecar).
 | Database | PostgreSQL (Prisma ORM) | Supabase (or any managed Postgres) |
 | Rate limiting | Upstash Redis (optional) | Upstash |
 | Scheduled jobs | Vercel Cron + GitHub Actions | Vercel / GitHub |
-| ML inference | FastAPI (`ml/api`, `services/ar-api`) | Railway / Fly.io (separate service) |
+| ML inference (artist trajectory) | In-process TS model (`lib/ml/`) | Same Vercel deployment — no separate service |
 
-The Next.js app is fully functional **without** the ML service and Redis — those
-degrade gracefully (rate limiting is skipped if Redis env vars are absent; the
-ML trajectory endpoint returns an error only if called without `ML_ARTIST_TRAJECTORY_URL`).
+The Next.js app is fully functional **without** Redis — rate limiting falls
+back to a real (if per-instance) in-memory limiter when Redis env vars are
+absent, never to unlimited. There is a separate, optional Python/FastAPI ML
+service (`ml/api`) that has never been deployed and that nothing in the app
+calls by default — see §7.
 
 ---
 
@@ -92,6 +94,25 @@ npx prisma migrate deploy
 `npx prisma migrate deploy` against production (or trigger the Database
 Migrations workflow).
 
+**Backups & recovery:** this project does not run its own backup job — it
+relies entirely on the managed Postgres provider's backup posture. On
+Supabase specifically:
+- **Free/Pro tier**: daily backups, retained per the plan's window (Pro:
+  7 days by default, longer with the PITR add-on). Point-in-time recovery
+  (restore to any second, not just a daily snapshot) is a paid add-on, not
+  enabled by default.
+- Verify the actual plan/retention window in the Supabase dashboard
+  (**Database → Backups**) — the defaults above can change and this repo
+  has no way to confirm what's actually configured for your project.
+- If a real RPO/RTO requirement exists (e.g. "no more than 1 hour of data
+  loss is acceptable"), confirm PITR is enabled before launch — the daily
+  snapshot default does not meet that bar.
+- `jobs/etl/data_retention.ts` and `db_seed.yml`/`cleanup_junk_tracks.yml`
+  are additive/idempotent or dry-run-gated (see their own docs), so none of
+  them should be a routine source of unrecoverable data loss — but they are
+  not a substitute for provider-level backups if something goes wrong
+  upstream of this app (e.g. a bad manual query against the database).
+
 ---
 
 ## 5. Build & deploy (Vercel)
@@ -127,12 +148,45 @@ Vercel **Hobby** plan only allows daily schedules. To run alert checks more
 frequently (e.g. every 2h: `0 */2 * * *`), upgrade to the **Pro** plan.
 
 ### GitHub Actions (ingestion, ETL, ML)
-The 16 workflows under `.github/workflows/` run ingestion, ETL, and ML training
-on schedules / manual dispatch. They require these repo secrets:
-`DATABASE_URL`, plus the relevant provider keys (`SPOTIFY_CLIENT_ID/SECRET`,
-`YOUTUBE_API_KEY`, `TIKTOK_*`, `RAPIDAPI_KEY`, `SHAZAM_API_KEY`,
-`FIRECRAWL_API_KEY`, `SEARCHAPI_KEY`, `META_*`, `LUMINATE_*`, `SOUNDCHARTS_*`,
-`SONGSTATS_*`).
+The 31 workflows under `.github/workflows/` run ingestion, ETL, ML training,
+and pipeline ops on schedules / manual dispatch. Depending on which
+workflows you use, they require these repo secrets:
+- `DATABASE_URL` — required by nearly all of them.
+- Provider keys: `SPOTIFY_CLIENT_ID/SECRET`, `YOUTUBE_API_KEY`,
+  `RAPIDAPI_KEY` (writers/producers external search), `SHAZAM_API_KEY`,
+  `FIRECRAWL_API_KEY`, `SEARCHAPI_KEY`, `META_*`, `LUMINATE_*`,
+  `SOUNDCHARTS_APP_ID`/`SOUNDCHARTS_API_KEY`, `SONGSTATS_*`.
+- **TikTok needs no API keys**: `ingest_tiktok.yml` crawls TikTok Creative
+  Center's public trending-music charts through the self-hosted crawl4ai
+  service (`services/crawler-api`), booted inside the Actions runner on
+  each run. Set a `CRAWLER_API_URL` repo **variable** (plus optional
+  `CRAWLER_API_KEY` secret) to use a deployed crawler instance instead.
+- `CRON_SECRET` — same value as the Vercel env var; some workflows call back
+  into the deployed app's `/api/cron/*` routes and need it to authenticate.
+- `INTERNAL_ADMIN_SECRET` — used by `ml_train.yml` and `provision_user.yml`
+  to call the app's `/api/internal/*` management routes. Same value as the
+  Vercel env var of the same name.
+- `VERCEL_URL` — the deployed app's hostname (e.g.
+  `your-app.vercel.app`, no scheme), used by `ml_train.yml` to build the
+  callback URL for `/api/internal/ml/train`. **This is a repo secret you
+  must set by hand** — despite the name, it is not the same as the
+  `VERCEL_URL` environment variable Vercel auto-injects into deployments;
+  GitHub Actions runs outside Vercel's build environment and has no access
+  to that. Keep it in sync with your production domain.
+- `SEED_ADMIN_EMAIL` / `SEED_ADMIN_PASSWORD` — used by `db_seed.yml` and
+  `provision_user.yml` to create the first admin user.
+- `SLACK_WEBHOOK_URL` — optional; `pipeline_alerts.yml` no-ops without it.
+
+> The **Soundcharts ingest** (`ingest_soundcharts.yml`, daily 05:00 UTC) is
+> what feeds Apple Music / Amazon playlist placements and Spotify
+> monthly-listener + follower series. It is an **optional** data source:
+> without `SOUNDCHARTS_APP_ID` / `SOUNDCHARTS_API_KEY` the workflow
+> **skips cleanly** (green run, no Slack alert) and those datasets stay
+> empty — the corresponding directory pages show honest empty states and
+> the ML listener features remain null (the models handle that). Add the
+> two repo secrets to activate it; per-run API budgets are tunable via
+> `SOUNDCHARTS_RESOLVE_BUDGET`, `SOUNDCHARTS_PLAYLIST_SONG_BUDGET`, and
+> `SOUNDCHARTS_ARTIST_BUDGET` (see `jobs/ingest/soundcharts.ts`).
 
 > The **artist-trajectory ETL** runs via the `artist_etl.yml` workflow daily
 > at 8:30 UTC (after ingestion). The `/api/cron/etl-artist-trajectory` route
@@ -144,15 +198,28 @@ on schedules / manual dispatch. They require these repo secrets:
 
 ---
 
-## 7. ML service (optional)
+## 7. ML service (optional, not required)
 
-The Python FastAPI service is deployed separately:
+Artist trajectory predictions (`/api/v1/artist/trajectory/predict` and the
+public forwarding route) are served by the in-process TypeScript model at
+`lib/ml/models/artist-trajectory.ts` — trained and promoted via
+`/api/internal/ml/train` (see `ml_train.yml`), stored in the `ml_models`
+table, no separate service to deploy or keep alive. This is real,
+functioning ML: a logistic regression trained on historical trajectory
+snapshots, evaluated on a held-out split, gated against regressing below the
+current production model before being promoted.
+
+The standalone Python/FastAPI service (`ml/api/artist_trajectory_service.py`)
+is separate research scaffolding — a from-scratch XGBoost/PyTorch pipeline
+with real training code but no deployment target and no trained model
+artifacts committed anywhere. **Nothing in this app calls it.** If you want
+to stand it up as an independent, more sophisticated alternative:
 ```bash
 pip install -r requirements.txt
 uvicorn ml.api.artist_trajectory_service:app --host 0.0.0.0 --port 8000
 ```
-Point `ML_ARTIST_TRAJECTORY_URL` at its public URL. If the service is not
-deployed, only the artist-trajectory prediction endpoints are affected.
+then point `ML_ARTIST_TRAJECTORY_URL` at its public URL and wire a route to
+call it — as of now, setting that variable alone does nothing.
 
 ---
 
@@ -167,16 +234,94 @@ deployed, only the artist-trajectory prediction endpoints are affected.
    handling, v1 auth enforcement, and cron fail-closed behavior, cleaning up its
    own fixture data afterwards.
 3. Spot-check a real track page: `https://<domain>/tracks/<id>`.
+4. Check `https://<domain>/status` (sign in first) for job health, data
+   freshness, and any unacknowledged high-severity anomalies.
 
 ---
 
-## 9. Deployment debt (tracked, not yet resolved)
+## 9. Rollback & incident response
+
+**A bad app deploy (broken build, regressed behavior, not a DB issue):**
+1. Vercel → Project → Deployments → find the last known-good deployment →
+   **⋯ → Promote to Production** (a.k.a. Instant Rollback). This is
+   immediate and does not require a new build.
+2. If the bad deploy already merged to `main`, also `git revert` the
+   offending commit(s) on `main` so the next deploy doesn't reintroduce it.
+
+**A bad migration (schema change broke something):**
+1. Prisma migrations are forward-only by default — there is no
+   `prisma migrate down`. Write a new migration that reverses the change
+   (e.g. drop the column/index a prior migration added) and deploy it via
+   `db_migrate.yml`, the same path as any other migration.
+2. If the migration hasn't been applied to production yet (caught in
+   review), just remove the migration folder before merging — nothing to
+   roll back.
+3. For a destructive migration already applied to production with data
+   loss: restore from a Supabase backup (see §4) to a **branch/point-in-time
+   snapshot first**, verify the data there, then decide whether to restore
+   the whole database or hand-copy the affected rows back. Do not restore
+   the primary database directly without inspecting the snapshot first.
+
+**A bad model promotion (ML model regressed in production):**
+Should be rare — the promotion gate in `lib/ml/models/{artist-trajectory,
+track-viral}.ts` already blocks a retrain that regresses held-out accuracy
+by more than 2 points vs. the incumbent. If a bad model still got promoted
+(e.g. the regression was subtle enough to pass the gate but wrong in
+practice): call `POST /api/internal/ml/train` again once the underlying
+data issue is fixed — training always compares against the current
+incumbent, so a good retrain will simply replace the bad one. There is no
+separate "previous model" store to roll back to (`ml_models` holds one row
+per model type) — this is a known gap, not a solved one.
+
+**A bad pipeline run (ingest/ETL wrote bad data):**
+Check `/status` or the `job_runs` table for the specific run, then check
+`pipeline_alerts.yml` (Slack, if configured) for what fired. Most ETL jobs
+recompute derived tables from source data rather than incrementally
+mutating them, so re-running the job after fixing the root cause (bad
+credential, upstream API change, etc.) self-heals in most cases — this is
+job-specific, there is no single "undo" command.
+
+**Who to page:** not formalized in this repo — no on-call rotation or
+incident-severity definitions exist yet. At minimum, confirm who owns
+watching `/status` and the Slack alerts channel before launch.
+
+---
+
+## 10. Deployment debt (tracked, not yet resolved)
 
 - **One moderate npm advisory.** postcss <8.5.10 pinned *inside Next's own
   bundle* (`node_modules/next/node_modules/postcss`) — present in every Next
   release through 16.x and only fixable upstream by Next. Our top-level
   postcss is patched. CI's blocking `npm audit --audit-level=high` gate is
   unaffected.
+
+- **Branch protection on `main` is still unverified.** Needs a repo admin to
+  require the `ci.yml` checks in GitHub Settings → Branches — not something
+  that can be confirmed or set from inside the repository or via any
+  available tool. Until this is set, a failing-CI PR can still merge.
+
+- **Validation rigor still varies by route** (some go through
+  `lib/shared/validation.ts` + a dedicated `validate.ts`, others do an inline
+  check in the route). Audited the highest-risk intersection — routes that
+  both take user input and feed a raw `$queryRaw(Unsafe)` query (the airplay
+  chart endpoints) — and found every one properly parameterized (positional
+  binds or an allowlisted identifier, never string-concatenated user input).
+  No actual bug found; left as a style-consistency backlog item rather than
+  sweeping all ~80 routes to one pattern, which would be a large, low-value
+  refactor of a stable, shipped API surface.
+
+- **No APM/error-tracking product** (Sentry or similar) — Vercel's own
+  runtime-error/log dashboards remain the only production visibility. Needs a
+  vendor account and DSN this repo doesn't have; nothing to wire up without
+  that.
+
+- **No browser-based E2E framework.** `npm run smoke` (`scripts/smoke.ts`) is
+  a real HTTP-level integration test that runs in CI and now explicitly
+  checks that F-02/F-03/F-06's previously-open routes (`/api/artists/breaking`,
+  `/api/artists/:id`, `/api/artists/:id/trajectory`, `/api/ai/scout-brief`,
+  `/api/talent-scout/health`) 401 without a session — that gap existed until
+  2026-07-02. A true browser-driving suite (Playwright: render JS, click
+  through the UI) is still a separate, larger lift not started here.
 
 Resolved 2026-06-11: **Next.js 16.2.9 + React 19 migration** — clears all
 high-severity framework advisories. Includes async request APIs (codemod),

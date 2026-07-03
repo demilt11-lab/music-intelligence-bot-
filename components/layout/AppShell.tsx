@@ -17,9 +17,11 @@ import { cn } from '@/lib/utils'
 export interface NavItem {
   href: string
   label: string
+  description?: string
   icon?: ReactNode
   badge?: number
   disabled?: boolean
+  badge_label?: string
 }
 
 export interface NavSection {
@@ -201,10 +203,22 @@ function SideNavItem({
 
       {!collapsed ? (
         <>
-          <span className="flex-1 truncate">{item.label}</span>
+          <div className="flex-1 min-w-0">
+            <span className="block truncate leading-tight">{item.label}</span>
+            {item.description ? (
+              <span className="block truncate text-[10px] text-slate-500 leading-tight mt-0.5">
+                {item.description}
+              </span>
+            ) : null}
+          </div>
           {item.badge !== undefined && item.badge > 0 ? (
             <span className="ml-auto inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-slate-800 px-1.5 text-xs font-medium tabular-nums text-slate-300">
               {item.badge > 99 ? '99+' : item.badge}
+            </span>
+          ) : null}
+          {item.badge_label ? (
+            <span className="ml-auto inline-flex items-center rounded-full border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-400">
+              {item.badge_label}
             </span>
           ) : null}
         </>
@@ -365,6 +379,7 @@ const DEFAULT_NAV_SECTIONS: NavSection[] = [
       {
         href: '/',
         label: 'Home',
+        description: 'Command center & quick tasks',
         icon: (
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -384,22 +399,51 @@ const DEFAULT_NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    title: 'Intelligence',
+    title: 'Scout',
     items: [
       {
-        href: '/tracks',
-        label: 'Tracks',
+        href: '/talent-scout',
+        label: 'Talent Scout',
+        description: 'AI breakout discovery feed',
+        badge_label: 'Live',
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
-            <path d="M9 18V5l12-2v13" />
-            <circle cx="6" cy="18" r="3" />
-            <circle cx="18" cy="16" r="3" />
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
         ),
       },
       {
+        href: '/search',
+        label: 'Search',
+        description: 'Artists, tracks, playlists & URLs',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        ),
+      },
+      {
+        href: '/compare',
+        label: 'Compare Artists',
+        description: 'Side-by-side momentum analysis',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
+          </svg>
+        ),
+      },
+    ],
+  },
+  {
+    title: 'Catalog',
+    items: [
+      {
         href: '/artists',
         label: 'Artists',
+        description: 'Momentum dashboard & status filters',
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -410,32 +454,9 @@ const DEFAULT_NAV_SECTIONS: NavSection[] = [
         ),
       },
       {
-        href: '/talent-scout',
-        label: 'Talent Scout',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
-            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-          </svg>
-        ),
-      },
-      {
-        href: '/search',
-        label: 'Search',
-        icon: (
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-        ),
-      },
-    ],
-  },
-  {
-    title: 'Catalog',
-    items: [
-      {
         href: '/playlists',
         label: 'Playlists',
+        description: 'Editorial & algorithmic playlists',
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
             <line x1="8" y1="6" x2="21" y2="6" />
@@ -450,6 +471,7 @@ const DEFAULT_NAV_SECTIONS: NavSection[] = [
       {
         href: '/curators',
         label: 'Curators',
+        description: 'Playlist curators by platform',
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
             <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
@@ -459,6 +481,7 @@ const DEFAULT_NAV_SECTIONS: NavSection[] = [
       {
         href: '/genres',
         label: 'Genres',
+        description: 'Momentum by genre & market',
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
             <circle cx="12" cy="12" r="10" />
@@ -470,6 +493,7 @@ const DEFAULT_NAV_SECTIONS: NavSection[] = [
       {
         href: '/songwriters',
         label: 'Songwriters',
+        description: 'Catalog credits & collaborations',
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
             <path d="M12 20h9" />
@@ -485,6 +509,7 @@ const DEFAULT_NAV_SECTIONS: NavSection[] = [
       {
         href: '/watchlist',
         label: 'Watchlist',
+        description: 'Your saved artists & tracks',
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
@@ -494,11 +519,33 @@ const DEFAULT_NAV_SECTIONS: NavSection[] = [
       {
         href: '/analytics',
         label: 'Analytics',
+        description: 'Workspace coverage & signal health',
         icon: (
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
-            <line x1="18" y1="20" x2="18" y2="10" />
-            <line x1="12" y1="20" x2="12" y2="4" />
-            <line x1="6" y1="20" x2="6" y2="14" />
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg>
+        ),
+      },
+      {
+        href: '/alerts',
+        label: 'Alerts',
+        description: 'Momentum & threshold notifications',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+          </svg>
+        ),
+      },
+      {
+        href: '/status',
+        label: 'Pipeline Status',
+        description: 'Job health, freshness & anomalies',
+        icon: (
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-full w-full">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
           </svg>
         ),
       },
@@ -514,7 +561,7 @@ export function AppShell({
   apiKeyActive = false,
   children,
   logo,
-  appName = 'Music Intelligence',
+  appName = 'NOV8TE Buddy',
 }: AppShellProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)

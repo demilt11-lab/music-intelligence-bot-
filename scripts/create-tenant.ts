@@ -1,8 +1,6 @@
 // scripts/create-tenant.ts
-import { PrismaClient } from '@prisma/client';
+import { db as prisma } from '@/lib/db';
 import crypto from 'crypto';
-
-const prisma = new PrismaClient();
 
 function generateApiKey(): { raw: string; hash: string } {
   const raw = `mi_${crypto.randomBytes(32).toString('hex')}`;
@@ -20,7 +18,7 @@ async function main() {
 
   if (!name || !slug) {
     console.error(
-      'Usage: ts-node scripts/create-tenant.ts "<Tenant Name>" <slug> [label] [scopes]',
+      'Usage: npx tsx scripts/create-tenant.ts "<Tenant Name>" <slug> [label] [scopes]',
     );
     process.exit(1);
   }

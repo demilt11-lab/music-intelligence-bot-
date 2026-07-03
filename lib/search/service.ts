@@ -170,46 +170,52 @@ export async function search(
   }
 
   // ── Standard mode: return grouped results ────────────────────────────────
-  const grouped: SearchGroupedResults = {};
+  let grouped: SearchGroupedResults = {};
 
-  if (type === 'all' || type === 'artists') {
-    const rows = await queryArtists(q, limit, offset);
-    grouped.artists = (rows as RawRow[]).map(normalizeArtist);
-  }
+  try {
+    if (type === 'all' || type === 'artists') {
+      const rows = await queryArtists(q, limit, offset);
+      grouped.artists = (rows as RawRow[]).map(normalizeArtist);
+    }
 
-  if (type === 'all' || type === 'tracks') {
-    const rows = await queryTracks(q, limit, offset);
-    grouped.tracks = (rows as RawRow[]).map(normalizeTrack);
-  }
+    if (type === 'all' || type === 'tracks') {
+      const rows = await queryTracks(q, limit, offset);
+      grouped.tracks = (rows as RawRow[]).map(normalizeTrack);
+    }
 
-  if (type === 'all' || type === 'playlists') {
-    const rows = await queryPlaylists(q, limit, offset);
-    grouped.playlists = (rows as RawRow[]).map(normalizePlaylist);
-  }
+    if (type === 'all' || type === 'playlists') {
+      const rows = await queryPlaylists(q, limit, offset);
+      grouped.playlists = (rows as RawRow[]).map(normalizePlaylist);
+    }
 
-  if (type === 'all' || type === 'curators') {
-    const rows = await queryCurators(q, limit, offset);
-    grouped.curators = (rows as RawRow[]).map(normalizeCurator);
-  }
+    if (type === 'all' || type === 'curators') {
+      const rows = await queryCurators(q, limit, offset);
+      grouped.curators = (rows as RawRow[]).map(normalizeCurator);
+    }
 
-  if (type === 'all' || type === 'albums') {
-    const rows = await queryAlbums(q, limit, offset);
-    grouped.albums = (rows as RawRow[]).map(normalizeAlbum);
-  }
+    if (type === 'all' || type === 'albums') {
+      const rows = await queryAlbums(q, limit, offset);
+      grouped.albums = (rows as RawRow[]).map(normalizeAlbum);
+    }
 
-  if (type === 'all' || type === 'stations') {
-    const rows = await queryStations(q, limit, offset);
-    grouped.stations = (rows as RawRow[]).map(normalizeStation);
-  }
+    if (type === 'all' || type === 'stations') {
+      const rows = await queryStations(q, limit, offset);
+      grouped.stations = (rows as RawRow[]).map(normalizeStation);
+    }
 
-  if (type === 'all' || type === 'cities') {
-    const rows = await queryCities(q, limit, offset, triggerCitiesOnly);
-    grouped.cities = (rows as RawRow[]).map(normalizeCity);
-  }
+    if (type === 'all' || type === 'cities') {
+      const rows = await queryCities(q, limit, offset, triggerCitiesOnly);
+      grouped.cities = (rows as RawRow[]).map(normalizeCity);
+    }
 
-  if (type === 'all' || type === 'songwriters') {
-    const rows = await querySongwriters(q, limit, offset);
-    grouped.songwriters = (rows as RawRow[]).map(normalizeSongwriter);
+    if (type === 'all' || type === 'songwriters') {
+      const rows = await querySongwriters(q, limit, offset);
+      grouped.songwriters = (rows as RawRow[]).map(normalizeSongwriter);
+    }
+  } catch {
+    // DB unavailable (not generated, not connected, schema not migrated) —
+    // reset and fall through to sample data below.
+    grouped = {};
   }
 
   return { obj: grouped };

@@ -148,6 +148,117 @@ async function evaluateTrendLabels(today: Date): Promise<void> {
 }
 
 // ─────────────────────────────────────────────
+// Evaluate ml_trend_label predictions — the *trained model's own output*
+// (TrackTrendPrediction), scored against the same real-world outcome
+// (current TrackTrendLabel) as evaluateTrendLabels() uses for the
+// heuristic. Without this, ModelAccuracyReport only ever had rows for
+// modelName="compute_track_signals"/"compute_artist_signals" (the
+// rule-based ETL) — the actual ML model's accuracy was never measured.
+// ─────────────────────────────────────────────
+
+async function evaluateMlTrendLabels(today: Date): Promise<void> {
+  const windowStart = subDays(today, 35);
+  const windowEnd = subDays(today, 28);
+
+  const pending = await db.predictionOutcome.findMany({
+    where: {
+      predictionType: "ml_trend_label",
+      predictedAt: { gte: windowStart, lte: windowEnd },
+      wasCorrect: null,
+      trackId: { not: null },
+    },
+  });
+
+  console.log(
+    `[evaluate_predictions] Evaluating ${pending.length} ml_trend_label outcome(s) from ${windowStart.toISOString().slice(0, 10)} → ${windowEnd.toISOString().slice(0, 10)}.`,
+  );
+
+  if (pending.length === 0) return;
+
+  let correct = 0;
+  // All rows in a given evaluation run come from the same trained model
+  // (track-viral) — group by (modelName, modelVersion) in case that ever
+  // changes, so accuracy isn't blended across model versions.
+  const byModel = new Map<string, { correct: number; total: number }>();
+
+  for (const outcome of pending) {
+    const currentLabels = await db.trackTrendLabel.findMany({
+      where: { trackId: outcome.trackId as number },
+      select: { label: true },
+    });
+
+    const labelSet = new Set(currentLabels.map((l) => l.label));
+    const predicted = outcome.predictedValue;
+    let wasCorrect = false;
+
+    if (predicted === "VIRAL" && (labelSet.has("VIRAL") || labelSet.has("TRENDING"))) {
+      wasCorrect = true;
+    } else if (predicted === "TRENDING" && (labelSet.has("TRENDING") || labelSet.has("POPULAR"))) {
+      wasCorrect = true;
+    } else if (predicted === "NONE" && labelSet.has("NONE")) {
+      wasCorrect = true;
+    } else if (predicted === "POPULAR" && labelSet.has("POPULAR")) {
+      wasCorrect = true;
+    }
+
+    const actualValue = currentLabels.length > 0 ? [...labelSet].sort().join(",") : "NONE";
+
+    await db.predictionOutcome.update({
+      where: { id: outcome.id },
+      data: { actualValue, wasCorrect, evaluatedAt: today },
+    });
+
+    if (wasCorrect) correct++;
+    const modelKey = `${outcome.modelName}:${outcome.modelVersion ?? "unversioned"}`;
+    const agg = byModel.get(modelKey) ?? { correct: 0, total: 0 };
+    agg.total++;
+    if (wasCorrect) agg.correct++;
+    byModel.set(modelKey, agg);
+  }
+
+  console.log(
+    `[evaluate_predictions] ml_trend_label accuracy=${((correct / pending.length) * 100).toFixed(1)}% (${correct}/${pending.length})`,
+  );
+
+  for (const [modelKey, agg] of byModel) {
+    const [modelName, modelVersionRaw] = modelKey.split(":");
+    const modelVersion = modelVersionRaw === "unversioned" ? null : modelVersionRaw;
+    const { accuracy, precision, recall, f1Score } = computeMetrics(agg.correct, agg.total);
+
+    await db.modelAccuracyReport.upsert({
+      where: {
+        modelName_evaluationDate_windowDays: {
+          modelName,
+          evaluationDate: today,
+          windowDays: WINDOW_DAYS,
+        },
+      },
+      update: {
+        totalPredictions: agg.total,
+        correctPredictions: agg.correct,
+        accuracy,
+        precision,
+        recall,
+        f1Score,
+        notes: `ml_trend_label evaluation (trained model, version=${modelVersion ?? "n/a"}) against window ${windowStart.toISOString().slice(0, 10)}–${windowEnd.toISOString().slice(0, 10)}`,
+      },
+      create: {
+        modelName,
+        evaluationDate: today,
+        windowDays: WINDOW_DAYS,
+        totalPredictions: agg.total,
+        correctPredictions: agg.correct,
+        accuracy,
+        precision,
+        recall,
+        f1Score,
+        notes: `ml_trend_label evaluation (trained model, version=${modelVersion ?? "n/a"}) against window ${windowStart.toISOString().slice(0, 10)}–${windowEnd.toISOString().slice(0, 10)}`,
+      },
+    });
+  }
+}
+
+// ─────────────────────────────────────────────
 // Evaluate viral_score predictions (60-day retrospective)
 // ─────────────────────────────────────────────
 //
@@ -402,6 +513,7 @@ export async function evaluatePredictions(dateStr: string): Promise<void> {
   await evaluateTrendLabels(today);
   await evaluateBreakProbability(today);
   await evaluateViralScores(today);
+  await evaluateMlTrendLabels(today);
 
   console.log(`[evaluate_predictions] Evaluation complete for ${dateStr}.`);
 }

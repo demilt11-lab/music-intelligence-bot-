@@ -1,14 +1,28 @@
 name: ML Training Pipeline
 
+# Prevent overlapping runs of the same workflow (e.g. a manual
+# workflow_dispatch firing while the scheduled run is still in flight),
+# which could otherwise double-write the same rows.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 7 * * *'   # 07:00 UTC daily (after ETL at 04:00 + Vercel cron at 06:00 as fallback)
+  # Triggered by ETL — Compute Signals finishing, rather than a fixed clock
+  # time guessed to land after it. The previous schedule (07:00 UTC) ran
+  # *before* etl_compute_signals (08:00 UTC) despite a comment claiming it
+  # ran after a 04:00 UTC ETL step that doesn't exist in this repo — training
+  # was running on the previous day's signals every single day.
+  workflow_run:
+    workflows: ["ETL — Compute Signals"]
+    types: [completed]
 
 jobs:
   train:
     name: Trigger in-process ML training on Vercel
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Train both models
         run: |
