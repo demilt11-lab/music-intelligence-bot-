@@ -3,15 +3,15 @@
  *
  * Imports the real production module (lib/tiktok/crawler.ts) and exercises
  * every pure parsing path with realistic payload fixtures: the in-page
- * rank_list API (both current and legacy field spellings), the markdown
- * fallback, the sink-JSON extraction, and creator follower-count parsing.
+ * rank_list API (both current and legacy field spellings), the song-detail
+ * link fallback, the sink-JSON extraction, and creator follower-count parsing.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
   parseRankListPayload,
-  parseCreativeCenterMarkdown,
+  parseSongDetailLinks,
   extractSinkJson,
   parseCompactCount,
   parseFollowersFromMarkdown,
@@ -76,38 +76,43 @@ test('parseRankListPayload defaults a missing author to Unknown', () => {
   assert.equal(out[0].author, 'Unknown');
 });
 
-// ─── markdown fallback ────────────────────────────────────────────────────────
+// ─── song-detail link fallback ────────────────────────────────────────────────
 
-test('parseCreativeCenterMarkdown pairs title/author lines and skips chrome', () => {
-  const markdown = [
-    '# TikTok Creative Center',
-    'Popular',
-    'Breakout',
-    'Last 7 days',
-    '**Midnight Motion**',
-    'Aria Vale',
-    '[View More](https://ads.tiktok.com/x)',
-    '**Golden Hour Anthem**',
-    'The Wanderers',
-    '1',
-    '2',
-  ].join('\n');
-
-  const out = parseCreativeCenterMarkdown(markdown, 'popular');
+test('parseSongDetailLinks extracts songs from song-detail hrefs only', () => {
+  const links = [
+    { href: 'https://ads.tiktok.com/business/creativecenter/song/detail/pc/en?music_id=7123456&region=US', text: 'Midnight Motion' },
+    { href: 'https://ads.tiktok.com/business/creativecenter/inspiration/popular/hashtag/pc/en', text: 'Hashtags' },
+    { href: 'https://ads.tiktok.com/business/creativecenter/song/detail/pc/en?music_id=7999999', text: 'Golden Hour Anthem' },
+    { href: 'https://ads.tiktok.com/about-us', text: 'About us' },
+  ];
+  const out = parseSongDetailLinks(links, 'popular');
   assert.equal(out.length, 2);
-  assert.equal(out[0].title, 'Midnight Motion');
-  assert.equal(out[0].author, 'Aria Vale');
-  assert.equal(out[0].rank, 1);
-  assert.equal(out[1].title, 'Golden Hour Anthem');
-  assert.equal(out[1].author, 'The Wanderers');
-  // Derived ids stay stable for the resolver's dedupe cache
-  assert.ok(out[0].soundId.startsWith('cc-md-'));
+  assert.deepEqual(out[0], {
+    soundId: '7123456',
+    title: 'Midnight Motion',
+    author: 'Unknown',
+    rank: 1,
+    chart: 'popular',
+  });
+  assert.equal(out[1].soundId, '7999999');
 });
 
-test('parseCreativeCenterMarkdown dedupes repeated pairs and caps output', () => {
-  const pair = '**Same Song**\nSame Artist\n';
-  const out = parseCreativeCenterMarkdown(pair.repeat(10), 'surging');
+test('parseSongDetailLinks dedupes by sound id and requires id + text', () => {
+  const links = [
+    { href: 'https://ads.tiktok.com/business/creativecenter/song/detail?music_id=1', text: 'Song A' },
+    { href: 'https://ads.tiktok.com/business/creativecenter/song/detail?music_id=1&period=7', text: 'Song A (dup)' },
+    { href: 'https://ads.tiktok.com/business/creativecenter/song/detail?music_id=2', text: '' },
+    { href: 'https://ads.tiktok.com/business/creativecenter/song/detail', text: 'No id param' },
+  ];
+  const out = parseSongDetailLinks(links, 'surging');
   assert.equal(out.length, 1);
+  assert.equal(out[0].soundId, '1');
+  assert.equal(out[0].chart, 'surging');
+});
+
+test('parseSongDetailLinks handles empty/missing input', () => {
+  assert.deepEqual(parseSongDetailLinks(undefined, 'popular'), []);
+  assert.deepEqual(parseSongDetailLinks([], 'popular'), []);
 });
 
 // ─── sink extraction ──────────────────────────────────────────────────────────

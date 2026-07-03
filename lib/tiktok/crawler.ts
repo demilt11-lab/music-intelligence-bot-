@@ -13,15 +13,18 @@
 //      same-origin via js_code inside the crawled page, and the response is
 //      written into the DOM where a CSS extraction can read it. Structured,
 //      stable, and immune to class-name obfuscation.
-//   2. Markdown fallback — if the in-page API shape changes or is blocked,
-//      parse the rendered page's markdown for ranked title/author entries
-//      (same resilience approach as jobs/ingest/billboard.ts).
+//   2. Song-detail links — every song card links to a song-detail page with
+//      a stable music_id; link text is the title. Structured, so page
+//      furniture can never be mistaken for music. (A free-text markdown
+//      parser was removed after it fabricated stub tracks from nav chrome
+//      in its first production run.)
+//   Zero results from both tiers is treated as a failure by the job, with a
+//   markdown-head diagnostic logged for tuning.
 //
 // All parsing lives in pure exported functions so tests exercise the real
 // logic with fixture payloads.
 
 import { crawlUrl } from '@/lib/crawler/client';
-import { cleanLine, isUsableLine } from '@/lib/crawler/textParsing';
 
 export interface CrawledSound {
   /** Creative Center clip id — used as the sound's external id. */
@@ -56,12 +59,12 @@ function rankListJs(rankType: 'popular' | 'surging'): string {
       const body = await res.text();
       const pre = document.createElement('pre');
       pre.id = '${SINK_ID}';
-      pre.textContent = res.ok ? body : JSON.stringify({ miCrawlError: res.status + ' ' + body.slice(0, 300) });
+      pre.textContent = res.ok ? body : JSON.stringify({ miCrawlError: res.status + ' ' + body.slice(0, 300), miLocation: location.href });
       document.body.appendChild(pre);
     } catch (e) {
       const pre = document.createElement('pre');
       pre.id = '${SINK_ID}';
-      pre.textContent = JSON.stringify({ miCrawlError: String(e) });
+      pre.textContent = JSON.stringify({ miCrawlError: String(e), miLocation: location.href });
       document.body.appendChild(pre);
     }
   `;
@@ -98,49 +101,31 @@ export function parseRankListPayload(
   return out;
 }
 
-// Nav/chrome noise on the Creative Center page that must not be mistaken
-// for a song title when falling back to markdown parsing.
-const CC_METADATA_RE =
-  /^(TikTok\b.*|Creative Center.*|Trend(s|ing)?|Inspiration|Popular|Breakout|Music|Songs?|Hashtags?|Creators?|Videos?|Products?|Keyword|Ads?|Log ?in|Sign ?up|Get Started|For You|View More|See More|More|Filter|Region|Period|Last \d+ days|New to|Rank(ing)?s?|[0-9]+(st|nd|rd|th)?|[\d\s\-–|.,:]+)$/i;
-
 /**
- * Markdown fallback: Creative Center renders each sound card with the song
- * title and artist on adjacent lines. Pair consecutive usable lines as
- * (title, author). Conservative by design — it prefers returning fewer,
- * correct entries over guessing.
+ * Structured fallback: Creative Center song cards link to song-detail pages
+ * (…/creativecenter/song/detail…?music_id=…). The link text is the song
+ * title and music_id is a REAL stable sound id. Unlike markdown line
+ * pairing — which fabricated stub tracks out of nav chrome in its first
+ * production run — this cannot mistake page furniture for music.
  */
-export function parseCreativeCenterMarkdown(
-  markdown: string,
+export function parseSongDetailLinks(
+  links: Array<{ href: string; text?: string | null }> | undefined,
   chart: 'popular' | 'surging',
 ): CrawledSound[] {
-  const lines = markdown
-    .split('\n')
-    .map(cleanLine)
-    .filter((l) => isUsableLine(l, CC_METADATA_RE));
+  if (!links?.length) return [];
 
   const out: CrawledSound[] = [];
   const seen = new Set<string>();
-  for (let i = 0; i + 1 < lines.length && out.length < 50; i++) {
-    const title = lines[i];
-    const author = lines[i + 1];
-    // Titles/authors on this page are short; long lines are descriptions.
-    if (title.length > 80 || author.length > 80) continue;
-    const key = `${title}::${author}`.toLowerCase();
-    if (seen.has(key)) {
-      i++; // consume the whole repeated pair, not just its title line
-      continue;
-    }
-    seen.add(key);
-    out.push({
-      // No stable id in markdown mode — derive one from the pair so the
-      // sound resolver's ExternalId cache still de-duplicates across runs.
-      soundId: `cc-md-${key.replace(/[^a-z0-9]+/g, '-').slice(0, 60)}`,
-      title,
-      author,
-      rank: out.length + 1,
-      chart,
-    });
-    i++; // consume the author line
+  for (const link of links) {
+    if (!link.href || !/creativecenter\/song[\/-]detail/i.test(link.href)) continue;
+    const idMatch = link.href.match(/[?&](?:music_id|clip_id|song_id)=([^&#]+)/i);
+    const soundId = idMatch ? decodeURIComponent(idMatch[1]) : null;
+    const title = (link.text ?? '').trim();
+    if (!soundId || !title || title.length > 120) continue;
+    if (seen.has(soundId)) continue;
+    seen.add(soundId);
+    out.push({ soundId, title, author: 'Unknown', rank: out.length + 1, chart });
+    if (out.length >= 50) break;
   }
   return out;
 }
@@ -191,21 +176,30 @@ export async function fetchCreativeCenterChart(
   }
 
   const payload = extractSinkJson(result.extracted);
+  const sinkError = (payload as Record<string, unknown> | null)?.miCrawlError;
+  if (sinkError) {
+    console.warn(
+      `[tiktok-crawler] ${chart}: in-page rank_list API failed: ${String(sinkError).slice(0, 300)} ` +
+        `(page: ${String((payload as Record<string, unknown>).miLocation ?? 'unknown')})`,
+    );
+  }
   const fromApi = parseRankListPayload(payload, chart);
   if (fromApi.length > 0) {
     console.log(`[tiktok-crawler] ${chart}: ${fromApi.length} sounds via in-page rank_list API`);
     return fromApi;
   }
 
-  const fromMarkdown = result.markdown ? parseCreativeCenterMarkdown(result.markdown, chart) : [];
-  if (fromMarkdown.length > 0) {
-    console.log(`[tiktok-crawler] ${chart}: ${fromMarkdown.length} sounds via markdown fallback`);
-    return fromMarkdown;
+  const fromLinks = parseSongDetailLinks(result.links, chart);
+  if (fromLinks.length > 0) {
+    console.log(`[tiktok-crawler] ${chart}: ${fromLinks.length} sounds via song-detail links`);
+    return fromLinks;
   }
 
   // Nothing parsed — log a diagnostic head so the workflow logs show what
   // the page actually served (bot wall, consent screen, layout change).
-  const head = (result.markdown ?? '').split('\n').slice(0, 25).join(' | ').slice(0, 1200);
+  // Deliberately NO free-text markdown parsing here: its first production
+  // run fabricated stub tracks out of nav chrome.
+  const head = (result.markdown ?? '').split('\n').slice(0, 30).join(' | ').slice(0, 1500);
   console.warn(`[tiktok-crawler] ${chart}: page loaded but nothing parsed. Markdown head: ${head}`);
   return [];
 }

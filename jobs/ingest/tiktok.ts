@@ -506,11 +506,13 @@ async function main(): Promise<void> {
 
   await db.$disconnect();
 
-  if (videos.length === 0 && crawlerFailures > 0) {
+  // Creative Center always has trending music, so zero records never means
+  // "quiet day" — it means the crawl or the extraction broke.
+  if (videos.length === 0) {
     throw new Error(
-      `TikTok ingest fetched 0 records with ${crawlerFailures} crawler failure(s). ` +
+      `TikTok ingest fetched 0 records (${crawlerFailures} crawler-level failure(s)). ` +
         `Check that the crawl4ai service (services/crawler-api) is reachable at CRAWLER_API_URL ` +
-        `and that TikTok Creative Center is serving the chart page (see markdown-head diagnostics above).`,
+        `and see the rank_list/markdown-head diagnostics above for what Creative Center served.`,
     );
   }
 
