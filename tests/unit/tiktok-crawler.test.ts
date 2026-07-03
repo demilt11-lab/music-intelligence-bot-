@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import {
   parseRankListPayload,
   parseSongDetailLinks,
+  parseTrendsTable,
   extractSinkJson,
   parseCompactCount,
   parseFollowersFromMarkdown,
@@ -113,6 +114,38 @@ test('parseSongDetailLinks dedupes by sound id and requires id + text', () => {
 test('parseSongDetailLinks handles empty/missing input', () => {
   assert.deepEqual(parseSongDetailLinks(undefined, 'popular'), []);
   assert.deepEqual(parseSongDetailLinks([], 'popular'), []);
+});
+
+// ─── trends-table fallback ────────────────────────────────────────────────────
+
+test('parseTrendsTable parses numbered rows under a Rank+Song header', () => {
+  const md = [
+    'Nav | Creative Tools | Log in',
+    '# Browse what is trending',
+    'Rank | Song | Artist | Trends | Action',
+    '1 | Midnight Motion | Aria Vale | graph | Use',
+    '2 | Golden Hour Anthem | The Wanderers | graph | Use',
+  ].join('\n');
+  const out = parseTrendsTable(md, 'popular');
+  assert.equal(out.length, 2);
+  assert.equal(out[0].title, 'Midnight Motion');
+  assert.equal(out[0].author, 'Aria Vale');
+  assert.equal(out[0].rank, 1);
+  assert.equal(out[1].title, 'Golden Hour Anthem');
+});
+
+test('parseTrendsTable refuses tables without a music header (hashtag table)', () => {
+  // Exact shape observed in the live run diagnostics: a hashtag table.
+  const md = 'Rank | Hashtag | Posts & Views | Trends | Creator | Action | 1 | #ijustwannadance | News & Entertainment | 32.8KPosts | 34MViews';
+  assert.deepEqual(parseTrendsTable(md, 'popular'), []);
+});
+
+test('parseTrendsTable skips count-like cells and respects rank sequence', () => {
+  const md = 'Rank | Music | Artist | 1 | 32.8KPosts | x | 1 | Real Song | Real Artist';
+  const out = parseTrendsTable(md, 'surging');
+  assert.equal(out.length, 1);
+  assert.equal(out[0].title, 'Real Song');
+  assert.equal(out[0].chart, 'surging');
 });
 
 // ─── sink extraction ──────────────────────────────────────────────────────────
