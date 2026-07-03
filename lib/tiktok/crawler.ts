@@ -18,7 +18,9 @@
 //      furniture can never be mistaken for music. (A free-text markdown
 //      parser was removed after it fabricated stub tracks from nav chrome
 //      in its first production run.)
-//   Zero results from both tiers is treated as a failure by the job, with a
+//   3. Trends-table markdown — activates only under a table header that
+//      mentions Rank + Song/Music, consuming numbered rows only.
+//   Zero results from all tiers is treated as a failure by the job, with a
 //   markdown-head diagnostic logged for tuning.
 //
 // All parsing lives in pure exported functions so tests exercise the real
@@ -36,8 +38,15 @@ export interface CrawledSound {
   chart: 'popular' | 'surging';
 }
 
-const CREATIVE_CENTER_URL =
-  'https://ads.tiktok.com/business/creativecenter/inspiration/popular/music/pc/en';
+// TikTok restructured Creative Center (mid-2026): the legacy
+// /business/creativecenter/... music chart now redirects to the new Trends
+// hub at /creative/creativeCenter/trends. Try the new music tab first, the
+// legacy URL as backup — whichever loads, the in-page API tier fetches the
+// rank list same-origin.
+const CANDIDATE_PAGES = [
+  'https://ads.tiktok.com/creative/creativeCenter/trends/music?region=US&period=7',
+  'https://ads.tiktok.com/business/creativecenter/inspiration/popular/music/pc/en',
+];
 
 /** DOM element id the in-page fetch writes its JSON into. */
 const SINK_ID = 'mi-sound-rank-sink';
@@ -51,21 +60,28 @@ const SINK_ID = 'mi-sound-rank-sink';
  */
 function rankListJs(rankType: 'popular' | 'surging'): string {
   return `
+    const sink = (text) => {
+      const pre = document.createElement('pre');
+      pre.id = '${SINK_ID}';
+      pre.textContent = text;
+      document.body.appendChild(pre);
+    };
     try {
-      const res = await fetch('/creative_radar_api/v1/popular_trend/sound/rank_list?page=1&limit=50&period=7&rank_type=${rankType}&country_code=US', {
-        headers: { accept: 'application/json' },
-        credentials: 'include',
-      });
-      const body = await res.text();
-      const pre = document.createElement('pre');
-      pre.id = '${SINK_ID}';
-      pre.textContent = res.ok ? body : JSON.stringify({ miCrawlError: res.status + ' ' + body.slice(0, 300), miLocation: location.href });
-      document.body.appendChild(pre);
+      const attempts = [];
+      for (const entity of ['music', 'sound', 'song']) {
+        const url = '/creative_radar_api/v1/popular_trend/' + entity + '/rank_list?page=1&limit=50&period=7&rank_type=${rankType}&country_code=US';
+        try {
+          const res = await fetch(url, { headers: { accept: 'application/json' }, credentials: 'include' });
+          const body = await res.text();
+          if (res.ok && body.includes('list')) { sink(body); return; }
+          attempts.push(entity + ':' + res.status + ':' + body.slice(0, 120));
+        } catch (e) {
+          attempts.push(entity + ':' + String(e).slice(0, 120));
+        }
+      }
+      sink(JSON.stringify({ miCrawlError: attempts.join(' | '), miLocation: location.href }));
     } catch (e) {
-      const pre = document.createElement('pre');
-      pre.id = '${SINK_ID}';
-      pre.textContent = JSON.stringify({ miCrawlError: String(e), miLocation: location.href });
-      document.body.appendChild(pre);
+      sink(JSON.stringify({ miCrawlError: String(e), miLocation: location.href }));
     }
   `;
 }
@@ -130,6 +146,60 @@ export function parseSongDetailLinks(
   return out;
 }
 
+/**
+ * Trends-hub table fallback: the new Trends pages render ranked tables whose
+ * markdown serializes as pipe-separated segments, e.g.
+ *   "Rank | Song | Artist | ... | 1 | Song Title | Artist Name | ..."
+ * Structurally keyed: activates ONLY when a table header mentioning both
+ * Rank and Song/Music is present, and only consumes numbered rows after it —
+ * page furniture cannot enter through this path.
+ */
+export function parseTrendsTable(
+  markdown: string,
+  chart: 'popular' | 'surging',
+): CrawledSound[] {
+  const segments = markdown
+    .split(/[|\n]/)
+    .map((s) => s.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/[#*`]/g, '').trim())
+    .filter((s) => s.length > 0);
+
+  // Find the header: "Rank" followed within a few cells by Song/Music/Sound
+  let headerIdx = -1;
+  for (let i = 0; i < segments.length - 1; i++) {
+    if (/^Rank(ing)?$/i.test(segments[i])) {
+      const windowText = segments.slice(i + 1, i + 5).join(' ');
+      if (/\b(songs?|music|sounds?)\b/i.test(windowText)) {
+        headerIdx = i;
+        break;
+      }
+    }
+  }
+  if (headerIdx === -1) return [];
+
+  const out: CrawledSound[] = [];
+  const seen = new Set<string>();
+  let expectedRank = 1;
+  for (let i = headerIdx + 1; i < segments.length - 1 && out.length < 50; i++) {
+    if (segments[i] !== String(expectedRank)) continue;
+    const title = segments[i + 1] ?? '';
+    const author = segments[i + 2] ?? '';
+    // A real row has a short title cell; count-like cells ("34MViews") are not titles.
+    if (!title || title.length > 120 || /^[\d.,]+[KMB]?(Posts|Views)?$/i.test(title)) continue;
+    const key = title.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      soundId: `cc-table-${key.replace(/[^a-z0-9]+/g, '-').slice(0, 60)}`,
+      title,
+      author: /^[\d.,]+[KMB]?(Posts|Views)?$/i.test(author) || !author ? 'Unknown' : author,
+      rank: expectedRank,
+      chart,
+    });
+    expectedRank++;
+  }
+  return out;
+}
+
 /** Extracts the JSON the in-page fetch wrote into the sink element. */
 export function extractSinkJson(extracted: unknown): unknown {
   const rows = Array.isArray(extracted) ? extracted : extracted ? [extracted] : [];
@@ -147,60 +217,88 @@ export function extractSinkJson(extracted: unknown): unknown {
 }
 
 /**
- * Fetches one Creative Center chart ('popular' or 'surging') through the
- * crawler service. Throws on crawler-level failure (service unreachable,
- * page blocked) so the caller can count real failures; returns [] only when
- * the page loaded but yielded nothing parseable.
+ * Fetches one Creative Center chart ('popular' or 'surging'), trying each
+ * candidate page until one yields sounds. Throws only when every page fails
+ * at the crawler level; returns [] when pages load but nothing parses (the
+ * job treats that as a failure with the diagnostics below).
  */
 export async function fetchCreativeCenterChart(
   chart: 'popular' | 'surging',
 ): Promise<CrawledSound[]> {
-  const result = await crawlUrl(CREATIVE_CENTER_URL, {
-    // Must run BEFORE waitFor: the script itself creates the sink element
-    // the wait condition looks for.
-    jsCodeBeforeWait: [rankListJs(chart)],
-    waitFor: `css:#${SINK_ID}`,
-    waitForTimeoutMs: 20_000,
-    delayBeforeReturnHtmlSeconds: 1.5,
-    pageTimeoutMs: 60_000,
-    magic: true,
-    extractionSchema: {
-      name: 'SoundRankSink',
-      baseSelector: 'body',
-      fields: [{ name: 'json', selector: `#${SINK_ID}`, type: 'text' }],
-    },
-  });
+  let crawlerErrors = 0;
 
-  if (!result.success) {
-    throw new Error(`crawler failed for Creative Center (${chart}): ${result.error ?? 'unknown error'}`);
+  for (const pageUrl of CANDIDATE_PAGES) {
+    let result;
+    try {
+      result = await crawlUrl(pageUrl, {
+        // Must run BEFORE waitFor: the script itself creates the sink element
+        // the wait condition looks for.
+        jsCodeBeforeWait: [rankListJs(chart)],
+        waitFor: `css:#${SINK_ID}`,
+        waitForTimeoutMs: 20_000,
+        delayBeforeReturnHtmlSeconds: 1.5,
+        pageTimeoutMs: 60_000,
+        magic: true,
+        scanFullPage: true,
+        extractionSchema: {
+          name: 'SoundRankSink',
+          baseSelector: 'body',
+          fields: [{ name: 'json', selector: `#${SINK_ID}`, type: 'text' }],
+        },
+      });
+    } catch (err) {
+      crawlerErrors++;
+      console.warn(`[tiktok-crawler] ${chart}: crawl threw for ${pageUrl}:`, (err as Error).message);
+      continue;
+    }
+
+    if (!result.success) {
+      crawlerErrors++;
+      console.warn(`[tiktok-crawler] ${chart}: crawl failed for ${pageUrl}: ${result.error ?? 'unknown'}`);
+      continue;
+    }
+
+    const payload = extractSinkJson(result.extracted);
+    const sinkError = (payload as Record<string, unknown> | null)?.miCrawlError;
+    if (sinkError) {
+      console.warn(
+        `[tiktok-crawler] ${chart}: in-page rank_list attempts failed: ${String(sinkError).slice(0, 400)} ` +
+          `(page: ${String((payload as Record<string, unknown>).miLocation ?? pageUrl)})`,
+      );
+    }
+
+    const fromApi = parseRankListPayload(payload, chart);
+    if (fromApi.length > 0) {
+      console.log(`[tiktok-crawler] ${chart}: ${fromApi.length} sounds via in-page rank_list API (${pageUrl})`);
+      return fromApi;
+    }
+    if (payload && !sinkError) {
+      console.warn(
+        `[tiktok-crawler] ${chart}: rank_list returned JSON but no parseable sounds: ` +
+          JSON.stringify(payload).slice(0, 400),
+      );
+    }
+
+    const fromLinks = parseSongDetailLinks(result.links, chart);
+    if (fromLinks.length > 0) {
+      console.log(`[tiktok-crawler] ${chart}: ${fromLinks.length} sounds via song-detail links (${pageUrl})`);
+      return fromLinks;
+    }
+
+    const fromTable = result.markdown ? parseTrendsTable(result.markdown, chart) : [];
+    if (fromTable.length > 0) {
+      console.log(`[tiktok-crawler] ${chart}: ${fromTable.length} sounds via trends table (${pageUrl})`);
+      return fromTable;
+    }
+
+    // Nothing parsed on this page — log a diagnostic head and try the next.
+    const head = (result.markdown ?? '').split('\n').slice(0, 30).join(' | ').slice(0, 1500);
+    console.warn(`[tiktok-crawler] ${chart}: nothing parsed from ${pageUrl}. Markdown head: ${head}`);
   }
 
-  const payload = extractSinkJson(result.extracted);
-  const sinkError = (payload as Record<string, unknown> | null)?.miCrawlError;
-  if (sinkError) {
-    console.warn(
-      `[tiktok-crawler] ${chart}: in-page rank_list API failed: ${String(sinkError).slice(0, 300)} ` +
-        `(page: ${String((payload as Record<string, unknown>).miLocation ?? 'unknown')})`,
-    );
+  if (crawlerErrors === CANDIDATE_PAGES.length) {
+    throw new Error(`crawler failed for every Creative Center candidate page (${chart})`);
   }
-  const fromApi = parseRankListPayload(payload, chart);
-  if (fromApi.length > 0) {
-    console.log(`[tiktok-crawler] ${chart}: ${fromApi.length} sounds via in-page rank_list API`);
-    return fromApi;
-  }
-
-  const fromLinks = parseSongDetailLinks(result.links, chart);
-  if (fromLinks.length > 0) {
-    console.log(`[tiktok-crawler] ${chart}: ${fromLinks.length} sounds via song-detail links`);
-    return fromLinks;
-  }
-
-  // Nothing parsed — log a diagnostic head so the workflow logs show what
-  // the page actually served (bot wall, consent screen, layout change).
-  // Deliberately NO free-text markdown parsing here: its first production
-  // run fabricated stub tracks out of nav chrome.
-  const head = (result.markdown ?? '').split('\n').slice(0, 30).join(' | ').slice(0, 1500);
-  console.warn(`[tiktok-crawler] ${chart}: page loaded but nothing parsed. Markdown head: ${head}`);
   return [];
 }
 
