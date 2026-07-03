@@ -45,6 +45,31 @@ jobs:
         if: ${{ !inputs.apply }}
         run: |
           echo "::warning::Cold-start was skipped because 'apply' was not checked. This runs the full ingest+ETL chain against whatever DATABASE_URL points at (production) — re-run with 'apply' checked only if that's intended."
+      - name: Set up Python for crawler service
+        if: ${{ inputs.apply && !inputs.skip_ingest }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ingest:tiktok crawls TikTok Creative Center through the self-hosted
+      # crawl4ai service — boot it inside this runner (skipped for ETL-only
+      # runs). continue-on-error: a crawler boot failure must not abort the
+      # whole cold start; the TikTok step will fail loudly on its own.
+      - name: Start crawl4ai crawler service (in-runner)
+        if: ${{ inputs.apply && !inputs.skip_ingest }}
+        continue-on-error: true
+        run: |
+          pip install -q -r services/crawler-api/requirements.txt
+          python -m playwright install --with-deps chromium
+          (cd services/crawler-api && nohup uvicorn main:app --host 127.0.0.1 --port 8090 > /tmp/crawler.log 2>&1 &)
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8090/health > /dev/null; then
+              echo "crawler service is up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "crawler service failed to start:"; cat /tmp/crawler.log; exit 1
+
       - name: Run cold-start sequence
         if: ${{ inputs.apply }}
         run: bash scripts/coldstart.sh
@@ -55,8 +80,8 @@ jobs:
           SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
           SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
-          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          CRAWLER_API_URL: ${{ vars.CRAWLER_API_URL || 'http://127.0.0.1:8090' }}
+          CRAWLER_API_KEY: ${{ secrets.CRAWLER_API_KEY }}
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
           SHAZAM_API_KEY: ${{ secrets.SHAZAM_API_KEY }}
           SHAZAM_BASE_URL: ${{ secrets.SHAZAM_BASE_URL }}
