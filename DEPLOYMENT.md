@@ -139,7 +139,9 @@ Standard flow: push to `main` → Vercel builds and deploys. The build is
 escape hatch has been removed), so type errors now fail the build.
 
 CI (`.github/workflows/ci.yml`) gates every PR with typecheck → lint → build →
-unit tests, plus an end-to-end smoke test against a real Postgres.
+unit tests, an HTTP-level smoke test, an ETL pipeline integration run, a
+browser-driven Playwright suite (`npm run test:e2e`), and an npm audit —
+all against a real Postgres.
 
 ---
 
@@ -343,12 +345,6 @@ watching `/status` and the Slack alerts channel before launch.
 
 ## 12. Deployment debt (tracked, not yet resolved)
 
-- **One moderate npm advisory.** postcss <8.5.10 pinned *inside Next's own
-  bundle* (`node_modules/next/node_modules/postcss`) — present in every Next
-  release through 16.x and only fixable upstream by Next. Our top-level
-  postcss is patched. CI's blocking `npm audit --audit-level=high` gate is
-  unaffected.
-
 - **Branch protection on `main` is still unverified.** Needs a repo admin to
   require the `ci.yml` checks in GitHub Settings → Branches — not something
   that can be confirmed or set from inside the repository or via any
@@ -369,13 +365,19 @@ watching `/status` and the Slack alerts channel before launch.
   vendor account and DSN this repo doesn't have; nothing to wire up without
   that.
 
-- **No browser-based E2E framework.** `npm run smoke` (`scripts/smoke.ts`) is
-  a real HTTP-level integration test that runs in CI and now explicitly
-  checks that F-02/F-03/F-06's previously-open routes (`/api/artists/breaking`,
-  `/api/artists/:id`, `/api/artists/:id/trajectory`, `/api/ai/scout-brief`,
-  `/api/talent-scout/health`) 401 without a session — that gap existed until
-  2026-07-02. A true browser-driving suite (Playwright: render JS, click
-  through the UI) is still a separate, larger lift not started here.
+- **Browser-driven E2E coverage is narrow.** `npm run test:e2e` (Playwright,
+  wired into CI as the `E2E (Playwright)` job) now renders real pages against
+  a real Chromium and covers the two flows that only a browser can verify:
+  the auth redirect/login/error cycle (`tests/e2e/auth.spec.ts`) and the
+  homepage CommandBar's disabled/enabled/navigate behavior (BUG-009,
+  `tests/e2e/homepage.spec.ts`). `npm run smoke` (`scripts/smoke.ts`) remains
+  the broader HTTP-level integration test. Neither suite covers most other
+  pages (search, artist/track detail, watchlist, compare, the A&R bot chat) —
+  extending Playwright coverage to those is a follow-up, not a blocker.
+
+Resolved 2026-07-04: **npm audit is clean (0 vulnerabilities).** The postcss
+override in `package.json` already patches the advisory previously tracked
+here inside Next's vendored bundle.
 
 Resolved 2026-06-11: **Next.js 16.2.9 + React 19 migration** — clears all
 high-severity framework advisories. Includes async request APIs (codemod),

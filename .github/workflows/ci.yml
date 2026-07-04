@@ -170,10 +170,68 @@ jobs:
       - name: Reconciliation must pass
         run: npx tsx jobs/etl/reconcile.ts
 
+  # ── Browser-driven E2E: renders real pages, exercises client-side JS ─────────
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    needs: validate
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: e2e_check
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/e2e_check
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/e2e_check
+      CRON_SECRET: ci-e2e-secret
+      AUTH_SECRET: ci-e2e-auth-secret
+      INTERNAL_API_BASE_URL: http://localhost:3000
+      NEXT_PUBLIC_BASE_URL: http://localhost:3000
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply migrations to Postgres
+        run: npx prisma migrate deploy
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npx next build
+
+      - name: Run E2E suite
+        run: npx playwright test
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
   # ── Dependency security audit (production deps, high+) ──────────────────────
-  # Blocking: the Next 16 migration cleared the framework advisories. The one
-  # remaining moderate finding (postcss pinned inside next's own bundle) is
-  # below this gate's threshold and only fixable upstream by Next.
   security-audit:
     name: npm audit (prod deps, high+)
     runs-on: ubuntu-latest

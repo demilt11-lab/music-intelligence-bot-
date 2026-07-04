@@ -45,3 +45,9 @@ yarn-error.log*
 .idea/
 *.swp
 *.swo
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+tests/e2e/.auth/
