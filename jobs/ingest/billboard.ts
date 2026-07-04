@@ -1,7 +1,8 @@
 /**
  * Billboard chart ingestion job
  *
- * Uses Firecrawl to scrape Billboard chart pages and write entries
+ * Uses the crawl4ai crawler service (services/crawler-api) to render
+ * Billboard chart pages with a real headless browser and write entries
  * into chart_snapshots + chart_rows, keyed to canonical DB tracks.
  *
  * Charts scraped:
@@ -10,11 +11,18 @@
  *   - Hot Country Songs
  *   - Pop Airplay
  *
+ * Add more chart sites by appending to CHARTS below — the markdown parser
+ * is heuristic (three fallback strategies) rather than tied to Billboard's
+ * specific markup, so it generalizes to other ranked chart pages as long as
+ * they render as "rank heading, then title, then artist" or a pipe table.
+ *
  * Track resolution: ExternalId(billboard) → title+artist fuzzy → stub creation
  */
 
 import { db } from '@/lib/db';
-import { scrapeUrl } from '@/lib/firecrawl/client';
+import { crawlUrl } from '@/lib/crawler/client';
+import { cleanLine, isUsableLine } from '@/lib/crawler/textParsing';
+import { resolveTrackByTitleArtist } from '@/lib/crawler/resolveTrack';
 import { runTrackedJob } from '@/lib/jobs/tracker';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -37,11 +45,7 @@ function toDateOnly(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
-function normalise(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
-}
-
-// ─── Parse markdown from Firecrawl ────────────────────────────────────────────
+// ─── Parse markdown from the crawler service ──────────────────────────────────
 
 interface BillboardEntry {
   rank: number;
@@ -54,27 +58,10 @@ interface BillboardEntry {
 // Lines that are metadata/nav noise, never a song title or artist name
 const METADATA_RE = /^(LW|PK|WOC|NEW|RE-?ENTRY|Award|Peak|Chart|Date|Debut|Hot|Billboard|spotify|apple|amazon|youtube|tidal|pandora|trending|airplay|radio|sales|streaming|Skip to|Toggle|Share|Award Badge|[|#\-–—]+|\d+)$/i;
 
-function cleanLine(l: string): string {
-  return l
-    .replace(/\*+/g, '')          // strip bold/italic markers
-    .replace(/#+/g, '')           // strip heading hashes
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // markdown links → text
-    .replace(/`+/g, '')
-    .trim();
-}
-
-function isUsableLine(l: string): boolean {
-  if (l.length < 2) return false;
-  if (METADATA_RE.test(l)) return false;
-  if (/^[\d\s\-–|.,]+$/.test(l)) return false;  // pure numbers/punctuation
-  if (/^https?:\/\//.test(l)) return false;
-  return true;
-}
-
 /**
- * Parse Billboard chart markdown from Firecrawl.
+ * Parse Billboard chart markdown.
  *
- * Firecrawl renders Billboard as a sequence of rank headings (### N or ## N)
+ * The crawler renders Billboard as a sequence of rank headings (### N or ## N)
  * followed by metadata lines, then the song title and artist as plain text.
  * The title is NOT reliably bold — it appears as the first non-metadata text
  * line after the rank heading.
@@ -84,6 +71,7 @@ function isUsableLine(l: string): boolean {
 function parseBillboardMarkdown(markdown: string): BillboardEntry[] {
   const entries: BillboardEntry[] = [];
   const seen = new Set<number>();
+  const usable = (l: string) => isUsableLine(l, METADATA_RE);
 
   // ── Strategy 1: rank-heading sections ────────────────────────────────────
   // Split on lines that are only a heading + a 1-3 digit number, e.g. "### 42"
@@ -100,7 +88,7 @@ function parseBillboardMarkdown(markdown: string): BillboardEntry[] {
     const candidates = afterHeading
       .split('\n')
       .map(cleanLine)
-      .filter(isUsableLine);
+      .filter(usable);
 
     if (candidates.length < 2) continue;
 
@@ -117,7 +105,7 @@ function parseBillboardMarkdown(markdown: string): BillboardEntry[] {
   if (entries.length >= 10) return entries.sort((a, b) => a.rank - b.rank);
 
   // ── Strategy 2: pipe-delimited table rows ─────────────────────────────────
-  // Some Firecrawl outputs render as: | 1 | Song Title | Artist |
+  // Some renders come out as: | 1 | Song Title | Artist |
   const tableRows = markdown.match(/^\|.+\|.+\|/mg) ?? [];
   for (const row of tableRows) {
     const cells = row.split('|').map((c) => c.trim()).filter(Boolean);
@@ -126,7 +114,7 @@ function parseBillboardMarkdown(markdown: string): BillboardEntry[] {
     if (isNaN(rank) || rank < 1 || rank > 100 || seen.has(rank)) continue;
     const title = cleanLine(cells[1]);
     const artist = cleanLine(cells[2]);
-    if (!isUsableLine(title) || !isUsableLine(artist)) continue;
+    if (!usable(title) || !usable(artist)) continue;
     entries.push({ rank, title, artist });
     seen.add(rank);
   }
@@ -142,7 +130,7 @@ function parseBillboardMarkdown(markdown: string): BillboardEntry[] {
     if (rank < 1 || rank > 100 || seen.has(rank)) continue;
     const title = m[2].trim();
     const next = lines[i + 1] ?? '';
-    if (!isUsableLine(title) || !isUsableLine(next)) continue;
+    if (!usable(title) || !usable(next)) continue;
     entries.push({ rank, title, artist: next });
     seen.add(rank);
     i++;
@@ -151,72 +139,25 @@ function parseBillboardMarkdown(markdown: string): BillboardEntry[] {
   return entries.sort((a, b) => a.rank - b.rank);
 }
 
-// ─── Track resolution ─────────────────────────────────────────────────────────
-
-interface ResolvedTrack {
-  trackId: number;
-  isNew: boolean;
-}
-
-async function resolveBillboardTrack(entry: BillboardEntry): Promise<ResolvedTrack> {
-  const normTitle = normalise(entry.title);
-  const normArtist = normalise(entry.artist);
-
-  // 1. Fuzzy title + artist match against existing tracks
-  if (normTitle && normArtist) {
-    const titleToken = normTitle.split(' ')[0];
-    const candidates = await db.track.findMany({
-      where: { title: { contains: titleToken, mode: 'insensitive' } },
-      include: { trackArtists: { include: { artist: true } } },
-      take: 50,
-    });
-
-    for (const c of candidates) {
-      if (normalise(c.title) !== normTitle) continue;
-      const artistMatch = c.trackArtists.some((ta) => normalise(ta.artist.name) === normArtist);
-      if (artistMatch) return { trackId: c.id, isNew: false };
-    }
-  }
-
-  // 2. Create stub track + artist
-  let artist = await db.artist.findFirst({
-    where: { name: { equals: entry.artist, mode: 'insensitive' } },
-  });
-  if (!artist) {
-    artist = await db.artist.create({ data: { name: entry.artist } });
-  }
-
-  const track = await db.track.create({
-    data: {
-      title: entry.title,
-      trackArtists: { create: { artistId: artist.id, role: 'primary' } },
-    },
-  });
-
-  console.log(`[billboard] Created stub track id=${track.id} "${entry.title}" by "${entry.artist}"`);
-  return { trackId: track.id, isNew: true };
-}
-
 // ─── Chart ingestion ──────────────────────────────────────────────────────────
 
 async function ingestChart(chart: typeof CHARTS[number], snapshotDate: Date): Promise<void> {
-  console.log(`[billboard] Scraping ${chart.name}…`);
+  console.log(`[billboard] Crawling ${chart.name}…`);
 
-  const result = await scrapeUrl(chart.url, {
-    formats: ['markdown'],
-    onlyMainContent: true,
-    waitFor: 2000,
+  const result = await crawlUrl(chart.url, {
+    magic: true,
+    delayBeforeReturnHtmlSeconds: 2,
   });
 
-  if (!result.success || !result.data?.markdown) {
-    console.warn(`[billboard] Scrape failed for ${chart.name}: ${result.error ?? 'no content'}`);
+  if (!result.success || !result.markdown) {
+    console.warn(`[billboard] Crawl failed for ${chart.name}: ${result.error ?? 'no content'}`);
     return;
   }
 
   // Log first 1500 chars so we can inspect the actual structure
-  console.log(`[billboard] Raw markdown sample (${chart.name}):\n---\n${result.data.markdown.slice(0, 1500)}\n---`);
+  console.log(`[billboard] Raw markdown sample (${chart.name}):\n---\n${result.markdown.slice(0, 1500)}\n---`);
 
-  const entries = parseBillboardMarkdown(result.data.markdown);
+  const entries = parseBillboardMarkdown(result.markdown);
   console.log(`[billboard] Parsed ${entries.length} entries from ${chart.name}`);
 
   if (entries.length === 0) {
@@ -247,7 +188,7 @@ async function ingestChart(chart: typeof CHARTS[number], snapshotDate: Date): Pr
   let written = 0;
   for (const entry of entries) {
     try {
-      const { trackId } = await resolveBillboardTrack(entry);
+      const { trackId } = await resolveTrackByTitleArtist(entry.title, entry.artist, 'billboard');
 
       await db.chartRow.upsert({
         where: { snapshotId_rank: { snapshotId: snapshot.id, rank: entry.rank } },
@@ -276,7 +217,7 @@ async function ingestChart(chart: typeof CHARTS[number], snapshotDate: Date): Pr
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  if (!process.env.FIRECRAWL_API_KEY) throw new Error('Missing required env var: FIRECRAWL_API_KEY');
+  if (!process.env.CRAWLER_API_URL) throw new Error('Missing required env var: CRAWLER_API_URL');
   if (!process.env.DATABASE_URL) throw new Error('Missing required env var: DATABASE_URL');
 
   console.log('[billboard] Starting Billboard chart ingestion…');

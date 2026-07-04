@@ -273,6 +273,10 @@ async def explain_artist(
                 afd."listenersGrowth14d",
                 afd."listenersGrowth30d",
                 afd."listenersGrowth90d",
+                afd."airplayGrowth7d",
+                afd."airplayGrowth30d",
+                afd."chartPresence7d",
+                afd."chartRankImprovement7d",
                 afd."listenersVelocity7d",
                 afd."listenersAcceleration7d",
                 afd."tiktokVideosPerDay7d",
@@ -306,6 +310,9 @@ async def explain_artist(
             ("streamsPerPlaylistAdd7d", "Streams per playlist add (7d)", "Conversion efficiency"),
             ("savesPerStream30d", "Saves per stream (30d)", "Listener engagement depth"),
             ("growthConsistency30d", "Growth consistency score (30d)", "Steadiness of growth"),
+            ("airplayGrowth7d", "Radio airplay growth % (7d)", "Radio momentum"),
+            ("chartRankImprovement7d", "Avg. chart rank improvement (7d, all platforms)", "Chart momentum"),
+            ("chartPresence7d", "# distinct charts appeared on (7d, all platforms)", "Chart breadth / durability"),
         ]
 
         breakdowns = []

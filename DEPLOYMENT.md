@@ -14,12 +14,16 @@ Vercel + Postgres + an optional Python ML sidecar).
 | Rate limiting | Upstash Redis (optional) | Upstash |
 | Scheduled jobs | Vercel Cron + GitHub Actions | Vercel / GitHub |
 | ML inference (artist trajectory) | In-process TS model (`lib/ml/`) | Same Vercel deployment — no separate service |
+| Crawling (crawl4ai) | FastAPI (`services/crawler-api`) | GitHub Actions runner (TikTok) or a deployed instance — Railway / Fly.io (see §8) |
+| A&R bot API | FastAPI (`services/ar-api`) | Railway / Fly.io (separate service, see §9) |
 
-The Next.js app is fully functional **without** Redis — rate limiting falls
-back to a real (if per-instance) in-memory limiter when Redis env vars are
-absent, never to unlimited. There is a separate, optional Python/FastAPI ML
-service (`ml/api`) that has never been deployed and that nothing in the app
-calls by default — see §7.
+The Next.js app is fully functional **without** Redis, the crawler service,
+and the A&R bot service — rate limiting falls back to a real (if
+per-instance) in-memory limiter when Redis env vars are absent, never to
+unlimited; the crawl-based ingest jobs fail closed with a clear "missing
+CRAWLER_API_URL" error but the serving API itself is unaffected. There is a
+separate, optional Python/FastAPI ML service (`ml/api`) that has never been
+deployed and that nothing in the app calls by default — see §7.
 
 ---
 
@@ -33,6 +37,9 @@ calls by default — see §7.
 4. (Optional) Third-party API keys (Spotify, YouTube, TikTok, Shazam, Luminate,
    Soundcharts, Songstats, Firecrawl, Meta/Instagram, SearchAPI) for the
    ingest/ETL jobs. The serving API works without them; ingestion does not.
+5. (Optional) A deployed `services/crawler-api` instance (`CRAWLER_API_URL`)
+   for the crawl4ai-based ingest jobs (Billboard, Apple Music charts, X
+   followers, radio spins). See § 8.
 
 ---
 
@@ -56,6 +63,8 @@ Copy `.env.example` → `.env.local` for local dev. In production set them in
 | `UI_TENANT_SLUG` | Tenant slug the first-party web UI operates under (default `workspace`, auto-created on first use). The UI no longer ships any API key to the browser — `/api/ui/*` routes resolve the tenant server-side. |
 | `SCOUT_SAMPLE_FALLBACK` | Set to `1` to let the Talent Scout return clearly-labeled sample rows when no UGC/ML/chart data exists (default off: an honest empty state is shown instead). |
 | `ML_ARTIST_TRAJECTORY_URL` | Artist trajectory prediction endpoint (points at the FastAPI ML service). |
+| `CRAWLER_API_URL` + `CRAWLER_API_KEY` | crawl4ai crawler service (points at `services/crawler-api`). Required by `ingest:billboard`, `ingest:crawl-dsp-apple`, `ingest:crawl-social-x`, `ingest:crawl-radio-spins`; the serving API is unaffected if unset. |
+| `AR_API_URL` | Predictive A&R FastAPI service (`services/ar-api`). Required by the `/ar-bot` chat's tool-calling loop (`lib/bot/execute.ts`); combined with `ANTHROPIC_API_KEY` for the reply itself. If unset, `/ar-bot` shows an "unconfigured" banner instead of failing. |
 | `UPSTASH_REDIS_URL` + `UPSTASH_REDIS_TOKEN` | Rate limiting. If absent, rate limiting is disabled (all requests allowed). |
 | `ALLOWED_ORIGIN` | CORS allow-origin for `/api/*`. Defaults to `*`; set to your domain. |
 | Data-provider keys | The ingest/ETL jobs (see `.env.example` for the full list). |
@@ -148,7 +157,7 @@ Vercel **Hobby** plan only allows daily schedules. To run alert checks more
 frequently (e.g. every 2h: `0 */2 * * *`), upgrade to the **Pro** plan.
 
 ### GitHub Actions (ingestion, ETL, ML)
-The 31 workflows under `.github/workflows/` run ingestion, ETL, ML training,
+The 34 workflows under `.github/workflows/` run ingestion, ETL, ML training,
 and pipeline ops on schedules / manual dispatch. Depending on which
 workflows you use, they require these repo secrets:
 - `DATABASE_URL` — required by nearly all of them.
@@ -161,6 +170,14 @@ workflows you use, they require these repo secrets:
   service (`services/crawler-api`), booted inside the Actions runner on
   each run. Set a `CRAWLER_API_URL` repo **variable** (plus optional
   `CRAWLER_API_KEY` secret) to use a deployed crawler instance instead.
+- `CRAWLER_API_URL` (+ optional `CRAWLER_API_KEY`) repo **secrets** — required
+  by the other crawl-based workflows: Billboard (`ingest_billboard.yml`),
+  Apple Music charts (`ingest_crawl_dsp_apple.yml`), X followers
+  (`ingest_crawl_social_x.yml`), and radio spins
+  (`ingest_crawl_radio_spins.yml`). Unlike the TikTok workflow, these do not
+  boot the crawler inside the runner — the secret must point at a reachable
+  deployment of the crawl4ai service in §8 for those four workflows to do
+  anything.
 - `CRON_SECRET` — same value as the Vercel env var; some workflows call back
   into the deployed app's `/api/cron/*` routes and need it to authenticate.
 - `INTERNAL_ADMIN_SECRET` — used by `ml_train.yml` and `provision_user.yml`
@@ -223,7 +240,44 @@ call it — as of now, setting that variable alone does nothing.
 
 ---
 
-## 8. Post-deploy verification
+## 8. Crawler service (optional)
+
+The crawl4ai-backed FastAPI service (`services/crawler-api`) is also deployed
+separately — it needs a real Chromium install, so it can't run inside the
+Vercel build:
+```bash
+cd services/crawler-api
+pip install -r requirements.txt
+python -m playwright install --with-deps chromium
+uvicorn main:app --host 0.0.0.0 --port 8090
+```
+Point `CRAWLER_API_URL` at its public URL (and set `CRAWLER_API_KEY` on both
+sides if you want the endpoint to require auth — it's open by default, same
+posture as `services/ar-api`). If the service is not deployed, `ingest:billboard`,
+`ingest:crawl-dsp-apple`, `ingest:crawl-social-x`, and `ingest:crawl-radio-spins`
+fail closed with a clear missing-env error; everything else is unaffected.
+See `services/crawler-api/README.md` for the API surface.
+
+---
+
+## 9. A&R bot service (optional)
+
+`services/ar-api` (Predictive A&R API) is deployed the same way:
+```bash
+cd services/ar-api
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 8080
+```
+Point `AR_API_URL` at its public URL. It's consumed by the `/ar-bot` chat page
+via a Claude tool-calling loop (`lib/ai/agent.ts` + `lib/bot/tools.ts` +
+`lib/bot/execute.ts`) — requires both `AR_API_URL` and `ANTHROPIC_API_KEY` to
+produce real replies; the page shows which one is missing otherwise. Note
+`playlists_to_pitch` intentionally returns 501 (unimplemented) — the UI
+surfaces that as a plain error rather than fabricating recommendations.
+
+---
+
+## 10. Post-deploy verification
 
 1. **Health:** `curl https://<domain>/api/health` → `{"status":"ok","db":"up"}`.
 2. **Smoke test** (against any environment with DB access + a running server):
@@ -239,7 +293,7 @@ call it — as of now, setting that variable alone does nothing.
 
 ---
 
-## 9. Rollback & incident response
+## 11. Rollback & incident response
 
 **A bad app deploy (broken build, regressed behavior, not a DB issue):**
 1. Vercel → Project → Deployments → find the last known-good deployment →
@@ -287,7 +341,7 @@ watching `/status` and the Slack alerts channel before launch.
 
 ---
 
-## 10. Deployment debt (tracked, not yet resolved)
+## 12. Deployment debt (tracked, not yet resolved)
 
 - **One moderate npm advisory.** postcss <8.5.10 pinned *inside Next's own
   bundle* (`node_modules/next/node_modules/postcss`) — present in every Next

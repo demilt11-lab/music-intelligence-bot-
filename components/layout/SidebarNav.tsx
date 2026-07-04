@@ -7,6 +7,7 @@ import { usePathname } from 'next/navigation'
 const BASE_NAV_ITEMS = [
   { href: '/', label: 'Home', icon: '⌂' },
   { href: '/talent-scout', label: 'Buddy Scout', icon: '◎', hot: true },
+  { href: '/ar-bot', label: 'A&R Bot', icon: '❖', hot: true },
   { href: '/artists', label: 'Artists', icon: '♪' },
   { href: '/playlists', label: 'Playlists', icon: '▤' },
   { href: '/curators', label: 'Curators', icon: '✦' },

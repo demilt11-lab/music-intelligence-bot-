@@ -25,6 +25,8 @@ lib/charts/            — Chart modules (TikTok videos/users/tracks, YouTube Sh
 lib/curators/          — Curator directory + curator playlists
 lib/playlists/         — Playlist directory + playlist tracks
 lib/radio/             — Radio stations, airplay by entity, broadcast markets
+lib/crawler/           — Client + shared parsing helpers for the crawl4ai crawler service
+services/crawler-api/  — Standalone FastAPI service wrapping crawl4ai (headless-browser crawling)
 prisma/schema.prisma   — Full database schema
 ```
 
@@ -491,6 +493,67 @@ Country and city broadcast market ratios.
   }
 }
 ```
+
+---
+
+## Crawling (crawl4ai)
+
+DSP web players, social profiles, and radio station sites either block plain
+HTTP fetches (bot detection) or only render content via JavaScript, so those
+sources are crawled through a self-hosted [crawl4ai](https://github.com/unclecode/crawl4ai)
+service rather than fetched directly:
+
+- **`services/crawler-api/`** — a standalone FastAPI service wrapping
+  crawl4ai's `AsyncWebCrawler` (real headless Chromium via Playwright, with
+  stealth-mode bot-detection bypass). Deployed separately, same posture as
+  `services/ar-api`. See its README for local dev + deployment.
+- **`lib/crawler/client.ts`** — `crawlUrl(url, options)`, the Next.js-side
+  HTTP client for the service. Returns rendered `markdown`, optional
+  CSS-extracted `extracted` data, and discovered page `links`.
+- **`lib/crawler/textParsing.ts`** / **`lib/crawler/resolveTrack.ts`** —
+  shared markdown-cleanup and title+artist → canonical-Track resolution used
+  by every crawl-based ingestion job.
+
+Ingestion jobs built on this (`npm run ingest:<name>`):
+
+| Job | Source | Writes |
+|---|---|---|
+| `billboard` | Billboard chart pages (Hot 100, R&B/Hip-Hop, Country, Pop Airplay) | `chart_snapshots` / `chart_rows` |
+| `crawl-dsp-apple` | Apple Music "Top 100" editorial playlists (Global, USA) | `chart_snapshots` / `chart_rows` |
+| `crawl-social-x` | X/Twitter artist profiles (follower counts) | `ArtistDailyStats.platformFollowers` / `totalFollowers` |
+| `crawl-radio-spins` | Radio station "recently played" pages (`Station.websiteUrl`) | `radio_airplay_facts` |
+
+Each job's markdown parser is heuristic (multiple fallback strategies) by
+design — these sites don't expose stable CSS class names or a public API, so
+parsing rendered text is more resilient than a brittle selector schema. The
+same `/crawl` endpoint also supports a `JsonCssExtractionStrategy` schema for
+sites that *do* have stable markup (see `services/crawler-api/README.md`).
+
+Extending to a source not covered yet (Amazon Music, Tidal, Facebook, more
+chart sites) means adding a target URL + a parse function following one of
+the existing jobs as a template — no new infrastructure required.
+
+crawl4ai data feeds A&R scoring too: `crawl_radio_spins.ts` and the chart jobs
+above roll up into `ArtistFeaturesDaily.airplayGrowth7d/30d` and
+`chartPresence7d`/`chartRankImprovement7d` (computed in
+`ml/ar_feature_engineering.py`, folded into `ml/scoring.py`'s heat/stability
+formulas), which is what `/ar-bot` (below) actually reads.
+
+---
+
+## A&R Bot
+
+`/ar-bot` is a chat UI for `services/ar-api` (the Predictive A&R scoring
+service) — the first live consumer of `lib/bot/tools.ts`'s tool schemas,
+which previously had no runtime behind them. A Claude tool-calling loop
+(`lib/ai/agent.ts`) executes `search_artists` / `explain_artist` /
+`playlists_to_pitch` against ar-api (`lib/bot/execute.ts`) and the UI renders
+the results as artist cards / feature breakdowns alongside Buddy's reply.
+
+Requires `ANTHROPIC_API_KEY` (the reply) and `AR_API_URL` (the data) — the
+page shows which is missing rather than failing silently if either is unset.
+`playlists_to_pitch` is intentionally unimplemented upstream (ar-api returns
+501); the bot reports that plainly instead of inventing recommendations.
 
 ---
 

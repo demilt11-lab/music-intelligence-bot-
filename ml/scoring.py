@@ -37,18 +37,21 @@ MODEL_VERSION = "v1.0.0"
 # ---------------------------------------------------------------------------
 
 HEAT_FEATURES = {
-    "listenersGrowth7d":       0.30,
-    "listenersGrowth30d":      0.20,
-    "tiktokViewsGrowth7d":     0.20,
-    "listenersVelocity7d":     0.15,
-    "streamsPerPlaylistAdd7d": 0.10,
-    "savesPerStream30d":       0.05,
+    "listenersGrowth7d":        0.28,
+    "listenersGrowth30d":       0.18,
+    "tiktokViewsGrowth7d":      0.18,
+    "listenersVelocity7d":      0.14,
+    "streamsPerPlaylistAdd7d":  0.09,
+    "savesPerStream30d":        0.04,
+    "airplayGrowth7d":          0.05,  # crawl4ai radio-spins momentum
+    "chartRankImprovement7d":   0.04,  # crawl4ai chart-crawl momentum (billboard, applemusic, ...)
 }
 
 STABILITY_FEATURES = {
-    "growthConsistency30d":    0.50,
-    "listenersGrowth30d":      0.30,
-    "followersGrowth30d":      0.20,
+    "growthConsistency30d":    0.45,
+    "listenersGrowth30d":      0.28,
+    "followersGrowth30d":      0.18,
+    "chartPresence7d":         0.09,  # breadth of chart presence — durability signal
 }
 
 # Platform balance uses platformStreams JSON from artist_daily_stats
@@ -145,6 +148,10 @@ def compute_scores_for_date(conn, target_date: date) -> None:
             "listenersGrowth90d",
             "followersGrowth7d",
             "followersGrowth30d",
+            "airplayGrowth7d",
+            "airplayGrowth30d",
+            "chartPresence7d",
+            "chartRankImprovement7d",
             "listenersVelocity7d",
             "listenersAcceleration7d",
             "tiktokVideosPerDay7d",

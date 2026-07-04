@@ -86,6 +86,8 @@ jobs:
           SHAZAM_API_KEY: ${{ secrets.SHAZAM_API_KEY }}
           SHAZAM_BASE_URL: ${{ secrets.SHAZAM_BASE_URL }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          CRAWLER_API_URL: ${{ secrets.CRAWLER_API_URL }}
+          CRAWLER_API_KEY: ${{ secrets.CRAWLER_API_KEY }}
           SEARCHAPI_KEY: ${{ secrets.SEARCHAPI_KEY }}
           META_APP_ID: ${{ secrets.META_APP_ID }}
           # Repo secret is named META_SECRET; accept either name.
