@@ -18,6 +18,7 @@ import { decodeState, statesMatch, SSO_STATE_COOKIE } from '@/lib/auth/sso/state
 import { getEnabledConnection } from '@/lib/auth/sso/connection';
 import { validateSamlResponse, profileFromSaml } from '@/lib/auth/sso/saml';
 import { jitProvisionSsoUser } from '@/lib/auth/sso/provision';
+import { captureError } from '@/lib/platform/observability';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (err) {
     console.error('[sso/callback/saml]', err);
+    void captureError(err, { route: '/api/auth/sso/callback/saml', statusCode: 500 });
     return fail(req, 'saml_validation_failed');
   }
 }

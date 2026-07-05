@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { captureError, type ErrorContext } from '@/lib/platform/observability';
 
 /**
  * Structured API error with an HTTP status code and a machine-readable code.
@@ -50,8 +51,11 @@ export function internalError(msg: string): ApiError {
  *
  * @param err - The caught value (may be an Error, ApiError, or anything else).
  */
-export function handleApiError(err: unknown): NextResponse {
+export function handleApiError(err: unknown, ctx: ErrorContext = {}): NextResponse {
   if (err instanceof ApiError) {
+    // Only server-side (5xx) ApiErrors are real incidents worth tracking;
+    // 4xx are expected client errors.
+    if (err.statusCode >= 500) void captureError(err, { ...ctx, statusCode: err.statusCode });
     return NextResponse.json(
       { error: err.message, code: err.code },
       { status: err.statusCode },
@@ -62,6 +66,7 @@ export function handleApiError(err: unknown): NextResponse {
     err instanceof Error ? err.message : 'An unexpected error occurred';
 
   console.error('[handleApiError] Unhandled error:', err);
+  void captureError(err, { ...ctx, statusCode: 500 });
 
   return NextResponse.json(
     { error: message, code: 'INTERNAL_ERROR' },

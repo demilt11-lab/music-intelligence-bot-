@@ -13,6 +13,7 @@ import { decodeState, statesMatch, SSO_STATE_COOKIE } from '@/lib/auth/sso/state
 import { getEnabledConnection, oidcCallbackUrl } from '@/lib/auth/sso/connection';
 import { discover, exchangeCode, fetchJwks, verifyIdToken, profileFromClaims } from '@/lib/auth/sso/oidc';
 import { jitProvisionSsoUser } from '@/lib/auth/sso/provision';
+import { captureError } from '@/lib/platform/observability';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest) {
     return res;
   } catch (err) {
     console.error('[sso/callback/oidc]', err);
+    void captureError(err, { route: '/api/auth/sso/callback/oidc', statusCode: 500 });
     return fail(req, 'sso_callback_failed');
   }
 }

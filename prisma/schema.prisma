@@ -465,6 +465,31 @@ model RequestLog {
   @@index([tenantId, endpoint])
 }
 
+// Self-hosted error tracking (the APM/error side of observability, no external
+// vendor required). Errors are *aggregated by fingerprint* — a stable hash of
+// route + error name + normalized message — so a recurring error is one row
+// with a rising `count`, not millions of duplicates. An admin surface reads
+// this alongside RequestLog latency to give production health without a SaaS.
+model ErrorEvent {
+  id          Int       @id @default(autoincrement())
+  fingerprint String    @unique
+  route       String
+  method      String?
+  statusCode  Int       @default(500)
+  errorName   String?
+  message     String // most recent message for this fingerprint
+  stackSample String? // truncated most-recent stack
+  tenantId    Int? // best-effort; null for pre-auth failures
+  count       Int       @default(1)
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  resolvedAt  DateTime? // admin can mark a fingerprint resolved
+
+  @@index([lastSeenAt])
+  @@index([statusCode])
+  @@map("error_events")
+}
+
 // ─────────────────────────────────────────────
 // Junction / link tables
 // ─────────────────────────────────────────────
