@@ -356,10 +356,21 @@ in `docs/ONCALL.md` before launch.
 
 ## 12. Deployment debt (tracked, not yet resolved)
 
-- **Branch protection on `main` is still unverified.** Needs a repo admin to
-  require the `ci.yml` checks in GitHub Settings → Branches — not something
-  that can be confirmed or set from inside the repository or via any
-  available tool. Until this is set, a failing-CI PR can still merge.
+- **Branch protection on `main` — one admin command.** Branch protection is a
+  GitHub *account setting* that cannot be toggled from application code (the
+  Claude session's GitHub access is scoped for read/PR only). It is reduced to a
+  single idempotent command a repo admin runs once:
+
+  ```
+  GITHUB_TOKEN=<admin PAT, repo scope> ./scripts/set-branch-protection.sh
+  ```
+
+  This requires the four CI checks (`Typecheck · Lint · Build · Unit tests`,
+  `Smoke (Postgres + live server)`, `ETL pipeline integration`,
+  `E2E (Playwright)`) + a PR review + linear history before any merge, so a
+  failing-CI PR can no longer merge. A GitHub *ruleset* equivalent is committed
+  at `.github/rulesets/main-protection.json` (Settings → Rules → import) for
+  admins who prefer rulesets over classic protection.
 
 - **Validation rigor still varies by route** (some go through
   `lib/shared/validation.ts` + a dedicated `validate.ts`, others do an inline
