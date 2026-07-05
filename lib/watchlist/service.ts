@@ -7,6 +7,7 @@
 import { db } from '@/lib/db';
 import { ScoutSources } from '@/lib/engine';
 import { emptyTrack } from '@/lib/talentScout/emptyTrack';
+import { tenantScopedWhere } from '@/lib/platform/tenant-scope';
 
 export type WatchlistEntry = {
   id: number;
@@ -33,7 +34,7 @@ function parseBaseline(notes: string | null): NotesBaseline | null {
 
 export async function listWatchlist(tenantId: number): Promise<WatchlistEntry[]> {
   const items = await db.watchlistItem.findMany({
-    where: { tenantId },
+    where: tenantScopedWhere(tenantId),
     orderBy: { addedAt: 'desc' },
   });
 
@@ -128,7 +129,7 @@ export async function removeWatchlistItemById(
   id: number,
 ): Promise<boolean> {
   const { count } = await db.watchlistItem.deleteMany({
-    where: { id, tenantId },
+    where: tenantScopedWhere(tenantId, { id }),
   });
   return count > 0;
 }
@@ -140,7 +141,7 @@ export async function removeWatchlistItemByEntity(
   entityId: number,
 ): Promise<boolean> {
   const { count } = await db.watchlistItem.deleteMany({
-    where: { tenantId, entityType, entityId },
+    where: tenantScopedWhere(tenantId, { entityType, entityId }),
   });
   return count > 0;
 }
@@ -151,7 +152,7 @@ export async function isOnWatchlist(
   entityId: number,
 ): Promise<boolean> {
   const item = await db.watchlistItem.findFirst({
-    where: { tenantId, entityType, entityId },
+    where: tenantScopedWhere(tenantId, { entityType, entityId }),
     select: { id: true },
   });
   return !!item;
