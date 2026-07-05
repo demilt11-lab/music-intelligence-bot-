@@ -323,11 +323,20 @@ Should be rare — the promotion gate in `lib/ml/models/{artist-trajectory,
 track-viral}.ts` already blocks a retrain that regresses held-out accuracy
 by more than 2 points vs. the incumbent. If a bad model still got promoted
 (e.g. the regression was subtle enough to pass the gate but wrong in
-practice): call `POST /api/internal/ml/train` again once the underlying
-data issue is fixed — training always compares against the current
-incumbent, so a good retrain will simply replace the bad one. There is no
-separate "previous model" store to roll back to (`ml_models` holds one row
-per model type) — this is a known gap, not a solved one.
+practice), **roll back in one step**:
+
+```
+POST /api/internal/ml/rollback
+  { "modelType": "track-viral" }            # → reverts to the previous version
+  { "modelType": "track-viral", "toVersion": 3 }   # → reverts to a specific version
+```
+
+Every promotion is archived in `ml_model_versions` (append-only), and
+`GET /api/internal/ml/status` lists each model's recent version history so you
+can pick a rollback target. The rollback takes effect immediately (the active
+model cache is invalidated) and is itself recorded as a new version, so history
+is never rewritten. Alternatively, call `POST /api/internal/ml/train` again once
+the underlying data issue is fixed to train a fresh replacement.
 
 **A bad pipeline run (ingest/ETL wrote bad data):**
 Check `/status` or the `job_runs` table for the specific run, then check

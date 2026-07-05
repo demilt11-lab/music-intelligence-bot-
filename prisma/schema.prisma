@@ -1691,6 +1691,26 @@ model MlModel {
   @@map("ml_models")
 }
 
+// Append-only archive of every promoted model version. MlModel holds the single
+// *active* pointer; this table keeps the full history so a bad promotion can be
+// rolled back in one step to any prior version (previously impossible — the
+// upsert overwrote the incumbent with no way back).
+model MlModelVersion {
+  id         Int      @id @default(autoincrement())
+  modelType  String
+  version    Int
+  weights    Json
+  accuracy   Float
+  nSamples   Int
+  trainedAt  DateTime
+  note       String? // e.g. "promoted", "rollback to v2"
+  createdAt  DateTime @default(now())
+
+  @@unique([modelType, version])
+  @@index([modelType, createdAt])
+  @@map("ml_model_versions")
+}
+
 // ─────────────────────────────────────────────
 // Songwriters
 // ─────────────────────────────────────────────

@@ -8,6 +8,7 @@
 import { db } from '@/lib/db';
 import { trainLogistic, predictProba, predictClass, type TrainedModel } from '../regression';
 import { extractTrackTrainingData, buildTrackFeatureVector, TRACK_FEATURE_NAMES } from '../features/track';
+import { archiveAndPromote } from '../versioning';
 
 export const MODEL_TYPE = 'track-viral';
 export const MODEL_VERSION = 1;
@@ -30,7 +31,7 @@ export async function loadModel(): Promise<TrainedModel | null> {
   return _cached;
 }
 
-function invalidateCache() {
+export function invalidateModelCache() {
   _cached = null;
   _cacheTime = 0;
 }
@@ -105,28 +106,17 @@ export async function trainTrackViralModel(): Promise<TrainResult> {
     };
   }
 
-  await db.mlModel.upsert({
-    where: { modelType: MODEL_TYPE },
-    update: {
-      version: MODEL_VERSION,
-      weights: model as any,
-      accuracy: model.accuracy,
-      nSamples: model.nSamples,
-      trainedAt: new Date(model.trainedAt),
-    },
-    create: {
-      modelType: MODEL_TYPE,
-      version: MODEL_VERSION,
-      weights: model as any,
-      accuracy: model.accuracy,
-      nSamples: model.nSamples,
-      trainedAt: new Date(model.trainedAt),
-    },
+  // Archive as a new version AND set active — reversible in one step.
+  const { version } = await archiveAndPromote(MODEL_TYPE, {
+    weights: model,
+    accuracy: model.accuracy,
+    nSamples: model.nSamples,
+    trainedAt: new Date(model.trainedAt),
   });
 
-  invalidateCache();
+  invalidateModelCache();
   console.log(
-    `[ml:track-viral] trained + promoted — samples=${model.nSamples} ` +
+    `[ml:track-viral] trained + promoted as v${version} — samples=${model.nSamples} ` +
       `heldOutAccuracy=${model.accuracy.toFixed(3)} (train=${model.trainAccuracy.toFixed(3)}, ` +
       `heldOut=${model.heldOut}, nTest=${model.nTestSamples})`,
   );

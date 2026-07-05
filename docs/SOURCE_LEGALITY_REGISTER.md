@@ -64,11 +64,16 @@ Credentials are enumerated (booleans only) at `/api/health`; none are logged.
 - **Crawls** run at the *lowest* useful cadence, single-threaded per source, with
   a render delay (`delay_before_return_html_s`) rather than aggressive parallel
   fetching.
-- **Action item (tracked):** add explicit `robots.txt` fetch-and-honor plus a
-  descriptive, contactable `User-Agent` to the crawler service before enabling
-  any *new* crawl source. Current crawl sources are chart/aggregate pages
-  reviewed individually; the automated robots check hardens this going forward.
-  Owner: Data. Target: pre-GA.
+- **robots.txt is honored automatically.** `crawlUrl` (`lib/crawler/client.ts`)
+  fetches and evaluates each origin's `robots.txt` for our descriptive
+  `User-Agent` (`MusicIntelligenceBot/1.0 (+repo URL)`) before every crawl and
+  refuses a disallowed path (`{ success:false, error:'blocked by robots.txt' }`)
+  — longest-match Allow/Disallow with wildcard/anchor support
+  (`lib/crawler/robots.ts`, covered by `tests/unit/crawler-robots.test.ts`).
+  The same User-Agent is sent to the crawler service so the actual fetch
+  identifies itself. Honoring can only be disabled per-call
+  (`respectRobots:false`) for a source with explicit written permission / a
+  contract — the default is always to honor.
 
 ## 5. Takedown & source-blocking runbook
 

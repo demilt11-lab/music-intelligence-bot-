@@ -7,11 +7,57 @@
 // hosted-API shape this mirrors.
 
 import { fetchWithRetry } from '@/lib/http/retry';
+import { isPathAllowed } from './robots';
 
 function getBaseUrl(): string {
   const url = process.env.CRAWLER_API_URL;
   if (!url) throw new Error('Missing required env var: CRAWLER_API_URL');
   return url.replace(/\/$/, '');
+}
+
+// A descriptive, contactable User-Agent — good crawler hygiene, and the token we
+// match robots.txt groups against. Overridable via env for a specific deploy.
+export const CRAWLER_USER_AGENT =
+  process.env.CRAWLER_USER_AGENT ??
+  'MusicIntelligenceBot/1.0 (+https://github.com/demilt11-lab/music-intelligence-bot-)';
+
+// Per-origin robots.txt cache. Missing/unreachable robots ⇒ allow (standard).
+const ROBOTS_TTL_MS = 60 * 60 * 1000;
+const robotsCache = new Map<string, { txt: string; fetchedAt: number }>();
+
+async function fetchRobots(origin: string): Promise<string> {
+  const cached = robotsCache.get(origin);
+  if (cached && Date.now() - cached.fetchedAt < ROBOTS_TTL_MS) return cached.txt;
+  let txt = '';
+  try {
+    const res = await fetch(`${origin}/robots.txt`, {
+      headers: { 'User-Agent': CRAWLER_USER_AGENT },
+      signal: AbortSignal.timeout(10_000),
+    });
+    // 2xx → use it; 4xx (incl. 404 "no robots") → allow all; 5xx → be cautious
+    // but non-blocking (treat as allow, standard crawler behavior).
+    txt = res.ok ? await res.text() : '';
+  } catch {
+    txt = ''; // unreachable robots ⇒ allow
+  }
+  robotsCache.set(origin, { txt, fetchedAt: Date.now() });
+  return txt;
+}
+
+/**
+ * Returns true if our crawler is permitted to fetch `url` per its site's
+ * robots.txt. Exposed for callers/tests; `crawlUrl` enforces it by default.
+ */
+export async function isCrawlAllowed(url: string): Promise<boolean> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  const robots = await fetchRobots(parsed.origin);
+  if (!robots) return true;
+  return isPathAllowed(robots, CRAWLER_USER_AGENT, parsed.pathname + parsed.search);
 }
 
 export interface CrawlExtractField {
@@ -50,6 +96,12 @@ export interface CrawlOptions {
   screenshot?: boolean;
   pageTimeoutMs?: number;
   extractionSchema?: CrawlExtractSchema;
+  /**
+   * Honor the target site's robots.txt (default true). A disallowed URL is not
+   * fetched — `crawlUrl` returns `{ success:false, error:'blocked by robots.txt' }`.
+   * Only set false for a source with explicit written permission / a contract.
+   */
+  respectRobots?: boolean;
 }
 
 export interface CrawlLink {
@@ -73,6 +125,14 @@ export async function crawlUrl<T = unknown>(
   url: string,
   options: CrawlOptions = {},
 ): Promise<CrawlResult<T>> {
+  // Robots.txt gate (default on). We do not fetch a path a site disallows.
+  if (options.respectRobots !== false) {
+    const allowed = await isCrawlAllowed(url);
+    if (!allowed) {
+      return { success: false, url, error: 'blocked by robots.txt' };
+    }
+  }
+
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const apiKey = process.env.CRAWLER_API_KEY;
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -91,6 +151,7 @@ export async function crawlUrl<T = unknown>(
         js_code_before_wait: options.jsCodeBeforeWait,
         scan_full_page: options.scanFullPage ?? false,
         magic: options.magic ?? true,
+        user_agent: CRAWLER_USER_AGENT,
         delay_before_return_html_s: options.delayBeforeReturnHtmlSeconds ?? 0.5,
         screenshot: options.screenshot ?? false,
         page_timeout_ms: options.pageTimeoutMs ?? 30000,
