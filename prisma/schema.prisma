@@ -214,6 +214,11 @@ enum TenantEnvironment {
   PROD
 }
 
+enum SsoProtocol {
+  OIDC
+  SAML
+}
+
 model Tenant {
   id          Int               @id @default(autoincrement())
   name        String
@@ -230,6 +235,8 @@ model Tenant {
   watchlistItems      WatchlistItem[]
   digestSubscriptions DigestSubscription[]
   alertRules          AlertRule[]
+  ssoConnections      SsoConnection[]
+  scimTokens          ScimToken[]
 }
 
 model WatchlistItem {
@@ -291,15 +298,77 @@ model TenantUser {
   tenantId     Int
   email        String
   role         TenantRole
-  passwordHash String?    // scrypt salt:hash — null until the user sets a password
+  passwordHash String?    // scrypt salt:hash — null until the user sets a password. SSO/SCIM users never set one.
+  // Enterprise identity. `externalId` is the stable IdP subject (OIDC `sub`) or
+  // SCIM `externalId`, used to re-link a user across logins even if their email
+  // changes. `isActive=false` is how SCIM deprovisioning soft-deletes a user
+  // (their sessions are revoked but the row and its audit trail are kept).
+  externalId      String?
+  isActive        Boolean @default(true)
+  ssoConnectionId Int?
+  provisionedVia  String  @default("password") // password | oidc | saml | scim
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  tenant   Tenant    @relation(fields: [tenantId], references: [id])
-  sessions Session[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id])
+  ssoConnection SsoConnection? @relation(fields: [ssoConnectionId], references: [id])
+  sessions      Session[]
 
   @@unique([tenantId, email])
+  @@unique([tenantId, externalId])
   @@index([email])
+}
+
+// A per-tenant identity-provider connection. A tenant can offer OIDC and/or
+// SAML SSO; users are matched to a connection by their email domain so the
+// login page can route "someone@acme.com" straight to Acme's IdP.
+model SsoConnection {
+  id          Int         @id @default(autoincrement())
+  tenantId    Int
+  protocol    SsoProtocol
+  displayName String
+  emailDomain String // e.g. "acme.com" — routes login by the user's email domain
+  enabled     Boolean     @default(true)
+  defaultRole TenantRole  @default(VIEWER) // role granted to JIT-provisioned users
+
+  // OIDC (authorization-code + PKCE). Secret is only ever read server-side.
+  oidcIssuer       String?
+  oidcClientId     String?
+  oidcClientSecret String?
+  oidcScopes       String  @default("openid email profile")
+
+  // SAML 2.0. `samlCert` is the IdP's signing certificate; assertions are
+  // rejected unless signed by it.
+  samlEntryPoint String? // IdP SSO URL
+  samlIssuer     String? // IdP entityID (expected `Issuer`)
+  samlCert       String? // IdP x509 signing cert (PEM)
+  samlAudience   String? // expected SP audience (defaults to our SP entityID)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant       @relation(fields: [tenantId], references: [id])
+  users  TenantUser[]
+
+  @@unique([tenantId, emailDomain])
+  @@index([emailDomain])
+}
+
+// A per-tenant bearer credential the customer's IdP uses to call our SCIM 2.0
+// provisioning API. Stored only as a SHA-256 hash — the raw token is shown once
+// at creation, exactly like an API key.
+model ScimToken {
+  id         Int       @id @default(autoincrement())
+  tenantId   Int
+  tokenHash  String    @unique
+  label      String
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId])
 }
 
 model Session {

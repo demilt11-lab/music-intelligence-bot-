@@ -339,6 +339,90 @@ async function main() {
       }
     }
 
+    // ── 10c. SCIM 2.0 provisioning + cross-tenant isolation ─────────────────
+    // Proves the SCIM provisioning API is bearer-authenticated, tenant-scoped,
+    // and that deprovisioning (active=false) actually takes effect.
+    {
+      const suffix = `${Date.now()}`;
+      const tA = await db.tenant.create({ data: { name: `SCIM A ${suffix}`, slug: `scim-a-${suffix}`, environment: 'PROD' } });
+      const tB = await db.tenant.create({ data: { name: `SCIM B ${suffix}`, slug: `scim-b-${suffix}`, environment: 'PROD' } });
+      function scimTok() {
+        const raw = `scim_${crypto.randomBytes(24).toString('hex')}`;
+        return { raw, hash: crypto.createHash('sha256').update(raw).digest('hex') };
+      }
+      const tokA = scimTok();
+      const tokB = scimTok();
+      await db.scimToken.create({ data: { tenantId: tA.id, tokenHash: tokA.hash, label: 'smoke-a' } });
+      await db.scimToken.create({ data: { tenantId: tB.id, tokenHash: tokB.hash, label: 'smoke-b' } });
+      const scimHeaders = (t: string) => ({ Authorization: `Bearer ${t}`, 'Content-Type': 'application/scim+json' });
+      const userEmail = `scim-user-${suffix}@acme.test`;
+
+      try {
+        const noAuth = await getJson('/api/scim/v2/Users');
+        check('GET /api/scim/v2/Users without bearer token → 401', noAuth.status === 401, `status=${noAuth.status}`);
+
+        const created = await getJson('/api/scim/v2/Users', {
+          method: 'POST',
+          headers: scimHeaders(tokA.raw),
+          body: JSON.stringify({
+            schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
+            userName: userEmail,
+            externalId: 'ext-smoke-1',
+            active: true,
+          }),
+        });
+        check('SCIM create user (tenant A) → 201 active', created.status === 201 && created.body?.active === true,
+          `status=${created.status}`);
+        const scimId = created.body?.id;
+
+        const listA = await getJson(
+          `/api/scim/v2/Users?filter=${encodeURIComponent(`userName eq "${userEmail}"`)}`,
+          { headers: scimHeaders(tokA.raw) },
+        );
+        check('  SCIM list with userName filter finds the user',
+          (listA.body?.Resources ?? []).some((u: any) => u.id === scimId));
+
+        const crossGet = await getJson(`/api/scim/v2/Users/${scimId}`, { headers: scimHeaders(tokB.raw) });
+        check('  Tenant B GET of tenant A\'s SCIM user → 404', crossGet.status === 404, `status=${crossGet.status}`);
+
+        const crossList = await getJson(
+          `/api/scim/v2/Users?filter=${encodeURIComponent(`userName eq "${userEmail}"`)}`,
+          { headers: scimHeaders(tokB.raw) },
+        );
+        check('  Tenant B SCIM list does NOT include tenant A\'s user',
+          !(crossList.body?.Resources ?? []).some((u: any) => u.id === scimId));
+
+        const patched = await getJson(`/api/scim/v2/Users/${scimId}`, {
+          method: 'PATCH',
+          headers: scimHeaders(tokA.raw),
+          body: JSON.stringify({
+            schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
+            Operations: [{ op: 'replace', path: 'active', value: false }],
+          }),
+        });
+        check('SCIM PATCH active=false (deprovision) → 200 inactive',
+          patched.status === 200 && patched.body?.active === false,
+          `status=${patched.status} active=${patched.body?.active}`);
+      } finally {
+        await db.tenantUser.deleteMany({ where: { tenantId: { in: [tA.id, tB.id] } } }).catch(() => {});
+        await db.scimToken.deleteMany({ where: { tenantId: { in: [tA.id, tB.id] } } }).catch(() => {});
+        await db.tenant.delete({ where: { id: tA.id } }).catch(() => {});
+        await db.tenant.delete({ where: { id: tB.id } }).catch(() => {});
+      }
+    }
+
+    // ── 10d. SSO login routes by email domain (and fails safe) ──────────────
+    {
+      const unknown = await fetch(
+        `${BASE_URL}/api/auth/sso/login?email=nobody@no-such-sso-domain-${Date.now()}.test`,
+        { redirect: 'manual' },
+      );
+      const loc = unknown.headers.get('location') ?? '';
+      check('SSO login with an unmapped domain → redirect back to /login with sso_error',
+        unknown.status >= 300 && unknown.status < 400 && loc.includes('/login') && loc.includes('sso_error='),
+        `status=${unknown.status} location=${loc}`);
+    }
+
     // ── 11. MCP initialize handshake ────────────────────────────────────────
     const mcpRes = await getJson('/api/mcp', {
       method: 'POST',

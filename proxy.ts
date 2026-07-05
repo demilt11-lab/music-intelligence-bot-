@@ -9,9 +9,16 @@ const PUBLIC_API_PATTERNS = [
 ];
 
 // API namespaces with their own auth: v1 (API keys), cron (CRON_SECRET),
-// internal (per-route checks), mcp (session OR x-api-key handled in route).
+// internal (per-route checks), mcp (session OR x-api-key handled in route),
+// scim (per-tenant SCIM bearer token verified in-route).
 // Session auth applies to all other /api/* routes.
-const SELF_AUTHED_API = [/^\/api\/v1\//, /^\/api\/cron\//, /^\/api\/internal\//, /^\/api\/mcp/];
+const SELF_AUTHED_API = [
+  /^\/api\/v1\//,
+  /^\/api\/cron\//,
+  /^\/api\/internal\//,
+  /^\/api\/mcp/,
+  /^\/api\/scim\//,
+];
 
 const SESSION_COOKIE = 'nv8_session';
 

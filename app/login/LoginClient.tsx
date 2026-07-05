@@ -8,8 +8,23 @@ export default function LoginClient() {
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const ssoError = searchParams.get('sso_error')
+  const [error, setError] = useState<string | null>(
+    ssoError ? `Single sign-on failed (${ssoError.replace(/_/g, ' ')}). Try again or use your password.` : null,
+  )
   const [loading, setLoading] = useState(false)
+
+  function handleSso() {
+    if (!email) {
+      setError('Enter your work email to continue with SSO.')
+      return
+    }
+    const next = searchParams.get('next')
+    const params = new URLSearchParams({ email })
+    if (next && next.startsWith('/')) params.set('returnTo', next)
+    // Full navigation (not fetch): the browser must follow the redirect to the IdP.
+    window.location.href = `/api/auth/sso/login?${params.toString()}`
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -95,6 +110,23 @@ export default function LoginClient() {
             {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
+
+        <div className="my-6 flex items-center gap-3 text-[11px] uppercase tracking-[0.22em] text-zinc-600">
+          <span className="h-px flex-1 bg-white/10" />
+          or
+          <span className="h-px flex-1 bg-white/10" />
+        </div>
+
+        <button
+          type="button"
+          onClick={handleSso}
+          className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-medium text-zinc-200 transition hover:bg-white/[0.06]"
+        >
+          Continue with SSO
+        </button>
+        <p className="mt-2 text-center text-[11px] text-zinc-600">
+          Enterprise single sign-on, routed by your email domain.
+        </p>
 
         <p className="mt-6 text-xs leading-5 text-zinc-500">
           Access is provisioned by your workspace admin
