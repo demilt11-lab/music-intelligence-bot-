@@ -1696,15 +1696,20 @@ model MlModel {
 // rolled back in one step to any prior version (previously impossible — the
 // upsert overwrote the incumbent with no way back).
 model MlModelVersion {
-  id         Int      @id @default(autoincrement())
-  modelType  String
-  version    Int
-  weights    Json
-  accuracy   Float
-  nSamples   Int
-  trainedAt  DateTime
-  note       String? // e.g. "promoted", "rollback to v2"
-  createdAt  DateTime @default(now())
+  id          Int      @id @default(autoincrement())
+  modelType   String
+  version     Int
+  weights     Json
+  accuracy    Float
+  nSamples    Int
+  trainedAt   DateTime
+  note        String? // e.g. "promoted", "rollback to v2"
+  // Reproducibility ledger: the code commit and a hash of the exact training
+  // set behind this version, so any model in production can be traced back to
+  // its inputs for audit/debugging.
+  codeSha     String?
+  datasetHash String?
+  createdAt   DateTime @default(now())
 
   @@unique([modelType, version])
   @@index([modelType, createdAt])

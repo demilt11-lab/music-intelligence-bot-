@@ -5,6 +5,7 @@
 // version ever promoted. Promotion snapshots the new version here first, so a
 // bad promotion can always be reverted to a prior version — the gap the
 // readiness review flagged ("no previous-model store").
+import crypto from 'crypto';
 import { db } from '@/lib/db';
 import type { TrainedModel } from './regression';
 
@@ -13,7 +14,32 @@ export type StoredModelFields = {
   accuracy: number;
   nSamples: number;
   trainedAt: Date;
+  /** Hash of the exact training set (see hashDataset). */
+  datasetHash?: string;
 };
+
+/** The code commit that produced a model, from the usual CI/deploy env vars. */
+export function currentCodeSha(): string | null {
+  return (
+    process.env.GIT_SHA ??
+    process.env.VERCEL_GIT_COMMIT_SHA ??
+    process.env.GITHUB_SHA ??
+    process.env.COMMIT_SHA ??
+    null
+  );
+}
+
+/**
+ * Stable content hash of a training set for the reproducibility ledger. Pure and
+ * order-independent-safe (rows are hashed in given order; callers pass the same
+ * deterministic extraction), so the same data always yields the same hash.
+ */
+export function hashDataset(rows: unknown[]): string {
+  const h = crypto.createHash('sha256');
+  h.update(String(rows.length));
+  for (const r of rows) h.update('\n' + JSON.stringify(r));
+  return h.digest('hex').slice(0, 32);
+}
 
 /**
  * Choose which version to roll back to. Pure so the (only interesting) logic is
@@ -70,6 +96,8 @@ export async function archiveAndPromote(
       nSamples: fields.nSamples,
       trainedAt: fields.trainedAt,
       note,
+      codeSha: currentCodeSha(),
+      datasetHash: fields.datasetHash ?? null,
     },
   });
 
@@ -117,6 +145,7 @@ export async function rollbackModel(modelType: string, toVersion?: number): Prom
       modelType, version: newVersion, weights: snapshot.weights as any,
       accuracy: snapshot.accuracy, nSamples: snapshot.nSamples, trainedAt: snapshot.trainedAt,
       note: `rollback to v${target}`,
+      codeSha: snapshot.codeSha, datasetHash: snapshot.datasetHash,
     },
   });
   await db.mlModel.update({
@@ -137,6 +166,6 @@ export async function listModelVersions(modelType: string, limit = 20) {
     where: { modelType },
     orderBy: { version: 'desc' },
     take: limit,
-    select: { version: true, accuracy: true, nSamples: true, trainedAt: true, note: true, createdAt: true },
+    select: { version: true, accuracy: true, nSamples: true, trainedAt: true, note: true, codeSha: true, datasetHash: true, createdAt: true },
   });
 }

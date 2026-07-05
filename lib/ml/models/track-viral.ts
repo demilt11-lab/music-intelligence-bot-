@@ -8,7 +8,7 @@
 import { db } from '@/lib/db';
 import { trainLogistic, predictProba, predictClass, type TrainedModel } from '../regression';
 import { extractTrackTrainingData, buildTrackFeatureVector, TRACK_FEATURE_NAMES } from '../features/track';
-import { archiveAndPromote } from '../versioning';
+import { archiveAndPromote, hashDataset } from '../versioning';
 
 export const MODEL_TYPE = 'track-viral';
 export const MODEL_VERSION = 1;
@@ -112,6 +112,7 @@ export async function trainTrackViralModel(): Promise<TrainResult> {
     accuracy: model.accuracy,
     nSamples: model.nSamples,
     trainedAt: new Date(model.trainedAt),
+    datasetHash: hashDataset(data.map((r) => ({ f: r.features, y: r.label }))),
   });
 
   invalidateModelCache();

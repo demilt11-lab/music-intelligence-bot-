@@ -7,7 +7,7 @@
 import { db } from '@/lib/db';
 import { trainLogistic, predictProba, predictClass, type TrainedModel } from '../regression';
 import { extractArtistTrainingData, buildArtistFeatureVector, ARTIST_FEATURE_NAMES } from '../features/artist';
-import { archiveAndPromote } from '../versioning';
+import { archiveAndPromote, hashDataset } from '../versioning';
 
 export const MODEL_TYPE = 'artist-trajectory';
 export const MODEL_VERSION = 1;
@@ -116,6 +116,7 @@ export async function trainArtistTrajectoryModel(): Promise<TrainResult> {
     accuracy: model.accuracy,
     nSamples: model.nSamples,
     trainedAt: new Date(model.trainedAt),
+    datasetHash: hashDataset(data.map((r) => ({ f: r.features, y: r.label }))),
   });
 
   invalidateModelCache();

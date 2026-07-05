@@ -346,9 +346,11 @@ mutating them, so re-running the job after fixing the root cause (bad
 credential, upstream API change, etc.) self-heals in most cases — this is
 job-specific, there is no single "undo" command.
 
-**Who to page:** not formalized in this repo — no on-call rotation or
-incident-severity definitions exist yet. At minimum, confirm who owns
-watching `/status` and the Slack alerts channel before launch.
+**Who to page & severity:** see `docs/INCIDENT_RESPONSE.md` — severity
+definitions (SEV1–4), the on-call rotation policy + template, escalation,
+detection sources (incl. `GET /api/internal/observability`), the step-by-step
+response procedure, and the postmortem process. Populate the concrete rotation
+in `docs/ONCALL.md` before launch.
 
 ---
 
@@ -374,15 +376,18 @@ watching `/status` and the Slack alerts channel before launch.
   vendor account and DSN this repo doesn't have; nothing to wire up without
   that.
 
-- **Browser-driven E2E coverage is narrow.** `npm run test:e2e` (Playwright,
-  wired into CI as the `E2E (Playwright)` job) now renders real pages against
-  a real Chromium and covers the two flows that only a browser can verify:
-  the auth redirect/login/error cycle (`tests/e2e/auth.spec.ts`) and the
-  homepage CommandBar's disabled/enabled/navigate behavior (BUG-009,
-  `tests/e2e/homepage.spec.ts`). `npm run smoke` (`scripts/smoke.ts`) remains
-  the broader HTTP-level integration test. Neither suite covers most other
-  pages (search, artist/track detail, watchlist, compare, the A&R bot chat) —
-  extending Playwright coverage to those is a follow-up, not a blocker.
+- **Browser-driven E2E coverage.** `npm run test:e2e` (Playwright, wired into
+  CI as the `E2E (Playwright)` job) renders real pages against a real Chromium.
+  It covers the auth redirect/login/error cycle (`tests/e2e/auth.spec.ts`), the
+  homepage CommandBar disabled/enabled/navigate behavior (BUG-009,
+  `tests/e2e/homepage.spec.ts`), core-page rendering for watchlist / search /
+  artists / A&R bot without an error boundary (`tests/e2e/navigation.spec.ts`),
+  the search box + URL-query handoff (`tests/e2e/search.spec.ts`), the watchlist
+  empty-state client-fetch path (`tests/e2e/watchlist.spec.ts`), and the A&R bot
+  disabled-until-input guard (`tests/e2e/ar-bot.spec.ts`) — 15 tests. `npm run
+  smoke` + `npm run pentest` (`scripts/*.ts`) remain the HTTP-level integration
+  and security suites. Deeper per-page assertions (artist/track detail with
+  seeded data, compare) can be layered on as data fixtures grow.
 
 Resolved 2026-07-04: **npm audit is clean (0 vulnerabilities).** The postcss
 override in `package.json` already patches the advisory previously tracked

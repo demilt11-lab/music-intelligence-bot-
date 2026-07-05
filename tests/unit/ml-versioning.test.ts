@@ -6,7 +6,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pickRollbackVersion } from '@/lib/ml/versioning';
+import { pickRollbackVersion, hashDataset } from '@/lib/ml/versioning';
 
 const history = [{ version: 1 }, { version: 2 }, { version: 3 }];
 
@@ -30,4 +30,13 @@ test('rejects when there is no prior version to roll back to (409)', () => {
 test('predecessor is the highest version strictly below active, not just active-1', () => {
   // Gaps in the history (e.g. a rejected promotion) must still resolve correctly.
   assert.equal(pickRollbackVersion([{ version: 1 }, { version: 4 }, { version: 5 }], 5), 4);
+});
+
+test('hashDataset is deterministic and sensitive to the training data', () => {
+  const a = [{ f: [1, 2], y: 'VIRAL' }, { f: [3, 4], y: 'NONE' }];
+  const b = [{ f: [1, 2], y: 'VIRAL' }, { f: [3, 4], y: 'NONE' }];
+  const c = [{ f: [1, 2], y: 'VIRAL' }, { f: [3, 5], y: 'NONE' }];
+  assert.equal(hashDataset(a), hashDataset(b), 'same data → same hash (reproducible)');
+  assert.notEqual(hashDataset(a), hashDataset(c), 'changed data → changed hash');
+  assert.match(hashDataset(a), /^[0-9a-f]{32}$/);
 });
