@@ -4,7 +4,12 @@ pandas>=2.0.0
 numpy>=1.24.0
 joblib>=1.3.0
 torch>=2.6.0
-fastapi>=0.104.0
+# FastAPI >= 0.139 depends on a Starlette that validates the Host header; the
+# old 0.104 floor was incoherent with the starlette pin below (it capped
+# starlette at < 0.28).
+fastapi>=0.139.0
+# Starlette < 1.0.1 is vulnerable to the "BadHost" host-header validation
+# bypass / auth bypass (CVE-2026-48710); 1.3.1 is the current patched release.
 starlette>=1.3.1
 uvicorn>=0.24.0
 psycopg2-binary>=2.9.0

@@ -1,5 +1,22 @@
-crawl4ai>=0.6.0
-fastapi>=0.104.0
+# crawl4ai 0.9.0 is the "secure-by-default" release. Versions < 0.8.7 are
+# vulnerable to code/argument injection via the eval/hooks path
+# (CVE-2026-53753, fixed in 0.8.7); 0.9.0 additionally hardens the API server.
+crawl4ai>=0.9.0
+# FastAPI >= 0.139 requires a Host-header-validating Starlette (see root
+# requirements.txt); earlier floors (0.104) predate that fix.
+fastapi>=0.139.0
 uvicorn>=0.24.0
 pydantic>=2.0.0
 python-dotenv>=1.0.0
+
+# --- Security floors for crawl4ai's transitive dependencies ---
+# crawl4ai declares only lower bounds for these, so pin the patched releases
+# here explicitly. Both stay within crawl4ai's own accepted ranges
+# (pillow>=10.4, nltk>=3.9.1).
+pillow>=12.2.0  # integer/buffer overflow in font glyph handling (CVE-2026-42308), fixed in 12.2.0
+nltk>=3.9.4     # Downloader / data.load() path traversal (CVE-2026-0847, CVE-2026-33236), fixed through 3.9.4
+# lxml: the XXE fix (CVE-2026-41066) lands in lxml 6.1.0, but crawl4ai pins
+# `lxml~=5.3` (< 6.0), so it cannot be raised here without an upstream crawl4ai
+# change. Not exploitable via this service: neither it nor lib/crawler parses
+# untrusted XML through the affected iterparse()/ETCompatXMLParser paths. Lift
+# this note once crawl4ai loosens its lxml cap.
