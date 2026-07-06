@@ -77,6 +77,7 @@ jobs:
       DIRECT_URL: postgresql://postgres:postgres@localhost:5432/music_intelligence
       CRON_SECRET: ci-smoke-secret
       AUTH_SECRET: ci-smoke-auth-secret
+      INTERNAL_ADMIN_SECRET: ci-smoke-internal-secret
       INTERNAL_API_BASE_URL: http://localhost:3000
       NEXT_PUBLIC_BASE_URL: http://localhost:3000
       NEXT_TELEMETRY_DISABLED: "1"
@@ -116,6 +117,11 @@ jobs:
 
       - name: Run smoke test
         run: npm run smoke
+
+      - name: Run penetration test (attacks must be blocked)
+        env:
+          PENTEST_BASE_URL: http://localhost:3000
+        run: npm run pentest
 
       - name: Server logs on failure
         if: failure()

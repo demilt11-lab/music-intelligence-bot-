@@ -15,26 +15,58 @@ function subDays(date: Date, days: number): Date {
 }
 
 /**
- * Precision = TP / (TP + FP)
- * Recall    = TP / (TP + FN)
- * F1        = 2 * precision * recall / (precision + recall)
+ * Confusion matrix for a binary detector. Each evaluator decides, per row,
+ * whether the model made a *positive* (actionable) call — e.g. "this will
+ * break out", "this is trending", "high break probability" — and whether that
+ * call was correct (the existing `wasCorrect` logic). From those two bits every
+ * row lands in exactly one cell:
  *
- * Here we treat "was_correct=true" as TP and "was_correct=false" as FP/FN
- * at the binary level (correct vs. incorrect).
+ *   predictedPositive & correct   → TP   (flagged it, and was right)
+ *   predictedPositive & !correct  → FP   (flagged it, and was wrong)
+ *   !predictedPositive & correct  → TN   (said "no", and was right)
+ *   !predictedPositive & !correct → FN   (said "no", but missed a real one)
  */
-function computeMetrics(correct: number, total: number): {
+export type ConfusionMatrix = { tp: number; fp: number; fn: number; tn: number };
+
+export function emptyConfusion(): ConfusionMatrix {
+  return { tp: 0, fp: 0, fn: 0, tn: 0 };
+}
+
+/** Fold one evaluated prediction into the running confusion matrix. */
+export function tally(
+  cm: ConfusionMatrix,
+  predictedPositive: boolean,
+  wasCorrect: boolean,
+): void {
+  if (predictedPositive && wasCorrect) cm.tp++;
+  else if (predictedPositive && !wasCorrect) cm.fp++;
+  else if (!predictedPositive && wasCorrect) cm.tn++;
+  else cm.fn++;
+}
+
+/**
+ * Precision = TP / (TP + FP)   — of everything we flagged, how much was real
+ * Recall    = TP / (TP + FN)   — of everything real, how much we caught
+ * Accuracy  = (TP + TN) / N    — overall correctness (== correct/total)
+ * F1        = 2·P·R / (P + R)
+ *
+ * These are genuinely distinct: a model that flags almost nothing can have
+ * high precision but poor recall, and vice-versa. Reporting one number for all
+ * three (the old behaviour) hid exactly that trade-off from label data teams.
+ */
+export function computeMetrics(cm: ConfusionMatrix): {
   accuracy: number;
   precision: number;
   recall: number;
   f1Score: number;
 } {
+  const total = cm.tp + cm.fp + cm.fn + cm.tn;
   if (total === 0) {
     return { accuracy: 0, precision: 0, recall: 0, f1Score: 0 };
   }
-  const accuracy = correct / total;
-  // Binary: precision = recall = accuracy (TP / (TP + FP) where FP = incorrect)
-  const precision = accuracy;
-  const recall = accuracy;
+  const accuracy = (cm.tp + cm.tn) / total;
+  const precision = cm.tp + cm.fp > 0 ? cm.tp / (cm.tp + cm.fp) : 0;
+  const recall = cm.tp + cm.fn > 0 ? cm.tp / (cm.tp + cm.fn) : 0;
   const f1Score =
     precision + recall > 0
       ? (2 * precision * recall) / (precision + recall)
@@ -69,6 +101,7 @@ async function evaluateTrendLabels(today: Date): Promise<void> {
   if (pending.length === 0) return;
 
   let correct = 0;
+  const cm = emptyConfusion();
 
   for (const outcome of pending) {
     // Fetch the track's current trend label(s)
@@ -104,15 +137,14 @@ async function evaluateTrendLabels(today: Date): Promise<void> {
     });
 
     if (wasCorrect) correct++;
+    // Positive class = the model called a trend (anything but NONE).
+    tally(cm, predicted !== "NONE", wasCorrect);
   }
 
-  const { accuracy, precision, recall, f1Score } = computeMetrics(
-    correct,
-    pending.length,
-  );
+  const { accuracy, precision, recall, f1Score } = computeMetrics(cm);
 
   console.log(
-    `[evaluate_predictions] trend_label accuracy=${(accuracy * 100).toFixed(1)}% (${correct}/${pending.length})`,
+    `[evaluate_predictions] trend_label accuracy=${(accuracy * 100).toFixed(1)}% precision=${(precision * 100).toFixed(1)}% recall=${(recall * 100).toFixed(1)}% (${correct}/${pending.length})`,
   );
 
   await db.modelAccuracyReport.upsert({
@@ -179,7 +211,7 @@ async function evaluateMlTrendLabels(today: Date): Promise<void> {
   // All rows in a given evaluation run come from the same trained model
   // (track-viral) — group by (modelName, modelVersion) in case that ever
   // changes, so accuracy isn't blended across model versions.
-  const byModel = new Map<string, { correct: number; total: number }>();
+  const byModel = new Map<string, ConfusionMatrix>();
 
   for (const outcome of pending) {
     const currentLabels = await db.trackTrendLabel.findMany({
@@ -210,9 +242,8 @@ async function evaluateMlTrendLabels(today: Date): Promise<void> {
 
     if (wasCorrect) correct++;
     const modelKey = `${outcome.modelName}:${outcome.modelVersion ?? "unversioned"}`;
-    const agg = byModel.get(modelKey) ?? { correct: 0, total: 0 };
-    agg.total++;
-    if (wasCorrect) agg.correct++;
+    const agg = byModel.get(modelKey) ?? emptyConfusion();
+    tally(agg, predicted !== "NONE", wasCorrect);
     byModel.set(modelKey, agg);
   }
 
@@ -223,7 +254,9 @@ async function evaluateMlTrendLabels(today: Date): Promise<void> {
   for (const [modelKey, agg] of byModel) {
     const [modelName, modelVersionRaw] = modelKey.split(":");
     const modelVersion = modelVersionRaw === "unversioned" ? null : modelVersionRaw;
-    const { accuracy, precision, recall, f1Score } = computeMetrics(agg.correct, agg.total);
+    const { accuracy, precision, recall, f1Score } = computeMetrics(agg);
+    const aggTotal = agg.tp + agg.fp + agg.fn + agg.tn;
+    const aggCorrect = agg.tp + agg.tn;
 
     await db.modelAccuracyReport.upsert({
       where: {
@@ -234,8 +267,8 @@ async function evaluateMlTrendLabels(today: Date): Promise<void> {
         },
       },
       update: {
-        totalPredictions: agg.total,
-        correctPredictions: agg.correct,
+        totalPredictions: aggTotal,
+        correctPredictions: aggCorrect,
         accuracy,
         precision,
         recall,
@@ -246,8 +279,8 @@ async function evaluateMlTrendLabels(today: Date): Promise<void> {
         modelName,
         evaluationDate: today,
         windowDays: WINDOW_DAYS,
-        totalPredictions: agg.total,
-        correctPredictions: agg.correct,
+        totalPredictions: aggTotal,
+        correctPredictions: aggCorrect,
         accuracy,
         precision,
         recall,
@@ -337,6 +370,7 @@ async function evaluateViralScores(today: Date): Promise<void> {
   }
 
   let correct = 0;
+  const cm = emptyConfusion();
 
   for (const outcome of pending) {
     const tid = outcome.trackId as number;
@@ -360,12 +394,14 @@ async function evaluateViralScores(today: Date): Promise<void> {
     });
 
     if (wasCorrect) correct++;
+    // Positive class = the model called a breakout (score above threshold).
+    tally(cm, predictedBreakout, wasCorrect);
   }
 
-  const { accuracy, precision, recall, f1Score } = computeMetrics(correct, pending.length);
+  const { accuracy, precision, recall, f1Score } = computeMetrics(cm);
 
   console.log(
-    `[evaluate_predictions] viral_score (60d breakout) accuracy=${(accuracy * 100).toFixed(1)}% (${correct}/${pending.length})`,
+    `[evaluate_predictions] viral_score (60d breakout) accuracy=${(accuracy * 100).toFixed(1)}% precision=${(precision * 100).toFixed(1)}% recall=${(recall * 100).toFixed(1)}% (${correct}/${pending.length})`,
   );
 
   await db.modelAccuracyReport.upsert({
@@ -428,6 +464,7 @@ async function evaluateBreakProbability(today: Date): Promise<void> {
   if (pending.length === 0) return;
 
   let correct = 0;
+  const cm = emptyConfusion();
 
   for (const outcome of pending) {
     // Find the artist's most recent trajectory snapshot
@@ -441,11 +478,12 @@ async function evaluateBreakProbability(today: Date): Promise<void> {
     const predictedProb = parseFloat(outcome.predictedValue);
     const isPositive =
       currentStatus === "ABOUT_TO_BREAK" || currentStatus === "GROWING";
+    const predictedPositive = predictedProb > 0.7;
 
     let wasCorrect = false;
-    if (predictedProb > 0.7 && isPositive) {
+    if (predictedPositive && isPositive) {
       wasCorrect = true;
-    } else if (predictedProb <= 0.7 && !isPositive) {
+    } else if (!predictedPositive && !isPositive) {
       wasCorrect = true;
     }
 
@@ -459,15 +497,14 @@ async function evaluateBreakProbability(today: Date): Promise<void> {
     });
 
     if (wasCorrect) correct++;
+    // Positive class = the model called a likely break (prob above threshold).
+    tally(cm, predictedPositive, wasCorrect);
   }
 
-  const { accuracy, precision, recall, f1Score } = computeMetrics(
-    correct,
-    pending.length,
-  );
+  const { accuracy, precision, recall, f1Score } = computeMetrics(cm);
 
   console.log(
-    `[evaluate_predictions] break_probability accuracy=${(accuracy * 100).toFixed(1)}% (${correct}/${pending.length})`,
+    `[evaluate_predictions] break_probability accuracy=${(accuracy * 100).toFixed(1)}% precision=${(precision * 100).toFixed(1)}% recall=${(recall * 100).toFixed(1)}% (${correct}/${pending.length})`,
   );
 
   await db.modelAccuracyReport.upsert({

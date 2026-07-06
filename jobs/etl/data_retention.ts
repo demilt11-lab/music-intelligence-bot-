@@ -55,6 +55,15 @@ async function main(): Promise<{ rowsWritten: number }> {
   console.log(`[data-retention] Deleted ${jobRunsDeleted} job_runs older than 90 days`);
   totalDeleted += jobRunsDeleted;
 
+  // Error events: 90-day retention on aggregates not seen recently. A still-
+  // firing error keeps a recent lastSeenAt and is retained.
+  const errorEventCutoff = daysAgo(90);
+  const { count: errorsDeleted } = await db.errorEvent.deleteMany({
+    where: { lastSeenAt: { lt: errorEventCutoff } },
+  });
+  console.log(`[data-retention] Deleted ${errorsDeleted} error_events not seen in 90 days`);
+  totalDeleted += errorsDeleted;
+
   console.log(`[data-retention] Total rows purged: ${totalDeleted}`);
 
   await db.$disconnect();

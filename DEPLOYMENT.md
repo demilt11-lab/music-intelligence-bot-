@@ -324,11 +324,20 @@ Should be rare — the promotion gate in `lib/ml/models/{artist-trajectory,
 track-viral}.ts` already blocks a retrain that regresses held-out accuracy
 by more than 2 points vs. the incumbent. If a bad model still got promoted
 (e.g. the regression was subtle enough to pass the gate but wrong in
-practice): call `POST /api/internal/ml/train` again once the underlying
-data issue is fixed — training always compares against the current
-incumbent, so a good retrain will simply replace the bad one. There is no
-separate "previous model" store to roll back to (`ml_models` holds one row
-per model type) — this is a known gap, not a solved one.
+practice), **roll back in one step**:
+
+```
+POST /api/internal/ml/rollback
+  { "modelType": "track-viral" }            # → reverts to the previous version
+  { "modelType": "track-viral", "toVersion": 3 }   # → reverts to a specific version
+```
+
+Every promotion is archived in `ml_model_versions` (append-only), and
+`GET /api/internal/ml/status` lists each model's recent version history so you
+can pick a rollback target. The rollback takes effect immediately (the active
+model cache is invalidated) and is itself recorded as a new version, so history
+is never rewritten. Alternatively, call `POST /api/internal/ml/train` again once
+the underlying data issue is fixed to train a fresh replacement.
 
 **A bad pipeline run (ingest/ETL wrote bad data):**
 Check `/status` or the `job_runs` table for the specific run, then check
@@ -338,18 +347,31 @@ mutating them, so re-running the job after fixing the root cause (bad
 credential, upstream API change, etc.) self-heals in most cases — this is
 job-specific, there is no single "undo" command.
 
-**Who to page:** not formalized in this repo — no on-call rotation or
-incident-severity definitions exist yet. At minimum, confirm who owns
-watching `/status` and the Slack alerts channel before launch.
+**Who to page & severity:** see `docs/INCIDENT_RESPONSE.md` — severity
+definitions (SEV1–4), the on-call rotation policy + template, escalation,
+detection sources (incl. `GET /api/internal/observability`), the step-by-step
+response procedure, and the postmortem process. Populate the concrete rotation
+in `docs/ONCALL.md` before launch.
 
 ---
 
 ## 12. Deployment debt (tracked, not yet resolved)
 
-- **Branch protection on `main` is still unverified.** Needs a repo admin to
-  require the `ci.yml` checks in GitHub Settings → Branches — not something
-  that can be confirmed or set from inside the repository or via any
-  available tool. Until this is set, a failing-CI PR can still merge.
+- **Branch protection on `main` — one admin command.** Branch protection is a
+  GitHub *account setting* that cannot be toggled from application code (the
+  Claude session's GitHub access is scoped for read/PR only). It is reduced to a
+  single idempotent command a repo admin runs once:
+
+  ```
+  GITHUB_TOKEN=<admin PAT, repo scope> ./scripts/set-branch-protection.sh
+  ```
+
+  This requires the four CI checks (`Typecheck · Lint · Build · Unit tests`,
+  `Smoke (Postgres + live server)`, `ETL pipeline integration`,
+  `E2E (Playwright)`) + a PR review + linear history before any merge, so a
+  failing-CI PR can no longer merge. A GitHub *ruleset* equivalent is committed
+  at `.github/rulesets/main-protection.json` (Settings → Rules → import) for
+  admins who prefer rulesets over classic protection.
 
 - **Validation rigor still varies by route** (some go through
   `lib/shared/validation.ts` + a dedicated `validate.ts`, others do an inline
@@ -366,15 +388,18 @@ watching `/status` and the Slack alerts channel before launch.
   vendor account and DSN this repo doesn't have; nothing to wire up without
   that.
 
-- **Browser-driven E2E coverage is narrow.** `npm run test:e2e` (Playwright,
-  wired into CI as the `E2E (Playwright)` job) now renders real pages against
-  a real Chromium and covers the two flows that only a browser can verify:
-  the auth redirect/login/error cycle (`tests/e2e/auth.spec.ts`) and the
-  homepage CommandBar's disabled/enabled/navigate behavior (BUG-009,
-  `tests/e2e/homepage.spec.ts`). `npm run smoke` (`scripts/smoke.ts`) remains
-  the broader HTTP-level integration test. Neither suite covers most other
-  pages (search, artist/track detail, watchlist, compare, the A&R bot chat) —
-  extending Playwright coverage to those is a follow-up, not a blocker.
+- **Browser-driven E2E coverage.** `npm run test:e2e` (Playwright, wired into
+  CI as the `E2E (Playwright)` job) renders real pages against a real Chromium.
+  It covers the auth redirect/login/error cycle (`tests/e2e/auth.spec.ts`), the
+  homepage CommandBar disabled/enabled/navigate behavior (BUG-009,
+  `tests/e2e/homepage.spec.ts`), core-page rendering for watchlist / search /
+  artists / A&R bot without an error boundary (`tests/e2e/navigation.spec.ts`),
+  the search box + URL-query handoff (`tests/e2e/search.spec.ts`), the watchlist
+  empty-state client-fetch path (`tests/e2e/watchlist.spec.ts`), and the A&R bot
+  disabled-until-input guard (`tests/e2e/ar-bot.spec.ts`) — 15 tests. `npm run
+  smoke` + `npm run pentest` (`scripts/*.ts`) remain the HTTP-level integration
+  and security suites. Deeper per-page assertions (artist/track detail with
+  seeded data, compare) can be layered on as data fixtures grow.
 
 Resolved 2026-07-04: **npm audit is clean (0 vulnerabilities).** The postcss
 override in `package.json` already patches the advisory previously tracked

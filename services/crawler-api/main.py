@@ -97,6 +97,7 @@ class CrawlRequest(BaseModel):
     )
     scan_full_page: bool = Field(False, description="Auto-scroll to trigger lazy-loaded content")
     magic: bool = Field(True, description="Stealth mode: randomized UA, masks automation signals")
+    user_agent: Optional[str] = Field(None, description="Descriptive User-Agent identifying the crawler (honored over magic's random UA when set)")
     delay_before_return_html_s: float = Field(0.5, description="Pause before capturing final HTML (SPA render time)")
     screenshot: bool = False
     page_timeout_ms: int = 30000
@@ -151,7 +152,13 @@ async def crawl(req: CrawlRequest, authorization: Optional[str] = Header(None)) 
         page_timeout=req.page_timeout_ms,
         extraction_strategy=extraction_strategy,
     )
-    browser_config = BrowserConfig(headless=True)
+    # A descriptive User-Agent (sent by the client) identifies the crawler to
+    # the target site — the same token robots.txt is evaluated against upstream.
+    browser_config = (
+        BrowserConfig(headless=True, user_agent=req.user_agent)
+        if req.user_agent
+        else BrowserConfig(headless=True)
+    )
 
     try:
         async with AsyncWebCrawler(config=browser_config) as crawler:
