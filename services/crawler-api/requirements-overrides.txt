@@ -1,0 +1,21 @@
+# Security override: force lxml past crawl4ai's `lxml~=5.3` (< 6.0) cap.
+#
+# crawl4ai 0.9.0 still caps lxml below 6.0, but the XXE fix for CVE-2026-41066
+# (unsafe resolve_entities default in iterparse() / ETCompatXMLParser) only
+# lands in lxml 6.1.0. Install this file AFTER the base requirements so pip
+# upgrades lxml in a separate resolution step:
+#
+#     pip install -r requirements.txt
+#     pip install -r requirements-overrides.txt
+#
+# The second command force-upgrades lxml and exits 0 with a benign
+# "crawl4ai 0.9.0 requires lxml~=5.3, but you have lxml 6.1.x which is
+# incompatible" dependency-conflict warning (the pins only clash inside a
+# single resolution, not across two invocations). crawl4ai's HTML parsing path
+# is API-compatible with lxml 6.x; smoke-test /health and one ingest job after
+# deploying to confirm.
+#
+# NOTE: `pip check` will likewise report the declared-cap mismatch and exit 1
+# by design — this is expected. Any build/deploy gate that runs `pip check`
+# should tolerate this single crawl4ai/lxml line.
+lxml>=6.1.0

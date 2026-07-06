@@ -250,6 +250,7 @@ Vercel build:
 ```bash
 cd services/crawler-api
 pip install -r requirements.txt
+pip install -r requirements-overrides.txt   # force lxml >= 6.1.0 (XXE fix) past crawl4ai's cap
 python -m playwright install --with-deps chromium
 uvicorn main:app --host 0.0.0.0 --port 8090
 ```

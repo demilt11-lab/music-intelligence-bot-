@@ -16,6 +16,7 @@ bundled into the Next.js build.
 cd services/crawler-api
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r requirements-overrides.txt   # force lxml >= 6.1.0 (XXE fix) past crawl4ai's cap
 python -m playwright install --with-deps chromium
 
 uvicorn main:app --host 0.0.0.0 --port 8090 --reload
@@ -84,6 +85,7 @@ do not deploy publicly without setting a key).
 ## Deployment
 
 Same posture as `services/ar-api` (see `DEPLOYMENT.md` § ML service): deploy
-as a separate process on Railway/Fly.io/similar, run
-`python -m playwright install --with-deps chromium` at build time, and set
-`CRAWLER_API_URL` (+ `CRAWLER_API_KEY`) in the Next.js app's environment.
+as a separate process on Railway/Fly.io/similar. At build time run
+`pip install -r requirements.txt`, then `pip install -r requirements-overrides.txt`
+(the lxml XXE override), then `python -m playwright install --with-deps chromium`,
+and set `CRAWLER_API_URL` (+ `CRAWLER_API_KEY`) in the Next.js app's environment.
